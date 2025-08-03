@@ -28,7 +28,7 @@
       pkgs.terminal-notifier
       pkgs.comma
       pkgs.lsd
-      #pkgs.jellyfin-mpv-shim # TODO: fix this
+      pkgs.jellyfin-mpv-shim # TODO: fix this
       pkgs.devenv
       pkgs.chaseln
       #pkgs.cinny-desktop
