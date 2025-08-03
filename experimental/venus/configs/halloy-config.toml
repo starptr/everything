@@ -1,0 +1,7 @@
+[servers.liberachat]
+nickname = "halloy-user"
+server = "irc.libera.chat"
+channels = ["#halloy"]
+
+[buffer.channel.topic]
+enabled = true

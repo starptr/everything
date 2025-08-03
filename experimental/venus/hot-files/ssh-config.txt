@@ -1,0 +1,25 @@
+# This is an ssh configuration file located at $venus/hot-files/ssh.txt
+
+Host ctrl-c
+  User yuto
+  HostName ctrl-c.club
+
+Host tilderef-old
+  User starptr
+  HostName 137.184.94.125
+
+Host tilderef
+  User starptr
+  HostName tilde.andref.app
+
+Host andref-emacs-wiki
+  User emacs-wiki
+  HostName tilde.andref.app
+
+Host nixie
+  User yuto
+  HostName nixie.yuto.sh
+
+Host *
+  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+  ServerAliveInterval 60

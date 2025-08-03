@@ -1,0 +1,20 @@
+#:schema https://creativeprojects.github.io/resticprofile/jsonschema/config-1.json
+#
+# indentation is not needed but it makes it easier to read ;)
+#
+version = "1"
+
+[default]
+  repository = "rclone:storj-baks:backup-repos/main-restic-backups"
+  password-file = "password.txt"
+
+  [default.backup]
+    verbose = true
+    tag = [ "sodium" ]
+    source = [
+      "{{ .Env.HOME }}/Downloads"
+    ]
+
+[use-native]
+  inherit = "default"
+  repository = "rclone:storj-baks-native:backup-repos/main-restic-backups"

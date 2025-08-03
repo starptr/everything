@@ -1,0 +1,21 @@
+# Also see https://github.com/Mic92/dotfiles/blob/master/nixos/.sops.yaml
+# for a more complex example.
+keys:
+  - &main_pub age1k02u4z06c0qwen95uwk4qphns3qqujtmz57sr3ea34f2rwh5kvjsfkjrfy # new age
+  - &server_nixie age165lra392e9ssuktvzf22yk63vjke8kfkmn6wrd0kvukwt8w7p5aqzx7exj # ed25519 to age
+  - &venus_1p age12ecq8rcc8s52e7nnzryjpafs73nzycp8jaa9z8s2gpnl5zn00a9q4u57nq # ed25519 venus on 1Password to age
+  - &hydrogen_sulfide age13v28wrk4qqhxhux86rvrp9p9e675qcgg3lcxc0tjhgxyx99vc44smcgxyw # ed25519 host pub key to age
+creation_rules:
+  - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
+    key_groups:
+    - pgp:
+      age:
+      - *main_pub
+      - *server_nixie
+      - *venus_1p
+  - path_regex: secrets/personal/[^/]+\.(yaml|json|env|ini)$
+    key_groups:
+    - pgp:
+      age:
+      - *main_pub
+      - *venus_1p

@@ -1,0 +1,71 @@
+# This is an ssh configuration file located at $venus/legacy-yadm/ssh-config.txt
+
+Host localhost
+  HostName localhost
+  Port 49860
+  User yuto
+
+Host 172.16.197.128
+  HostName 172.16.197.128
+  User yuto
+
+Host cs162-ashby
+  User cs162-aah
+  HostName ashby.cs.berkeley.edu
+
+Host cs162
+  User cs162-aah
+  HostName cedar.cs.berkeley.edu
+  RequestTTY yes
+  #RemoteCommand zsh
+  ForwardX11 yes
+  ForwardX11Trusted yes
+  ServerAliveInterval 20
+  TCPKeepAlive yes
+
+Host cs184
+  User cs184-aec
+  HostName s271-13.cs.berkeley.edu
+
+Host cs184-s277-9
+  User cs184-aec
+  HostName s277-9.cs.berkeley.edu
+
+Host cs199
+  User cs199-dyu
+  HostName cedar.cs.berkeley.edu
+
+Host millennium
+  User metalift
+  HostName a3.millennium.berkeley.edu
+
+Host millennium-a2
+  User metalift
+  HostName a2.millennium.berkeley.edu
+
+Host millennium-freddie
+  User metalift
+  HostName freddie.millennium.berkeley.edu
+
+Host intel
+  User yuto
+  HostName ssh-iam.intel-research.net
+
+Host ctrl-c
+  User yuto
+  HostName ctrl-c.club
+
+Host andref-tilde
+  User starptr
+  HostName 137.184.94.125
+
+Host andref
+  User starptr
+  HostName tilde.andref.app
+
+Host andref-emacs-wiki
+  User emacs-wiki
+  HostName tilde.andref.app
+
+Host *
+  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"

@@ -1,0 +1,48 @@
+# This is a git configuration file located at $venus/legacy-yadm/git-config.txt
+# It is NOT a toml file; it is a custom format whose spec is described in the git docs
+# See https://git-scm.com/docs/git-config#_configuration_file for the format specification
+
+[user]
+	email = yuto@berkeley.edu
+	name = Yuto Nishida
+[core]
+  pager = delta
+	excludesfile = /Users/yuto/.gitignore_global
+[interactive]
+  diffFilter = delta --color-only
+[delta]
+  navigate = true
+[merge]
+    conflictstyle = diff3
+
+[diff]
+    colorMoved = default
+[init]
+	defaultBranch = main
+[credential]
+	helper = cache
+[credential "https://dev.azure.com"]
+	useHttpPath = true
+[filter "lfs"]
+	process = git-lfs filter-process
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+[pull]
+	rebase = false
+[push]
+	autoSetupRemote = true
+[difftool "sourcetree"]
+	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
+	path = 
+[mergetool "sourcetree"]
+	cmd = /Applications/Sourcetree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
+	trustExitCode = true
+[credential "https://github.com"]
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
+[http]
+	postBuffer = 157286400
