@@ -1,0 +1,140 @@
+---
+? ''
+: - octodns:
+      cloudflare:
+        auto-ttl: true
+    ttl: 300
+    type: A
+    value: 75.2.60.5
+  - octodns:
+      cloudflare:
+        auto-ttl: true
+    ttl: 300
+    type: MX
+    values:
+    - exchange: eforward1.registrar-servers.com.
+      preference: 10
+    - exchange: eforward2.registrar-servers.com.
+      preference: 10
+    - exchange: eforward3.registrar-servers.com.
+      preference: 10
+    - exchange: eforward4.registrar-servers.com.
+      preference: 15
+    - exchange: eforward5.registrar-servers.com.
+      preference: 20
+  - octodns:
+      cloudflare:
+        auto-ttl: true
+    ttl: 300
+    type: TXT
+    value: v=spf1 include:spf.efwd.registrar-servers.com ~all
+ts:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+  ttl: 300
+  type: A
+  value: 100.66.149.91
+ts2:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+  ttl: 300
+  type: A
+  value: 100.101.227.126
+www:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+  ttl: 300
+  type: CNAME
+  value: modest-euler-7ef43a.netlify.app.
+x86_64.nix:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Nix Remote Builder running x86_64
+  ttl: 300
+  type: A
+  value: 143.198.60.34
+
+nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example record to demo taco's yaml injection
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+hello-caddy.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example caddy virtualHost from NixOS
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+caddy.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example caddy virtualHost from NixOS
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+hello-nginx.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example caddy virtualHost from NixOS
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+simple-proxy.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example caddy virtualHost from NixOS
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+ra.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example caddy virtualHost from NixOS
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+so.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Example caddy virtualHost from NixOS
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+komga.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Komga comic server
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+sp.nixie:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: Syncplay server
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞
+acmechallenge:
+  octodns:
+    cloudflare:
+      auto-ttl: true
+      comment: For acme HTTP challenge
+  ttl: 60
+  type: A
+  value: ＜ nixie.ipAddress ＞

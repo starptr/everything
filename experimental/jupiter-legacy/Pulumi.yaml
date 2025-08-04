@@ -1,0 +1,11 @@
+name: taco
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: .devenv/state/venv
+description: A minimal DigitalOcean Python Pulumi program
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: ""

@@ -1,0 +1,13 @@
+[project]
+name = "build-dns-config"
+version = "0.1.0"
+description = "Generates octodns yaml files from template files"
+
+# define any Python dependencies
+dependencies = [
+]
+
+# define the CLI executable
+# Here, we define the entry point to be the 'main()' function in the module 'app/main.py'
+[project.scripts]
+build-dns-config = "build_dns_config:main"

@@ -13,6 +13,7 @@
     ./use-tealdeer.nix
     ./use-resticprofile.nix
     ./ooss-maker.nix
+    ./../../../magic/home-manager/module.nix
   ];
   config = {
     venus.ooss-maker-for-this-system = config.lib.file.mkOOSS-Sodium;
@@ -110,11 +111,11 @@
 
     sops = {
       defaultSopsFile = ./../../../secrets/example.yaml;
-      age.keyFile = "${config.home.homeDirectory}/.config/sops/age/keys.txt";
+      age.keyFile = "${config.magic.absolutePathStrings.sodium.home}/.config/sops/age/keys.txt";
       secrets.example_key = { };
       secrets.main_restic_backups = {
         sopsFile = ./../../../secrets/personal/restic-repo-passwords.yaml;
-        path = "${config.home.homeDirectory}/.config/resticprofile/password.txt";
+        path = "${config.magic.absolutePathStrings.sodium.home}/.config/resticprofile/password.txt";
       };
       secrets.syncthing_pw = {
         sopsFile = ./../../../secrets/personal/passwords.yaml;
@@ -123,13 +124,13 @@
         format = "ini";
         mode = "0400"; # Of the regular unenc file in ~/.config/sops-nix/secrets/personal/rclone.conf.ini
         sopsFile = ./../../../secrets/personal/rclone.conf.ini; # Override the defaultSopsFile
-        path = "${config.home.homeDirectory}/.config/rclone/rclone.conf"; # Symlink to the regular unenc file
+        path = "${config.magic.absolutePathStrings.sodium.home}/.config/rclone/rclone.conf"; # Symlink to the regular unenc file
       };
       secrets."personal/jupiter.env" = {
         format = "dotenv";
         mode = "0400";
         sopsFile = ./../../../secrets/personal/jupiter.env;
-        path = "${config.home.homeDirectory}/src/gas-giants/jupiter/.env";
+        path = "${config.magic.absolutePathStrings.sodium.home}/src/gas-giants/jupiter/.env";
       };
     };
   };

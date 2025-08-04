@@ -5,70 +5,123 @@
 let
   # Define common variables
   forEachSystem = inputs.nixpkgs.lib.genAttrs (import inputs.systems);
+  recursiveUpdateAll = builtins.foldl' inputs.nixpkgs.lib.recursiveUpdate {};
 in
-{
-  devShells = forEachSystem (system:
-    let
-      pkgs = inputs.nixpkgs.legacyPackages.${system};
-    in
-    {
-      default = inputs.devenv.lib.mkShell {
-        inherit inputs pkgs;
-        modules = [
-          {
-            # https://devenv.sh/reference/options/
-            packages = [
-              pkgs.hello
-              pkgs.sops
-              pkgs.ssh-to-age
+# TODO: replace with recursiveUpdateAllNoOverlap (fails if there is conflict)
+recursiveUpdateAll [
+  {
+    # Jupiter
+    devShells = forEachSystem (system:
+      let
+        pkgs = inputs.nixpkgs.legacyPackages.${system};
+        getPython = pkgs: pkgs.python312;
+      in
+      {
+        jupiter = inputs.devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            {
+              packages = [
+                pkgs.hello
+                pkgs.pulumi-bin
+              ];
+              enterShell = ''
+                hello
+              '';
+
+              languages.python = {
+                enable = true;
+                package = getPython pkgs;
+                venv = {
+                  enable = true;
+                  #requirements = ./requirements.txt;
+                  requirements = ./../jupiter/requirements-freeze.txt;
+                };
+              };
+            }
+          ];
+        };
+      });
+    #packages = forEachSystem (system: let
+    #  pkgs = inputs.nixpkgs.legacyPackages.${system};
+    #  # TODO: forEachSystem should be around the entire Jupiter section of the outputs
+    #  getPython = pkgs: pkgs.python312;
+    #  metadata = builtins.fromTOML (builtins.readFile ./../jupiter/app/pyproject.toml);
+    #in
+    #{
+    #  ${metadata.project.name} = let
+    #    python = getPython pkgs;
+    #  in
+    #  python.pkgs.buildPythonPackage (attrs);
+    #});
+  }
+  {
+    # Main
+
+    devShells = forEachSystem (system:
+      let
+        pkgs = inputs.nixpkgs.legacyPackages.${system};
+      in
+      {
+        default = inputs.devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            {
+              # https://devenv.sh/reference/options/
+              packages = [
+                pkgs.hello
+                pkgs.sops
+                pkgs.ssh-to-age
+              ];
+  
+              enterShell = ''
+                hello
+                echo "Reminder: Do not use git in this repo. Use jujutsu instead."
+                echo "Don't forget to run `jj new` before making a new change."
+              '';
+  
+              processes.hello.exec = "hello";
+  
+              languages.nix.enable = true;
+            }
+          ];
+        };
+      });
+  
+    darwinConfigurations."Yutos-Sodium" = inputs.nix-darwin.lib.darwinSystem {
+      system = "aarch64-darwin";
+      modules = [
+        ../venus/modules/nixos-darwin/sodium.nix
+        inputs.home-manager.darwinModules.home-manager
+        {
+          nixpkgs = {
+            overlays = [
+              (self: super: {
+                jellyfin-mpv-shim = inputs.jellyfin-mpv-shim-darwin.packages."aarch64-darwin".default;
+              })
+              #chaseln.overlays.chaseln
+              inputs.soup.overlays.chaseln
+              (final: super: {
+                check-gits = inputs.soup.legacyPackages."aarch64-darwin".check-gits;
+              })
             ];
-
-            enterShell = ''
-              hello
-              echo "Reminder: Do not use git in this repo. Use jujutsu instead."
-            '';
-
-            processes.hello.exec = "hello";
-
-            languages.nix.enable = true;
-          }
-        ];
-      };
-    });
-
-  darwinConfigurations."Yutos-Sodium" = inputs.nix-darwin.lib.darwinSystem {
-    system = "aarch64-darwin";
-    modules = [
-      ../venus/modules/nixos-darwin/sodium.nix
-      inputs.home-manager.darwinModules.home-manager
-      {
-        nixpkgs = {
-          overlays = [
-            (self: super: {
-              jellyfin-mpv-shim = inputs.jellyfin-mpv-shim-darwin.packages."aarch64-darwin".default;
-            })
-            #chaseln.overlays.chaseln
-            inputs.soup.overlays.chaseln
-            (final: super: {
-              check-gits = inputs.soup.legacyPackages."aarch64-darwin".check-gits;
-            })
-          ];
-          config = import ../venus/app-configs/nixpkgs-config.nix; # Configures pkgs for evaluating this darwinConfiguration ("buildtime" config)
-        };
-      }
-      {
-        home-manager.useGlobalPkgs = true;
-        #home-manager.useUserPackages = true; # This breaks fish??
-        home-manager.users.yuto = {
-          imports = [
-            inputs.sops-nix.homeManagerModules.sops
-            (import ../venus/modules/home-manager/sodium.nix)
-          ];
-        };
-        home-manager.extraSpecialArgs = {
-          inherit (inputs) nixpkgs;
-        };
-      }
-    ];
-  };
-}
+            config = import ../venus/app-configs/nixpkgs-config.nix; # Configures pkgs for evaluating this darwinConfiguration ("buildtime" config)
+          };
+        }
+        {
+          home-manager.useGlobalPkgs = true;
+          #home-manager.useUserPackages = true; # This breaks fish??
+          home-manager.users.yuto = {
+            imports = [
+              inputs.sops-nix.homeManagerModules.sops
+              (import ../venus/modules/home-manager/sodium.nix)
+            ];
+          };
+          home-manager.extraSpecialArgs = {
+            inherit (inputs) nixpkgs;
+          };
+        }
+      ];
+    };
+  }
+]

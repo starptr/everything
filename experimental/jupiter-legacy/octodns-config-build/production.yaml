@@ -1,0 +1,26 @@
+---
+providers:
+  config:
+    class: octodns.provider.yaml.YamlProvider
+    directory: ./octodns-config-build
+    default_ttl: 3600
+    enforce_order: false
+  cloudflare:
+    class: octodns_cloudflare.CloudflareProvider
+    token: env/CLOUDFLARE_TOKEN
+    min_ttl: 60
+
+zones:
+  # This is a dynamic zone config. The source(s), here `config`, will be
+  # queried for a list of zone names and each will dynamically be set up to
+  # match the dynamic entry.
+  yart.me.: &default_zone_config
+    sources:
+      - config
+    targets:
+      - cloudflare
+  yuto.ink.: *default_zone_config
+  yuto.sh.: *default_zone_config
+  yuto.tel.: *default_zone_config
+  yuto.wiki.: *default_zone_config
+  yut.to.: *default_zone_config
