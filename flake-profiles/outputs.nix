@@ -18,7 +18,7 @@ recursiveUpdateAll [
         getPython = pkgs: pkgs.python312;
       in
       {
-        # `nix develop flake-profiles/everything-devenv#jupiter`
+        # `nix develop ./flake-profiles/everything-devenv#jupiter --impure`
         jupiter = inputs.devenv.lib.mkShell {
           inherit inputs pkgs;
           modules = [
@@ -37,7 +37,7 @@ recursiveUpdateAll [
                 venv = {
                   enable = true;
                   #requirements = ./requirements.txt;
-                  requirements = ./../jupiter/requirements-freeze.txt;
+                  requirements = ./../jupiter/requirements.txt;
                 };
               };
             }
@@ -54,7 +54,7 @@ recursiveUpdateAll [
       metadata = builtins.fromTOML (builtins.readFile ./../jupiter/app/pyproject.toml);
     in
     {
-      # `nix run flake-profiles/build-dns-config#build-dns-config`
+      # `nix run ./flake-profiles/build-dns-config#build-dns-config`
       ${metadata.project.name} = let
         python = getPython pkgs;
         attrs = build-dns-config-pyproject.renderers.buildPythonPackage {
@@ -72,6 +72,7 @@ recursiveUpdateAll [
         pkgs = inputs.nixpkgs.legacyPackages.${system};
       in
       {
+        # `nix develop ./flake-profiles/everything-devenv#default --impure`
         default = inputs.devenv.lib.mkShell {
           inherit inputs pkgs;
           modules = [

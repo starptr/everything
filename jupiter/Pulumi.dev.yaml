@@ -1,0 +1,5 @@
+config:
+  digitalocean:token:
+    secure: AAABAB2HzasE++E4PWfUWtjUPit0G1RcjYCrqwiD2wOW/X+IzattYl0Nwjw0manY/HmSn3AF/dJBTFgdgJnoK+UPC05Yw+r4L5cVkYQfVqqakEPKPsdTU9bt+jesdcl2Xvx1O1BBzg==
+  pulumi:tags:
+    pulumi:template: ""
