@@ -11,12 +11,14 @@ in
 recursiveUpdateAll [
   {
     # Jupiter
+    # TODO: split up Jupiter into 2 projects: pulumi and build-dns-config
     devShells = forEachSystem (system:
       let
         pkgs = inputs.nixpkgs.legacyPackages.${system};
         getPython = pkgs: pkgs.python312;
       in
       {
+        # `nix develop flake-profiles/everything-devenv#jupiter`
         jupiter = inputs.devenv.lib.mkShell {
           inherit inputs pkgs;
           modules = [
@@ -42,18 +44,25 @@ recursiveUpdateAll [
           ];
         };
       });
-    #packages = forEachSystem (system: let
-    #  pkgs = inputs.nixpkgs.legacyPackages.${system};
-    #  # TODO: forEachSystem should be around the entire Jupiter section of the outputs
-    #  getPython = pkgs: pkgs.python312;
-    #  metadata = builtins.fromTOML (builtins.readFile ./../jupiter/app/pyproject.toml);
-    #in
-    #{
-    #  ${metadata.project.name} = let
-    #    python = getPython pkgs;
-    #  in
-    #  python.pkgs.buildPythonPackage (attrs);
-    #});
+    packages = forEachSystem (system: let
+      # TODO: forEachSystem should be around the entire Jupiter section of the outputs
+      pkgs = inputs.nixpkgs.legacyPackages.${system};
+      getPython = pkgs: pkgs.python312;
+      build-dns-config-pyproject = inputs.pyproject-nix.lib.project.loadPyproject {
+        projectRoot = ./../jupiter/app;
+      };
+      metadata = builtins.fromTOML (builtins.readFile ./../jupiter/app/pyproject.toml);
+    in
+    {
+      # `nix run flake-profiles/build-dns-config#build-dns-config`
+      ${metadata.project.name} = let
+        python = getPython pkgs;
+        attrs = build-dns-config-pyproject.renderers.buildPythonPackage {
+          inherit python;
+        };
+      in
+      python.pkgs.buildPythonPackage (attrs);
+    });
   }
   {
     # Main

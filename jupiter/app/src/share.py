@@ -23,7 +23,7 @@ def _get_cwd():
 
 # Deprecate generated_json_path
 #generated_json_path = _get_cwd().joinpath('generated.json')
-generated_nixie_path = _get_cwd().joinpath('generated-nixie.json')
-generated_serverref_path = _get_cwd().joinpath('generated-serverref.json')
-octodns_config_template_path = _get_cwd().joinpath('octodns-config-template')
-octodns_config_build_path = _get_cwd().joinpath('octodns-config-build')
+generated_nixie_path = _get_cwd().joinpath('jupiter/generated-nixie.json')
+generated_serverref_path = _get_cwd().joinpath('jupiter/generated-serverref.json')
+octodns_config_template_path = _get_cwd().joinpath('jupiter/octodns-config-template')
+octodns_config_build_path = _get_cwd().joinpath('jupiter/octodns-config-build')
