@@ -1,42 +1,66 @@
 { self, nixpkgs, ... } @ inputs: let
+  magic = import ./../magic/common/constants.nix inputs.nixpkgs;
+  machine = "sodium"; # Current machine name
+  digests-directory-home-relative-pathstr = magic.relativePathStrings.${machine}.whale-digests;
   forEachSystem = inputs.nixpkgs.lib.genAttrs (import inputs.systems);
 in {
   packages = forEachSystem (system: let
       pkgs = import nixpkgs { inherit system; };
-      example-image = pkgs.dockerTools.buildLayeredImage {
+      # Creates an attrset with two properties: the image and a script to push it to the docker registry.
+      # @param name: The name of the docker repository for the image.
+      # @param buildLayeredImageArg: The arguments to pass to `dockerTools.buildLayeredImage`. The `name` property is optional, but can be specified here too.
+      image-nix-artifacts = { name, buildLayeredImageArg }: let
+          image = pkgs.dockerTools.buildLayeredImage ({
+            inherit name;
+          } // buildLayeredImageArg);
+          push-script = pkgs.writeShellApplication {
+            name = "push-${name}";
+            # We have to use skopeo; docker CLI requires the docker daemon to be running.
+            runtimeInputs = [ pkgs.skopeo pkgs.jq pkgs.docker-credential-helpers ];
+            text = ''
+              set -euo pipefail
+
+              dest="docker://docker.io/yuto7/${name}:latest"
+
+              echo "Checking credentials..."
+              if [[ -f "$HOME/.config/containers/auth.json" ]]; then
+                echo "Using creds from ~/.config/containers/auth.json"
+              else
+                echo "Error: No credentials found."
+                echo "Login with 'skopeo login docker.io'. You can use 'nix-shell -p skopeo' to get the skopeo command."
+                exit 1
+              fi
+
+              echo "Pushing to $dest..."
+              skopeo copy "docker-archive:${image}" "$dest"
+              echo "Done!"
+
+              echo "Saving digest to $HOME/${digests-directory-home-relative-pathstr}/${name}.txt ..."
+              digest=$(skopeo inspect --raw "docker-archive:${image}" | jq -r '.config.digest')
+              if [[ -z "$digest" ]]; then
+                echo "Error: Failed to get digest."
+                exit 1
+              fi
+
+              echo "Image digest: $digest"
+              echo "$digest" > "$HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
+              echo "Digest written to $HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
+            '';
+          };
+        in {
+          inherit image push-script;
+        };
+    in let
+      example-artifacts = image-nix-artifacts {
         name = "example-image";
-        tag = "latest";
-        contents = [ pkgs.curl ]; # Replace with your app
-        config.Cmd = [ "curl" "--version" ];
-      };
-      make-push-script = { layeredImage, name }: pkgs.writeShellApplication {
-        name = "push-${name}";
-        # We have to use skopeo; docker CLI requires the docker daemon to be running.
-        runtimeInputs = [ pkgs.skopeo pkgs.jq pkgs.docker-credential-helpers ];
-        text = ''
-          set -euo pipefail
-
-          dest="docker://docker.io/yuto7/${name}:latest"
-
-          echo "Checking credentials..."
-          if [[ -f "$HOME/.config/containers/auth.json" ]]; then
-            echo "Using creds from ~/.config/containers/auth.json"
-          else
-            echo "Error: No credentials found."
-            echo "Login with 'skopeo login docker.io'. You can use 'nix-shell -p skopeo' to get the skopeo command."
-            exit 1
-          fi
-
-          echo "Pushing to $dest..."
-          skopeo copy "docker-archive:${layeredImage}" "$dest"
-          echo "Done!"
-        '';
+        buildLayeredImageArg = {
+          tag = "latest";
+          contents = [ pkgs.curl ];
+          config.Cmd = [ "curl" "--version" ];
+        };
       };
     in {
-      whale-push-example = make-push-script {
-        layeredImage = example-image;
-        name = "example-image";
-      };
-      whale-example-image = example-image;
+      whale-example-image = example-artifacts.image;
+      whale-push-example = example-artifacts.push-script;
     });
 }
