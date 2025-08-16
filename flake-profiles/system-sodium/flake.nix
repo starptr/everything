@@ -22,7 +22,7 @@
 
     jellyfin-mpv-shim-darwin = {
       url = "github:starptr/jellyfin-mpv-shim.nix";
-      #inputs.nixpkgs.follows = "nixpkgs"; # TODO: migrate to support new shim
+      ##inputs.nixpkgs.follows = "nixpkgs"; # TODO: migrate to support new shim
     };
 
     systems.url = "github:nix-systems/default"; # For soup
