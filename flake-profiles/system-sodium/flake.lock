@@ -416,18 +416,14 @@
         "pystray": "pystray"
       },
       "locked": {
-        "lastModified": 1730240303,
-        "narHash": "sha256-TliVj5t4pf1lqA4vufOT7DrPx1yXOAn6CyjTGXt7QEU=",
-        "owner": "starptr",
-        "repo": "jellyfin-mpv-shim.nix",
-        "rev": "661f916fe0fc4d51d31c5d6d48bc1e6074822d07",
-        "type": "github"
+        "path": "./../../experimental/jellyfin-mpv-shim-darwin-compat",
+        "type": "path"
       },
       "original": {
-        "owner": "starptr",
-        "repo": "jellyfin-mpv-shim.nix",
-        "type": "github"
-      }
+        "path": "./../../experimental/jellyfin-mpv-shim-darwin-compat",
+        "type": "path"
+      },
+      "parent": []
     },
     "love": {
       "flake": false,
