@@ -21,7 +21,7 @@
     };
 
     jellyfin-mpv-shim-darwin = {
-      url = "github:starptr/jellyfin-mpv-shim.nix";
+      url = "path:./../../experimental/jellyfin-mpv-shim-darwin-compat";
       ##inputs.nixpkgs.follows = "nixpkgs"; # TODO: migrate to support new shim
     };
 
