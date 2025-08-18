@@ -40,14 +40,13 @@ fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
     for entry in fs::read_dir(dir).expect("Cannot read directory") {
         let entry = entry.expect("Cannot read entry");
         if IGNORE_NAMES.iter().any(|name_to_ignore| *name_to_ignore == entry.file_name()) {
-            println!("Skipping {:?}", entry.file_name());
+            println!("Skipping {:?}", entry.path());
             continue; // Skip ignored directories
         }
         let path = entry.path();
         if path.is_dir() {
             files.extend(collect_nix_files(&path));
         } else if path.extension().map(|ext| ext == "nix").unwrap_or(false) {
-            println!("Found Nix file: {:?}", path);
             files.push(path);
         }
     }
@@ -88,11 +87,12 @@ fn normalize_path(path: &Path) -> PathBuf {
 /// Compute relative path
 fn relative_path(from: &Path, to: &Path) -> String {
     let from_dir = from.parent().unwrap_or(Path::new("."));
-    diff_paths(to, from_dir)
+    let rel_path_no_dot_prefix = diff_paths(to, from_dir)
         .unwrap_or_else(|| to.to_path_buf())
         .to_str()
         .unwrap()
-        .replace('\\', "/")
+        .replace('\\', "/");
+    Path::new(".").join(rel_path_no_dot_prefix).to_str().unwrap().to_string()
 }
 
 /// Recursively traverse the AST and collect updates
@@ -107,16 +107,13 @@ fn collect_updates(
         if let NodeOrToken::Token(tok) = &child {
             // Relative path detection: rnix 0.12 uses SyntaxKind::LiteralPath for path literals
             if tok.kind() == SyntaxKind::TOKEN_PATH {
-                println!("Found path token: {:?}", tok);
                 let text = tok.text();
                 if text.starts_with("./") || text.starts_with("../") {
-                    println!("Relative path detected: {}", text);
                     let target_path = current_file
                         .parent()
                         .unwrap_or(Path::new("."))
                         .join(text);
                     let target_path = normalize_path(&target_path);
-                    println!("Target path: {:?}", target_path);
                     if target_path == *old_file {
                         let new_rel = relative_path(current_file, new_file);
                         let range = tok.text_range();
@@ -126,24 +123,7 @@ fn collect_updates(
             }
         }
         if let NodeOrToken::Node(n) = &child {
-            //if n.kind() == SyntaxKind::NODE_PATH {
-            //    println!("Found path node: {:#?} in file {:?}", n, current_file);
-            //    let text = n.text();
-            //    let textString = String::from(text);
-            //    if textString.starts_with("./") || textString.starts_with("../") {
-            //        let target_path = current_file
-            //            .parent()
-            //            .unwrap_or(Path::new("."))
-            //            .join(textString);
-            //        if target_path == *old_file {
-            //            let new_rel = relative_path(current_file, new_file);
-            //            let range = n.text_range();
-            //            updates.push((range.start().into(), range.end().into(), new_rel));
-            //        }
-            //    }
-            //} else {
-                collect_updates(n, old_file, new_file, current_file, updates);
-            //}
+            collect_updates(n, old_file, new_file, current_file, updates);
         }
     }
 }
@@ -164,7 +144,6 @@ fn main() {
         // Collect updates
         let mut updates = Vec::new();
         collect_updates(&root, &args.old, &args.new, &file_path, &mut updates);
-        println!("Found {} updates: {:#?}", updates.len(), updates);
 
         if !updates.is_empty() {
             println!("File: {:?}", file_path);
