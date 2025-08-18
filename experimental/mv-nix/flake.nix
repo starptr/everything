@@ -41,14 +41,14 @@
         in
         {
           devenv-up = self.devShells.${system}.default.config.procfileScript;
-          ${pname} = cardboard.lib.keepFnInput pkgs.rustPackages.rustPlatform.buildRustPackage {
-            inherit pname version;
-            src = ./app;
-            cargoLock = {
-              lockFile = ./app/Cargo.lock;
-            };
-          };
-          default = self.packages.${system}.${pname};
+          #${pname} = cardboard.lib.keepFnInput pkgs.rustPackages.rustPlatform.buildRustPackage {
+          #  inherit pname version;
+          #  src = ./app;
+          #  cargoLock = {
+          #    lockFile = ./app/Cargo.lock;
+          #  };
+          #};
+          #default = self.packages.${system}.${pname};
         }
       );
 
