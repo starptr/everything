@@ -1,9 +1,10 @@
 use clap::Parser;
-use rnix::{parse, SyntaxNode};
+use rnix::{parser, tokenizer, SyntaxKind, SyntaxNode, NodeOrToken};
 use std::fs;
 use std::path::{Path, PathBuf};
+use pathdiff::diff_paths;
 
-/// Simple tool to move a .nix file and update all relative references in a flake
+/// CLI args
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Args {
@@ -15,16 +16,16 @@ struct Args {
     #[arg(long)]
     new: PathBuf,
 
-    /// Dry run mode: print changes without modifying files
+    /// Dry run mode
     #[arg(long, default_value_t = false)]
     dry_run: bool,
 
-    /// Project root (defaults to current directory)
+    /// Project root
     #[arg(long, default_value = ".")]
     root: PathBuf,
 }
 
-/// Recursively collects all `.nix` files in a directory
+/// Recursively collect `.nix` files
 fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir).expect("Cannot read directory") {
@@ -39,14 +40,14 @@ fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Compute relative path from `from` to `to`
+/// Compute relative path
 fn relative_path(from: &Path, to: &Path) -> String {
-    let from_dir = from.parent().unwrap_or_else(|| Path::new("."));
-    pathdiff::diff_paths(to, from_dir)
+    let from_dir = from.parent().unwrap_or(Path::new("."));
+    diff_paths(to, from_dir)
         .unwrap_or_else(|| to.to_path_buf())
         .to_str()
         .unwrap()
-        .replace('\\', "/") // normalize Windows paths
+        .replace('\\', "/")
 }
 
 /// Recursively traverse the AST and collect updates
@@ -57,19 +58,27 @@ fn collect_updates(
     current_file: &Path,
     updates: &mut Vec<(usize, usize, String)>,
 ) {
-    for child in node.children() {
-        if child.kind().is_leaf() {
-            let text = child.text();
-            if text.starts_with("./") || text.starts_with("../") {
-                let target_path = current_file.parent().unwrap_or_else(|| Path::new(".")).join(text);
-                if target_path == *old_file {
-                    let new_rel = relative_path(current_file, new_file);
-                    let range = child.text_range();
-                    updates.push((range.start(), range.end(), new_rel));
+    for child in node.children_with_tokens() {
+        if let NodeOrToken::Token(tok) = &child {
+            // Relative path detection: rnix 0.12 uses SyntaxKind::LiteralPath for path literals
+            if tok.kind() == SyntaxKind::TOKEN_PATH {
+                let text = tok.text();
+                if text.starts_with("./") || text.starts_with("../") {
+                    let target_path = current_file
+                        .parent()
+                        .unwrap_or(Path::new("."))
+                        .join(text);
+                    if target_path == *old_file {
+                        let new_rel = relative_path(current_file, new_file);
+                        let range = tok.text_range();
+                        updates.push((range.start().into(), range.end().into(), new_rel));
+                    }
                 }
             }
         }
-        collect_updates(&child, old_file, new_file, current_file, updates);
+        if let NodeOrToken::Node(n) = &child {
+            collect_updates(n, old_file, new_file, current_file, updates);
+        }
     }
 }
 
@@ -80,10 +89,15 @@ fn main() {
 
     for file_path in nix_files {
         let mut content = fs::read_to_string(&file_path).expect("Failed to read file");
-        let parsed = parse(&content);
 
+        // Parse the file
+        let tokens = tokenizer::tokenize(&content);
+        let parsed = parser::parse(tokens.into_iter());
+        let root = SyntaxNode::new_root(parsed.0);
+
+        // Collect updates
         let mut updates = Vec::new();
-        collect_updates(&parsed.node(), &args.old, &args.new, &file_path, &mut updates);
+        collect_updates(&root, &args.old, &args.new, &file_path, &mut updates);
 
         if !updates.is_empty() {
             println!("File: {:?}", file_path);
@@ -92,7 +106,7 @@ fn main() {
             }
 
             if !args.dry_run {
-                // Apply updates in reverse order to not mess up byte offsets
+                // Apply updates in reverse order
                 for (start, end, new_val) in updates.iter().rev() {
                     content.replace_range(*start..*end, new_val);
                 }
