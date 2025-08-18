@@ -18,7 +18,7 @@ struct Args {
     new: PathBuf,
 
     /// Dry run mode
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     dry_run: bool,
 
     /// Project root
