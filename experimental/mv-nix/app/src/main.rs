@@ -53,12 +53,14 @@ fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-fn normalize_path(path: &Path) -> PathBuf {
+fn normalize_rel_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
     let mut result = if path.is_absolute() {
-        PathBuf::from("/")
+        panic!("Absolute paths are not supported in this function");
     } else {
-        PathBuf::new()
+        let mut initial = PathBuf::new();
+        initial.push(".");
+        initial
     };
 
     for comp in components {
@@ -109,11 +111,14 @@ fn collect_updates(
             if tok.kind() == SyntaxKind::TOKEN_PATH {
                 let text = tok.text();
                 if text.starts_with("./") || text.starts_with("../") {
+                    //println!("Found relative path {} in file {:?}", text, current_file);
                     let target_path = current_file
                         .parent()
                         .unwrap_or(Path::new("."))
                         .join(text);
-                    let target_path = normalize_path(&target_path);
+                    let target_path = normalize_rel_path(&target_path);
+                    //println!("Normalized target path: {:?}", target_path);
+                    //println!("Old file: {:?}", old_file);
                     if target_path == *old_file {
                         let new_rel = relative_path(current_file, new_file);
                         let range = tok.text_range();
