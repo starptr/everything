@@ -3,6 +3,7 @@ use rnix::{parser, tokenizer, SyntaxKind, SyntaxNode, NodeOrToken};
 use std::fs;
 use std::path::{Path, PathBuf};
 use pathdiff::diff_paths;
+use std::ffi::OsStr;
 
 /// CLI args
 #[derive(Parser)]
@@ -27,13 +28,26 @@ struct Args {
 
 /// Recursively collect `.nix` files
 fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
+    let IGNORE_NAMES: [&OsStr; 5] = [
+        OsStr::new(".devenv"),
+        OsStr::new(".direnv"),
+        OsStr::new(".git"),
+        OsStr::new("result"),
+        OsStr::new("target"),
+    ];
+
     let mut files = Vec::new();
     for entry in fs::read_dir(dir).expect("Cannot read directory") {
         let entry = entry.expect("Cannot read entry");
+        if IGNORE_NAMES.iter().any(|name_to_ignore| *name_to_ignore == entry.file_name()) {
+            println!("Skipping {:?}", entry.file_name());
+            continue; // Skip ignored directories
+        }
         let path = entry.path();
         if path.is_dir() {
             files.extend(collect_nix_files(&path));
         } else if path.extension().map(|ext| ext == "nix").unwrap_or(false) {
+            println!("Found Nix file: {:?}", path);
             files.push(path);
         }
     }
@@ -60,6 +74,7 @@ fn collect_updates(
 ) {
     for child in node.children_with_tokens() {
         if let NodeOrToken::Token(tok) = &child {
+            println!("Visiting token: {:?} in file {:?}", tok, current_file);
             // Relative path detection: rnix 0.12 uses SyntaxKind::LiteralPath for path literals
             if tok.kind() == SyntaxKind::TOKEN_PATH {
                 let text = tok.text();
@@ -77,7 +92,24 @@ fn collect_updates(
             }
         }
         if let NodeOrToken::Node(n) = &child {
-            collect_updates(n, old_file, new_file, current_file, updates);
+            println!("Visiting node: {:?} in file {:?}", n.kind(), current_file);
+            if n.kind() == SyntaxKind::NODE_PATH {
+                let text = n.text();
+                let textString = String::from(text);
+                if textString.starts_with("./") || textString.starts_with("../") {
+                    let target_path = current_file
+                        .parent()
+                        .unwrap_or(Path::new("."))
+                        .join(textString);
+                    if target_path == *old_file {
+                        let new_rel = relative_path(current_file, new_file);
+                        let range = n.text_range();
+                        updates.push((range.start().into(), range.end().into(), new_rel));
+                    }
+                }
+            } else {
+                collect_updates(n, old_file, new_file, current_file, updates);
+            }
         }
     }
 }
