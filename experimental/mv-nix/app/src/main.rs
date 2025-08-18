@@ -1,7 +1,7 @@
 use clap::Parser;
 use rnix::{parser, tokenizer, SyntaxKind, SyntaxNode, NodeOrToken};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, Component};
 use pathdiff::diff_paths;
 use std::ffi::OsStr;
 
@@ -54,6 +54,37 @@ fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut result = if path.is_absolute() {
+        PathBuf::from("/")
+    } else {
+        PathBuf::new()
+    };
+
+    for comp in components {
+        match comp {
+            Component::CurDir => {
+                // skip `.`
+            }
+            Component::ParentDir => {
+                // pop last if possible, otherwise keep `..`
+                if !result.pop() {
+                    result.push("..");
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                panic!("Unexpected root or prefix component in path normalization");
+            }
+            Component::Normal(c) => {
+                result.push(c);
+            }
+        }
+    }
+
+    result
+}
+
 /// Compute relative path
 fn relative_path(from: &Path, to: &Path) -> String {
     let from_dir = from.parent().unwrap_or(Path::new("."));
@@ -74,15 +105,18 @@ fn collect_updates(
 ) {
     for child in node.children_with_tokens() {
         if let NodeOrToken::Token(tok) = &child {
-            println!("Visiting token: {:?} in file {:?}", tok, current_file);
             // Relative path detection: rnix 0.12 uses SyntaxKind::LiteralPath for path literals
             if tok.kind() == SyntaxKind::TOKEN_PATH {
+                println!("Found path token: {:?}", tok);
                 let text = tok.text();
                 if text.starts_with("./") || text.starts_with("../") {
+                    println!("Relative path detected: {}", text);
                     let target_path = current_file
                         .parent()
                         .unwrap_or(Path::new("."))
                         .join(text);
+                    let target_path = normalize_path(&target_path);
+                    println!("Target path: {:?}", target_path);
                     if target_path == *old_file {
                         let new_rel = relative_path(current_file, new_file);
                         let range = tok.text_range();
@@ -92,24 +126,24 @@ fn collect_updates(
             }
         }
         if let NodeOrToken::Node(n) = &child {
-            println!("Visiting node: {:?} in file {:?}", n.kind(), current_file);
-            if n.kind() == SyntaxKind::NODE_PATH {
-                let text = n.text();
-                let textString = String::from(text);
-                if textString.starts_with("./") || textString.starts_with("../") {
-                    let target_path = current_file
-                        .parent()
-                        .unwrap_or(Path::new("."))
-                        .join(textString);
-                    if target_path == *old_file {
-                        let new_rel = relative_path(current_file, new_file);
-                        let range = n.text_range();
-                        updates.push((range.start().into(), range.end().into(), new_rel));
-                    }
-                }
-            } else {
+            //if n.kind() == SyntaxKind::NODE_PATH {
+            //    println!("Found path node: {:#?} in file {:?}", n, current_file);
+            //    let text = n.text();
+            //    let textString = String::from(text);
+            //    if textString.starts_with("./") || textString.starts_with("../") {
+            //        let target_path = current_file
+            //            .parent()
+            //            .unwrap_or(Path::new("."))
+            //            .join(textString);
+            //        if target_path == *old_file {
+            //            let new_rel = relative_path(current_file, new_file);
+            //            let range = n.text_range();
+            //            updates.push((range.start().into(), range.end().into(), new_rel));
+            //        }
+            //    }
+            //} else {
                 collect_updates(n, old_file, new_file, current_file, updates);
-            }
+            //}
         }
     }
 }
@@ -130,6 +164,7 @@ fn main() {
         // Collect updates
         let mut updates = Vec::new();
         collect_updates(&root, &args.old, &args.new, &file_path, &mut updates);
+        println!("Found {} updates: {:#?}", updates.len(), updates);
 
         if !updates.is_empty() {
             println!("File: {:?}", file_path);
