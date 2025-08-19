@@ -5,6 +5,12 @@ use std::path::{Path, PathBuf, Component};
 use pathdiff::diff_paths;
 use std::ffi::OsStr;
 
+/**
+ * TODO: Support moving non-nix files
+ * TODO: Support moving directories
+ * TODO: When moving directories, create the target directory automatically
+ */
+
 /// CLI args
 #[derive(Parser)]
 #[command(author, version, about)]
