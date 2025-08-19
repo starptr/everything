@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "experimental/mv-nix/app/Cargo.toml"
+    ]
+}
