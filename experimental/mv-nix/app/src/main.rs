@@ -32,8 +32,8 @@ struct Args {
     root: PathBuf,
 }
 
-/// Recursively collect `.nix` files
-fn collect_nix_files(dir: &Path) -> Vec<PathBuf> {
+/// Get all files under `dir` recursively. Ignore symlinks which point outside `dir`.
+fn collect_files(dir: &Path) -> Vec<PathBuf> {
     let IGNORE_NAMES: [&OsStr; 5] = [
         OsStr::new(".devenv"),
         OsStr::new(".direnv"),
@@ -142,7 +142,7 @@ fn collect_updates(
 fn main() {
     let args = Args::parse();
 
-    let nix_files = collect_nix_files(&args.root);
+    let all_files = collect_files(&args.root);
 
     for file_path in nix_files {
         let mut content = fs::read_to_string(&file_path).expect("Failed to read file");
