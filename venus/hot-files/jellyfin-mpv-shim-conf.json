@@ -107,6 +107,5 @@
     "transcode_hi10p": false,
     "transcode_warning": true,
     "use_web_seek": false,
-    "write_logs": true,
-    "vo": "gpu-next"
+    "write_logs": true
 }
