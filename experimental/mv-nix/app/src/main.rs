@@ -11,6 +11,15 @@ use std::ffi::OsStr;
  * TODO: When moving directories, create the target directory automatically
  */
 
+/**
+ * This tool lets you move a file or directory in a "subspace" (subtree of the filesystem),
+ * and automatically updates all relative paths in all files that point to the moved file/directory.
+ * Any text file that contains relative paths will be updated.
+ * 
+ * For example, relative paths such as `./foo/bar` or `../baz` will be updated.
+ * 
+ */
+
 /// CLI args
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -28,44 +37,39 @@ struct Args {
     dry_run: bool,
 
     /// Project root
-    #[arg(long, default_value = ".")]
-    root: PathBuf,
+    #[arg(short, long, default_value = ".")]
+    search_space_subtree_root_dir: PathBuf,
 }
 
-/// Get all files under `dir` recursively. Ignore symlinks which point outside `dir`.
-fn collect_files(dir: &Path) -> Vec<PathBuf> {
-    let IGNORE_NAMES: [&OsStr; 5] = [
-        OsStr::new(".devenv"),
-        OsStr::new(".direnv"),
-        OsStr::new(".git"),
-        OsStr::new("result"),
-        OsStr::new("target"),
-    ];
+/// Get all files under `dir` recursively, treating symlinks as literal files (ie. not following them).
+fn collect_files(subtree_root: &Path, keep_dirs: bool) -> Vec<PathBuf> {
+    use walkdir::WalkDir;
 
-    let mut files = Vec::new();
-    for entry in fs::read_dir(dir).expect("Cannot read directory") {
-        let entry = entry.expect("Cannot read entry");
-        if IGNORE_NAMES.iter().any(|name_to_ignore| *name_to_ignore == entry.file_name()) {
-            println!("Skipping {:?}", entry.path());
-            continue; // Skip ignored directories
-        }
-        let path = entry.path();
-        if path.is_dir() {
-            files.extend(collect_nix_files(&path));
-        } else if path.extension().map(|ext| ext == "nix").unwrap_or(false) {
-            files.push(path);
-        }
-    }
-    files
+    WalkDir::new(subtree_root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let ft = e.file_type();
+
+            if keep_dirs {
+                // Keep everything
+                return true;
+            }
+            // Don't keep directories
+            !ft.is_dir()
+        })
+        .map(|e| e.into_path())
+        .collect()
 }
 
+/// Logically remove `.` and `..` components from a relative path, except leading `..` components
 fn normalize_rel_path(path: &Path) -> PathBuf {
-    let mut components = path.components().peekable();
+    let components = path.components().peekable();
     let mut result = if path.is_absolute() {
         panic!("Absolute paths are not supported in this function");
     } else {
         let mut initial = PathBuf::new();
-        initial.push(".");
         initial
     };
 
@@ -92,59 +96,13 @@ fn normalize_rel_path(path: &Path) -> PathBuf {
     result
 }
 
-/// Compute relative path
-fn relative_path(from: &Path, to: &Path) -> String {
-    let from_dir = from.parent().unwrap_or(Path::new("."));
-    let rel_path_no_dot_prefix = diff_paths(to, from_dir)
-        .unwrap_or_else(|| to.to_path_buf())
-        .to_str()
-        .unwrap()
-        .replace('\\', "/");
-    Path::new(".").join(rel_path_no_dot_prefix).to_str().unwrap().to_string()
-}
-
-/// Recursively traverse the AST and collect updates
-fn collect_updates(
-    node: &SyntaxNode,
-    old_file: &Path,
-    new_file: &Path,
-    current_file: &Path,
-    updates: &mut Vec<(usize, usize, String)>,
-) {
-    for child in node.children_with_tokens() {
-        if let NodeOrToken::Token(tok) = &child {
-            // Relative path detection: rnix 0.12 uses SyntaxKind::LiteralPath for path literals
-            if tok.kind() == SyntaxKind::TOKEN_PATH {
-                let text = tok.text();
-                if text.starts_with("./") || text.starts_with("../") {
-                    //println!("Found relative path {} in file {:?}", text, current_file);
-                    let target_path = current_file
-                        .parent()
-                        .unwrap_or(Path::new("."))
-                        .join(text);
-                    let target_path = normalize_rel_path(&target_path);
-                    //println!("Normalized target path: {:?}", target_path);
-                    //println!("Old file: {:?}", old_file);
-                    if target_path == *old_file {
-                        let new_rel = relative_path(current_file, new_file);
-                        let range = tok.text_range();
-                        updates.push((range.start().into(), range.end().into(), new_rel));
-                    }
-                }
-            }
-        }
-        if let NodeOrToken::Node(n) = &child {
-            collect_updates(n, old_file, new_file, current_file, updates);
-        }
-    }
-}
-
 fn main() {
     let args = Args::parse();
 
-    let all_files = collect_files(&args.root);
+    // List all files that may need to be updated
+    let all_files = collect_files(&args.search_space_subtree_root_dir, false);
 
-    for file_path in nix_files {
+    for file in all_files {
         let mut content = fs::read_to_string(&file_path).expect("Failed to read file");
 
         // Parse the file
