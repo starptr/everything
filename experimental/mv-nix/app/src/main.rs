@@ -36,13 +36,19 @@ struct Args {
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     dry_run: bool,
 
-    /// Project root
+    /// Search root
     #[arg(short, long, default_value = ".")]
     search_space_subtree_root_dir: PathBuf,
+
+    /// Git repository root
+    #[arg(long, default_value = ".")]
+    git_repo_root: PathBuf,
 }
 
 /// Get all files under `dir` recursively, treating symlinks as literal files (ie. not following them).
-fn collect_files(subtree_root: &Path, keep_dirs: bool) -> Vec<PathBuf> {
+/// `subtree_root` must be a relative path wrt the cwd.
+/// Returns a list of relative paths wrt the cwd.
+fn collect_files(subtree_root: &Path, keep_dirs: bool, should_skip: &dyn Fn(&Path) -> bool) -> Vec<PathBuf> {
     use walkdir::WalkDir;
 
     WalkDir::new(subtree_root)
@@ -52,8 +58,13 @@ fn collect_files(subtree_root: &Path, keep_dirs: bool) -> Vec<PathBuf> {
         .filter(|e| {
             let ft = e.file_type();
 
+            // Skip if the path matches the skip criteria
+            if should_skip(e.path()) {
+                return false;
+            }
+
+            // Keep directories
             if keep_dirs {
-                // Keep everything
                 return true;
             }
             // Don't keep directories
@@ -97,10 +108,23 @@ fn normalize_rel_path(path: &Path) -> PathBuf {
 }
 
 fn main() {
+    use git2::Repository;
+
     let args = Args::parse();
 
+    let is_gitignored = {
+        let repo = Repository::discover(&args.git_repo_root).expect("Git repository not found");
+        |path: &Path| {
+            repo.is_path_ignored(path).expect("Unexpected error checking gitignore status")
+        }
+    };
+    let dont_skip = |_| false;
+
     // List all files that may need to be updated
-    let all_files = collect_files(&args.search_space_subtree_root_dir, false);
+    let all_files = collect_files(&args.search_space_subtree_root_dir, false, &is_gitignored);
+
+    // List all paths that are old
+    let old_files = collect_files(&args.old, true, &dont_skip);
 
     for file in all_files {
         let mut content = fs::read_to_string(&file_path).expect("Failed to read file");
