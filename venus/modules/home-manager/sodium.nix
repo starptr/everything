@@ -38,6 +38,7 @@
       pkgs.rclone
       pkgs.audacity
       pkgs.kubectl
+      pkgs.claude-code
     ];
 
     home.sessionVariables = {
