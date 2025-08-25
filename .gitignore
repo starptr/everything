@@ -13,3 +13,6 @@ result
 
 # Per-cloned local envrc
 .envrc
+
+# Dorenv
+.env
