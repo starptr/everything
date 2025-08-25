@@ -11,6 +11,8 @@ let
 
       venus = "${selfRelativePathStrings.everythingRepo}/venus";
 
+      jupiter-dotenv = "${selfRelativePathStrings.everythingRepo}/jupiter/.env";
+
       whale-digests = "${selfRelativePathStrings.everythingRepo}/exports/whale/digests";
 
       home = ""; # The home directory is an empty relative path to itself.

@@ -128,7 +128,7 @@
         format = "dotenv";
         mode = "0400";
         sopsFile = ./../../../secrets/personal/jupiter.env;
-        path = "${config.magic.absolutePathStrings.sodium.home}/src/gas-giants/jupiter/.env";
+        path = "${config.magic.absolutePathStrings.sodium.jupiter-dotenv}";
       };
     };
   };
