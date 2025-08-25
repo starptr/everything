@@ -13,6 +13,7 @@
     ./use-tealdeer.nix
     ./use-resticprofile.nix
     ./ooss-maker.nix
+    ./use-manuals.nix
     ./../../../magic/home-manager/module.nix
   ];
   config = {
@@ -86,11 +87,6 @@
     home.file."Library/Application Support/jellyfin-mpv-shim/scripts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.config/mpv/scripts";
     # v This is a hot-file config for jellyfin-mpv-shim. Since it is configurable via GUI, it needs to be out of store.
     home.file."Library/Application Support/jellyfin-mpv-shim/conf.json".source = config.venus.ooss-maker-for-this-system "jellyfin-mpv-shim-conf.json";
-
-    # TODO: clean this up
-    # This builds manual pages for the current intance of nixpkgs
-    home.file."nix-manuals/nixos-release".source = "${(import "${nixpkgs}/nixos/release.nix" { inherit nixpkgs; }).manualHTML.x86_64-linux}/share/doc/nixos";
-    home.file."nix-manuals/nixpkgs-manual".source = "${pkgs.nixpkgs-manual.override { inherit nixpkgs; }}/share/doc/nixpkgs";
 
     # TODO: clean this up
     xdg.configFile."ghostty/config".source = config.venus.ooss-maker-for-this-system "ghostty-config";
