@@ -53,6 +53,7 @@
     home.shellAliases = {
       # This assumes this repo is in ~/src/venus
       sdrs = "sudo darwin-rebuild switch --flake ${config.magic.absolutePathStrings.sodium.everythingRepo}/flake-profiles/system-sodium";
+      drb = "darwin-rebuild build --flake ${config.magic.absolutePathStrings.sodium.everythingRepo}/flake-profiles/system-sodium";
       # TODO: package makemkv
       maybe-makemkvcon = "/Applications/MakeMKV.app/Contents/MacOS/makemkvcon";
       maybe-pulumi = "/opt/homebrew/bin/pulumi";
