@@ -6,14 +6,14 @@
   # This file contains the single-source-of-truth for the location of the venus repository.
   # TODO: remove this file
   options = {
-    venus-location.sodium = lib.mkOption {
-      readOnly = true;
-      default = config.magic.absolutePathStrings.sodium.venus;
-      type = lib.types.str;
-      description = ''
-        The location of the venus repository.
-      '';
-    };
+    #venus-location.sodium = lib.mkOption {
+    #  readOnly = true;
+    #  default = config.magic.absolutePathStrings.sodium.venus;
+    #  type = lib.types.str;
+    #  description = ''
+    #    The location of the venus repository.
+    #  '';
+    #};
     # TODO(magic): use magic
     #venus-location.tilderef2-starptr = lib.mkOption {
     #  readOnly = true;

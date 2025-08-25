@@ -7,6 +7,7 @@
 {
   imports = [
     ./venus-location.nix
+    ./../../../magic/home-manager/module.nix
   ];
   options = {
     venus.ooss-maker-for-this-system = lib.mkOption {
@@ -39,10 +40,10 @@
         );
     in
     {
-      lib.file.mkOOSS-Sodium = ooss-maker "${config.venus-location.sodium}/hot-files";
-      lib.file.mkOOSS-Tilderef2-starptr = ooss-maker "${config.venus-location.tilderef2-starptr}/hot-files";
+      lib.file.mkOOSS-Sodium = ooss-maker "${config.magic.absolutePathStrings.sodium.venus}/hot-files";
+      lib.file.mkOOSS-Tilderef2-starptr = ooss-maker "${config.venus-location.tilderef2-starptr}/hot-files"; # TODO(magic): use magic
       lib.file.mkOOSS-never = hot-files-path: builtins.throw "This is a placeholder mkOOSS function. Please override it with eg. config.lib.file.mkOOSS-Sodium.";
-      lib.file.mkOOSS-Magnesium-Hydroxide = ooss-maker "${config.venus-location.magnesium-hydroxide}/hot-files";
-      lib.file.mkOOSS-Hydrogen-Sulfide = ooss-maker "${config.venus-location.hydrogen-sulfide}/hot-files";
+      lib.file.mkOOSS-Magnesium-Hydroxide = ooss-maker "${config.venus-location.magnesium-hydroxide}/hot-files"; # TODO(magic): use magic
+      lib.file.mkOOSS-Hydrogen-Sulfide = ooss-maker "${config.venus-location.hydrogen-sulfide}/hot-files"; # TODO(magic): use magic
     };
 }

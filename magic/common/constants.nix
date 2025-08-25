@@ -4,8 +4,8 @@
 let
   mkRelativePathStringsForMachine = machine: {
     ${machine} = lib.fix (selfRelativePathStrings: {
-      # MUT: List all `everythingRepo` values for each machine here.
       everythingRepo = {
+        # MUT: List all `everythingRepo` values for each machine here.
         "sodium" = "src/everything";
       }.${machine};
 
