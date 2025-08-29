@@ -9,6 +9,8 @@ let
 in
 # TODO: replace with recursiveUpdateAllNoOverlap (fails if there is conflict)
 recursiveUpdateAll [
+  # Eight
+  ((import ./../experimental/eight/outputs.nix) inputs)
   # Whale
   ((import ./../whale/outputs.nix) inputs)
   {
