@@ -1,3 +1,8 @@
+# This file is ... not a good idea, actually
+# Instead of centralizing all outputs, we should have each flake-profile
+# be its own flake-parts style flake.
+# Projects that want to use other flake-profiles can implement their package
+# logic in the flake-profile's flake.nix.
 {
   self,
   ...
