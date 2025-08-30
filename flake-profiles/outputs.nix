@@ -23,6 +23,7 @@ recursiveUpdateAll [
       let
         pkgs = inputs.nixpkgs.legacyPackages.${system};
         getPython = pkgs: pkgs.python312;
+        magic = pkgs.callPackage ./../magic/common/constants.nix {};
       in
       {
         # `nix develop ./flake-profiles/everything-devenv#jupiter --impure`
@@ -46,6 +47,13 @@ recursiveUpdateAll [
                   #requirements = ./requirements.txt;
                   requirements = ./../jupiter/requirements.txt;
                 };
+              };
+
+              dotenv = {
+                enable = true;
+                filename = [
+                  #magic.jupiter-env-path-rel-to-everythingRepo
+                ];
               };
             }
           ];
