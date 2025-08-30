@@ -11,9 +11,6 @@ devenv.local.nix
 # nix build
 result
 
-# Per-cloned local envrc
-.envrc
-
 # Dotenv
 .env
 .env.*
