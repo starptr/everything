@@ -22,6 +22,8 @@ def _get_cwd():
     return pathlib.Path(os.getcwd())
 
 # Deprecate generated_json_path
+# TODO: make Pulumi be runnable from the root of the everything repo
+# TODO: these values should be pulled from magic
 #generated_json_path = _get_cwd().joinpath('generated.json')
 generated_nixie_path = _get_cwd().joinpath('generated-nixie.json')
 generated_serverref_path = _get_cwd().joinpath('generated-serverref.json')
