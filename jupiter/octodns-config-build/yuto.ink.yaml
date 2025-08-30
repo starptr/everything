@@ -1,8 +1,0 @@
----
-img:
-  octodns:
-    cloudflare:
-      auto-ttl: true
-  ttl: 300
-  type: CNAME
-  value: fractal-cuttlefish.pikapod.net.
