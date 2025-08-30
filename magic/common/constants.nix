@@ -27,5 +27,5 @@ in {
   ];
 
   # MUT: Add any constants here
-  jupiter-env-path-rel-to-everythingRepo = "jupiter/.env";
+  jupiter-env-path-rel-to-everythingRepo = ".env.jupiter";
 })

@@ -14,5 +14,8 @@ result
 # Per-cloned local envrc
 .envrc
 
-# Dorenv
+# Dotenv
 .env
+.env.*
+**/.env
+**/.env.*
