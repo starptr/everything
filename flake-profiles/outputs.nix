@@ -38,6 +38,9 @@ recursiveUpdateAll [
               enterShell = ''
                 hello
                 # Automatically export environment variables from the .env file
+                # We manually source the file instead of using the dotenv integration with devenv
+                # because the env file is not checked into git. Therefore, at evaluation time,
+                # the flake cannot read the file. Or at least this is my guess on why it doesn't work.
                 if [ -f "${magic.jupiter-env-path-rel-to-everythingRepo}" ]; then
                   echo "Loading environment variables from ${magic.jupiter-env-path-rel-to-everythingRepo}"
                   source "${magic.jupiter-env-path-rel-to-everythingRepo}"
