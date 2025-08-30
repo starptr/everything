@@ -1,7 +1,7 @@
 # Use import to use this file.
 # This file cannot use `config`, because we cannot assume whether this module is being used from home-manager or otherwise.
 { lib, ...}:
-let
+lib.fix (self: let
   mkRelativePathStringsForMachine = machine: {
     ${machine} = lib.fix (selfRelativePathStrings: {
       everythingRepo = {
@@ -11,15 +11,14 @@ let
 
       venus = "${selfRelativePathStrings.everythingRepo}/venus";
 
-      jupiter-dotenv = "${selfRelativePathStrings.everythingRepo}/jupiter/.env";
+      jupiter-dotenv = "${selfRelativePathStrings.everythingRepo}/${self.jupiter-env-path-rel-to-everythingRepo}";
 
       whale-digests = "${selfRelativePathStrings.everythingRepo}/exports/whale/digests";
 
       home = ""; # The home directory is an empty relative path to itself.
     });
   };
-in
-lib.fix (self: {
+in {
   # Home-relative path strings.
   # The top-level attributes are all machine names.
   # The top-level values are arbitrarily-deep attrsets that contain relative path strings.
@@ -28,4 +27,5 @@ lib.fix (self: {
   ];
 
   # MUT: Add any constants here
+  jupiter-env-path-rel-to-everythingRepo = "jupiter/.env";
 })
