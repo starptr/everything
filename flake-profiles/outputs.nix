@@ -38,13 +38,13 @@ recursiveUpdateAll [
               enterShell = ''
                 hello
                 # Automatically export environment variables from the .env file
-                if [ -f "${magic.relativePathStrings.sodium.jupiter-dotenv}" ]; then
-                  echo "Loading environment variables from ${magic.relativePathStrings.sodium.jupiter-dotenv}"
+                if [ -f "${magic.jupiter-env-path-rel-to-everythingRepo}" ]; then
+                  echo "Loading environment variables from ${magic.jupiter-env-path-rel-to-everythingRepo}"
                   set -a
-                  source "${magic.relativePathStrings.sodium.jupiter-dotenv}"
+                  source "${magic.jupiter-env-path-rel-to-everythingRepo}"
                   set +a
                 else
-                  echo "Warning: ${magic.relativePathStrings.sodium.jupiter-dotenv} not found."
+                  echo "Warning: ${magic.jupiter-env-path-rel-to-everythingRepo} not found."
                 fi
               '';
 
