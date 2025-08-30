@@ -52,7 +52,7 @@ recursiveUpdateAll [
               dotenv = {
                 enable = true;
                 filename = [
-                  #magic.jupiter-env-path-rel-to-everythingRepo
+                  magic.jupiter-env-path-rel-to-everythingRepo
                 ];
               };
             }
