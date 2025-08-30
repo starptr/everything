@@ -37,6 +37,13 @@ recursiveUpdateAll [
               ];
               enterShell = ''
                 hello
+                # Automatically export environment variables from the .env file
+                if [ -f "${magic.relativePathStrings.sodium.jupiter-dotenv}" ]; then
+                  echo "Loading environment variables from ${magic.relativePathStrings.sodium.jupiter-dotenv}"
+                  set -a
+                  source "${magic.relativePathStrings.sodium.jupiter-dotenv}"
+                  set +a
+                fi
               '';
 
               languages.python = {
@@ -47,13 +54,6 @@ recursiveUpdateAll [
                   #requirements = ./requirements.txt;
                   requirements = ./../jupiter/requirements.txt;
                 };
-              };
-
-              dotenv = {
-                enable = true;
-                filename = [
-                  magic.jupiter-env-path-rel-to-everythingRepo
-                ];
               };
             }
           ];
