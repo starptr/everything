@@ -43,6 +43,8 @@ recursiveUpdateAll [
                   set -a
                   source "${magic.relativePathStrings.sodium.jupiter-dotenv}"
                   set +a
+                else
+                  echo "Warning: ${magic.relativePathStrings.sodium.jupiter-dotenv} not found."
                 fi
               '';
 
