@@ -1,0 +1,11 @@
+{
+    "nixie": {
+        "name": "nixie",
+        "ipAddress": "24.199.97.98"
+    },
+    "serverref": {
+        "name": "serverref",
+        "ipAddress": "143.198.229.127",
+        "nix-store-volume": "serverref-nix-store-e3d26ed"
+    }
+}
