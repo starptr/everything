@@ -4,5 +4,5 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs";
   inputs.systems.url = "github:nix-systems/default";
 
-  outputs = inputs: (import ../outputs.nix) inputs;
+  outputs = inputs: (import ./../../whale/outputs.nix) inputs;
 }

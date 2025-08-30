@@ -16,8 +16,6 @@ in
 recursiveUpdateAll [
   # Eight
   ((import ./../experimental/eight/outputs.nix) inputs)
-  # Whale
-  ((import ./../whale/outputs.nix) inputs)
   {
     # Jupiter
     # TODO: split up Jupiter into 2 projects: pulumi and build-dns-config
