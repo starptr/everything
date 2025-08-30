@@ -33,9 +33,5 @@ def get_cwd():
         raise Exception(f"Pulumi was called when CWD was an unexpected value. Update the list in share.py as appropriate.")
     return pathlib.Path(os.getcwd())
 
-# Deprecate generated_json_path
-#generated_json_path = get_cwd().joinpath('generated.json')
-generated_nixie_path = get_cwd().joinpath('generated-nixie.json')
-generated_serverref_path = get_cwd().joinpath('generated-serverref.json')
-octodns_config_template_path = get_cwd().joinpath('octodns-config-template')
-octodns_config_build_path = get_cwd().joinpath('octodns-config-build')
+# We assume that CWD is in everything/jupiter
+generated_json_path = get_cwd().joinpath('..', 'exports', 'jupiter', 'generated.json')

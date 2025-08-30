@@ -98,8 +98,7 @@ def write_dict_to_json_at(data, file_path):
 def on_generated_data_complete(data):
     logging.info("Data finished generating")
     logging.debug(f"Data: {data}")
-    write_dict_to_json_at(data['nixie'], share.generated_nixie_path)
-    write_dict_to_json_at(data['serverref'], share.generated_serverref_path)
+    write_dict_to_json_at(data, share.generated_json_path)
 
 # The lambda will run once the value in `generated_data` (an async variable) is available
 generated_data.apply(on_generated_data_complete)
