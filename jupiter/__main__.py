@@ -12,7 +12,7 @@ from app.src.share import logging
 #pulumi_config = pulumi.Config()
 #do_token = pulumi_config.require_object('token')
 
-# TODO: Check that this file was called when CWD is at `src/`
+share.get_cwd() # Validate that CWD is correct
 
 ssh_public_keys = [
     42072822, # Yuto's Sodium

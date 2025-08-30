@@ -18,14 +18,24 @@ class logging:
     def error(msg):
         print(msg)
 
-def _get_cwd():
+# We have limitations on how Pulumi can be called.
+# Because the CWD must be where Pulumi.yaml resides,
+# we cannot make the Pulumi CLI work from the root of the Everything repo.
+# Therefore, we will check to see if the CWD is where we expect it to be
+# by listing all of the possible locations of the jupiter directory
+# in all checkouts of the Everything repo.
+def get_cwd():
+    known_jupiter_paths = [
+        # MUT: Update this list with all possible paths to jupiter.
+        '/Users/yuto/src/everything/jupiter',
+    ]
+    if os.getcwd() not in known_jupiter_paths:
+        raise Exception(f"Pulumi was called when CWD was an unexpected value. Update the list in share.py as appropriate.")
     return pathlib.Path(os.getcwd())
 
 # Deprecate generated_json_path
-# TODO: make Pulumi be runnable from the root of the everything repo
-# TODO: these values should be pulled from magic
-#generated_json_path = _get_cwd().joinpath('generated.json')
-generated_nixie_path = _get_cwd().joinpath('generated-nixie.json')
-generated_serverref_path = _get_cwd().joinpath('generated-serverref.json')
-octodns_config_template_path = _get_cwd().joinpath('octodns-config-template')
-octodns_config_build_path = _get_cwd().joinpath('octodns-config-build')
+#generated_json_path = get_cwd().joinpath('generated.json')
+generated_nixie_path = get_cwd().joinpath('generated-nixie.json')
+generated_serverref_path = get_cwd().joinpath('generated-serverref.json')
+octodns_config_template_path = get_cwd().joinpath('octodns-config-template')
+octodns_config_build_path = get_cwd().joinpath('octodns-config-build')
