@@ -40,9 +40,7 @@ recursiveUpdateAll [
                 # Automatically export environment variables from the .env file
                 if [ -f "${magic.jupiter-env-path-rel-to-everythingRepo}" ]; then
                   echo "Loading environment variables from ${magic.jupiter-env-path-rel-to-everythingRepo}"
-                  set -a
                   source "${magic.jupiter-env-path-rel-to-everythingRepo}"
-                  set +a
                 else
                   echo "Warning: ${magic.jupiter-env-path-rel-to-everythingRepo} not found."
                 fi
