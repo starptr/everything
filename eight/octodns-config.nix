@@ -1,5 +1,5 @@
 { pkgs, lib }: let
-  yaml-lib = pkgs.callPackage ../../lib/yaml.nix {};
+  yaml-lib = pkgs.callPackage ../lib/yaml.nix {};
 in {
   config-directory = let
     nixie-ip-address = "24.199.97.98";

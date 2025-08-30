@@ -15,7 +15,7 @@ in
 # TODO: replace with recursiveUpdateAllNoOverlap (fails if there is conflict)
 recursiveUpdateAll [
   # Eight
-  ((import ./../experimental/eight/outputs.nix) inputs)
+  ((import ./../eight/outputs.nix) inputs)
   {
     # Jupiter
     # TODO: split up Jupiter into 2 projects: pulumi and build-dns-config
