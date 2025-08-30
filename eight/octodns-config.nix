@@ -2,7 +2,8 @@
   yaml-lib = pkgs.callPackage ../lib/yaml.nix {};
 in {
   config-directory = let
-    nixie-ip-address = "24.199.97.98";
+    generated = builtins.fromJSON (builtins.readFile ./../exports/jupiter/generated.json);
+    nixie-ip-address = generated.nixie.ipAddress;
     configurations-by-file = lib.fix (self: {
       "production.yaml" = {
         providers = {
