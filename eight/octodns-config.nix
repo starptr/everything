@@ -5,6 +5,10 @@ in {
     generated = builtins.fromJSON (builtins.readFile ./../exports/jupiter/generated.json);
     nixie-ip-address = generated.nixie.ipAddress;
     configurations-by-file = lib.fix (self: {
+      "andref.app.yaml" = import ./per-domain/andref.yaml.nix {
+        inherit generated;
+        configurations-by-file = self;
+      };
       "production.yaml" = {
         providers = {
           config = {
@@ -32,6 +36,7 @@ in {
           "yuto.tel." = self."production.yaml".zones."yart.me.";
           "yuto.wiki." = self."production.yaml".zones."yart.me.";
           "yut.to." = self."production.yaml".zones."yart.me.";
+          "andref.app." = self."production.yaml".zones."yart.me.";
         };
       };
       "yart.me.yaml" = {
