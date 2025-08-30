@@ -51,25 +51,25 @@ recursiveUpdateAll [
           ];
         };
       });
-    packages = forEachSystem (system: let
-      # TODO: forEachSystem should be around the entire Jupiter section of the outputs
-      pkgs = inputs.nixpkgs.legacyPackages.${system};
-      getPython = pkgs: pkgs.python312;
-      build-dns-config-pyproject = inputs.pyproject-nix.lib.project.loadPyproject {
-        projectRoot = ./../jupiter/app;
-      };
-      metadata = builtins.fromTOML (builtins.readFile ./../jupiter/app/pyproject.toml);
-    in
-    {
-      # `nix run ./flake-profiles/build-dns-config#build-dns-config`
-      ${metadata.project.name} = let
-        python = getPython pkgs;
-        attrs = build-dns-config-pyproject.renderers.buildPythonPackage {
-          inherit python;
-        };
-      in
-      python.pkgs.buildPythonPackage (attrs);
-    });
+    #packages = forEachSystem (system: let
+    #  # TODO: forEachSystem should be around the entire Jupiter section of the outputs
+    #  pkgs = inputs.nixpkgs.legacyPackages.${system};
+    #  getPython = pkgs: pkgs.python312;
+    #  build-dns-config-pyproject = inputs.pyproject-nix.lib.project.loadPyproject {
+    #    projectRoot = ./../jupiter/app;
+    #  };
+    #  metadata = builtins.fromTOML (builtins.readFile ./../jupiter/app/pyproject.toml);
+    #in
+    #{
+    #  # `nix run ./flake-profiles/build-dns-config#build-dns-config`
+    #  ${metadata.project.name} = let
+    #    python = getPython pkgs;
+    #    attrs = build-dns-config-pyproject.renderers.buildPythonPackage {
+    #      inherit python;
+    #    };
+    #  in
+    #  python.pkgs.buildPythonPackage (attrs);
+    #});
   }
   {
     # Main
