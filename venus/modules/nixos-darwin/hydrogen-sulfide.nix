@@ -132,6 +132,9 @@ in
     tokenFile = "/run/secrets/cluster_token";
     clusterInit = false;
     extraFlags = k3sExtraFlags;
+    gracefulNodeShutdown = {
+      enable = true;
+    };
   };
 
   services.openssh = {
