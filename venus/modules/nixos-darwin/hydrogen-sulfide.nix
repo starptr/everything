@@ -19,7 +19,7 @@ in let
   k3sExtraFlags = [
     "--node-ip=${tailscaleIp}"
     #"--advertise-address=${tailscaleIp}"
-  ] ++ (map (name: "--tls-san=${name}") tlsSans);
+  ]; #++ (map (name: "--tls-san=${name}") tlsSans);
 in
 {
   system.stateVersion = "24.11";
