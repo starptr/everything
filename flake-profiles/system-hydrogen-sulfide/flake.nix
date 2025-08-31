@@ -8,6 +8,11 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    deploy-rs = {
+      url = "github:serokell/deploy-rs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   nixConfig = {
@@ -21,7 +26,7 @@
     ];
   };
 
-  outputs = inputs @ { nixpkgs, nixos-wsl, home-manager, ... }: {
+  outputs = inputs @ { self, nixpkgs, nixos-wsl, home-manager, ... }: {
     nixosConfigurations."Hydrogen-Sulfide" = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
@@ -36,5 +41,20 @@
         }
       ];
     };
+
+    deploy.nodes."Hydrogen-Sulfide" = {
+      hostname = "hydrogen-sulfide.tail4c9a.ts.net";
+      profilesOrder = [ "system" ];
+      profiles.system = {
+        user = "root";
+        sshUser = "root";
+        path = inputs.deploy-rs.lib.x86_64-linux.activate.nixos self.nixosConfigurations."Hydrogen-Sulfide";
+        remoteBuild = true;
+      };
+    };
+    
+    # This is highly advised, and will prevent many possible mistakes
+    # Disabled to avoid remote builder
+    #checks = builtins.mapAttrs (system: deployLib: deployLib.deployChecks self.deploy) inputs.deploy-rs.lib;
   };
 }
