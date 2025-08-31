@@ -126,7 +126,7 @@ in
   services.k3s = {
     enable = true;
     role = "agent";
-    serverAddr = "https://100.112.134.68";
+    serverAddr = "https://100.112.134.68:6443";
     tokenFile = "/run/secrets/cluster_token";
     clusterInit = false;
     extraFlags = k3sExtraFlags;
