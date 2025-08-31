@@ -80,10 +80,11 @@
     #    protocol = "ssh-ng";
     #  }
     #];
-    # This automatically adds itself (aarch64-linux) to available buildMachines; no need for an entry above
+
     linux-builder = {
       enable = true;
-      maxJobs = 4;
+      systems = ["aarch64-linux" "x86_64-linux" ];
+      config.boot.binfmt.emulatedSystems = ["x86_64-linux"];
     };
   };
 
