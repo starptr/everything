@@ -149,10 +149,9 @@ in
   };
 
   sops = {
-    secrets."milky-way-token.txt" = {
-      format = "binary";
+    secrets."cluster_token" = {
       mode = "0400";
-      sopsFile = ./../../../secrets/milky-way-token.txt;
+      sopsFile = ./../../../secrets/milky-way.json;
     };
   };
 }
