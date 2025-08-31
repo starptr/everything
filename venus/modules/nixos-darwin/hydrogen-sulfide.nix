@@ -122,7 +122,7 @@ in
   services.k3s = {
     enable = true;
     role = "server";
-    clusterInit = true;
+    clusterInit = false;
     extraFlags = k3sExtraFlags;
   };
 
