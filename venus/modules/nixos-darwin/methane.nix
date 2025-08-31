@@ -72,6 +72,7 @@
     allowedTCPPorts = [ 22 80 443 ];
     allowedUDPPorts = [ 443 ];
   };
+  networking.hostName = "methane";
 
   services.nginx = {
     enable = true;
