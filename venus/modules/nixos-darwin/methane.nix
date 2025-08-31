@@ -1,5 +1,24 @@
-{ modulesPath, lib, pkgs, config, ... }:
-{
+{ modulesPath, lib, pkgs, config, ... }: let
+  # Assigned IP from the Tailscale dashboard
+  # TODO: create a centralized `magic.nix` for magic values like this
+  # We can set this statically, since
+  # 1. the tailscale IP is stable
+  # 2. it can be set in tailscale web dashboard to match this value
+  tailscaleIp = "100.112.134.68"; 
+  # List of ways to refer to this server in Tailscale from the Tailscale dashboard
+  tlsSans = [
+    # First name is advertised to agents
+    "methane"
+    "100.112.134.68"
+    "methane.tail4c9a.ts.net"
+    "fd7a:115c:a1e0::4234:8644"
+  ];
+in let
+  k3sExtraFlags = [
+    "--node-ip=${tailscaleIp}"
+    "--advertise-address=${tailscaleIp}"
+  ] ++ (map (name: "--tls-san=${name}") tlsSans);
+in {
   imports = lib.optional (builtins.pathExists ./do-userdata.nix) ./do-userdata.nix ++ [
     (modulesPath + "/virtualisation/digital-ocean-config.nix")
   ];
@@ -107,6 +126,13 @@
   services.tailscale = {
     enable = true;
     useRoutingFeatures = "both";
+  };
+
+  services.k3s = {
+    enable = true;
+    role = "server";
+    clusterInit = false;
+    extraFlags = k3sExtraFlags;
   };
 
   services.kubo = {
