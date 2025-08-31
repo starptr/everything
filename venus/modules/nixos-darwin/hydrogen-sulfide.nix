@@ -150,6 +150,7 @@ in
 
   sops = {
     secrets."milky-way-token.txt" = {
+      format = "binary";
       mode = "0400";
       sopsFile = ./../../../secrets/milky-way-token.txt;
     };
