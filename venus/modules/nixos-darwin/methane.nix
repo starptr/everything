@@ -103,6 +103,11 @@
     };
   };
 
+  services.tailscale = {
+    enable = true;
+    useRoutingFeatures = "both";
+  };
+
   services.kubo = {
     enable = false;
   };
