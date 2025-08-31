@@ -121,7 +121,9 @@ in
 
   services.k3s = {
     enable = true;
-    role = "server";
+    role = "agent";
+    serverAddr = "methane";
+    tokenFile = "/run/secrets/cluster_token";
     clusterInit = false;
     extraFlags = k3sExtraFlags;
   };
