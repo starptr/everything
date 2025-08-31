@@ -122,7 +122,7 @@ in
   services.k3s = {
     enable = true;
     role = "agent";
-    serverAddr = "methane";
+    serverAddr = "https://methane";
     tokenFile = "/run/secrets/cluster_token";
     clusterInit = false;
     extraFlags = k3sExtraFlags;
