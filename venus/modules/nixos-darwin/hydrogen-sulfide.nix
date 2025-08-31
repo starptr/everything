@@ -147,4 +147,11 @@ in
       ];
     };
   };
+
+  sops = {
+    secrets."milky-way-token.txt" = {
+      mode = "0400";
+      sopsFile = ./../../../secrets/milky-way-token.txt;
+    };
+  };
 }
