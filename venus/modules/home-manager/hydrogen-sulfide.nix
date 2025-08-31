@@ -8,7 +8,7 @@
 
 {
   imports = [
-    ./venus-location.nix
+    ./../../../magic/home-manager/module.nix
     ./ooss-maker.nix
     ./use-fish.nix
     ./use-direnv.nix
@@ -115,7 +115,7 @@
     };
 
     home.shellAliases = {
-      nrs = "sudo nixos-rebuild switch --flake ${config.venus-location.hydrogen-sulfide}/flake-profiles/hydrogen-sulfide";
+      #nrs = "sudo nixos-rebuild switch --flake ${config.venus-location.hydrogen-sulfide}/flake-profiles/hydrogen-sulfide";
     };
 
     # Let Home Manager install and manage itself.
