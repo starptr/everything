@@ -86,11 +86,11 @@ in {
   security.sudo.wheelNeedsPassword = false;
 
   # Nixie-specific config
-  networking.firewall = {
-    enable = true;
-    allowedTCPPorts = [ 22 80 443 ];
-    allowedUDPPorts = [ 443 ];
-  };
+  #networking.firewall = {
+  #  enable = true;
+  #  allowedTCPPorts = [ 22 80 443 ];
+  #  allowedUDPPorts = [ 443 ];
+  #};
   networking.hostName = "methane";
 
   services.nginx = {
