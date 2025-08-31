@@ -13,6 +13,11 @@
       url = "github:serokell/deploy-rs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    sops-nix = {
+      url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   nixConfig = {
@@ -30,6 +35,7 @@
     nixosConfigurations."Hydrogen-Sulfide" = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
+        inputs.sops-nix.nixosModules.sops
         nixos-wsl.nixosModules.default
         ./../../venus/modules/nixos-darwin/hydrogen-sulfide.nix
         home-manager.nixosModules.home-manager
