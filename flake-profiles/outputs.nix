@@ -100,6 +100,7 @@ recursiveUpdateAll [
                 pkgs.hello
                 pkgs.sops
                 pkgs.ssh-to-age
+                pkgs.deploy-rs
               ];
   
               enterShell = ''
