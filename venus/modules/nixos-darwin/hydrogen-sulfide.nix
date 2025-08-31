@@ -18,7 +18,7 @@ let
 in let
   k3sExtraFlags = [
     "--node-ip=${tailscaleIp}"
-    "--advertise-address=${tailscaleIp}"
+    #"--advertise-address=${tailscaleIp}"
   ] ++ (map (name: "--tls-san=${name}") tlsSans);
 in
 {
@@ -119,10 +119,10 @@ in
     useRoutingFeatures = "both";
   };
 
-  systemd.services.k3s = {
-    after = [ "network-online.target" "tailscaled.service" ];
-    requires = [ "tailscaled.service" ];
-  };
+  #systemd.services.k3s = {
+  #  after = [ "network-online.target" "tailscaled.service" ];
+  #  requires = [ "tailscaled.service" ];
+  #};
   services.k3s = {
     enable = true;
     role = "agent";
