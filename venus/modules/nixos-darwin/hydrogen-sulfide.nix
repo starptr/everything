@@ -7,6 +7,8 @@ let
   # 1. the tailscale IP is stable
   # 2. it can be set in tailscale web dashboard to match this value
   tailscaleIp = "100.110.15.98"; 
+  controlPlaneNodeIp = "100.112.134.68";
+  controlPlaneNodePort = "6443";
   # List of ways to refer to this server in Tailscale from the Tailscale dashboard
   tlsSans = [
     # First name is advertised to agents
@@ -126,7 +128,7 @@ in
   services.k3s = {
     enable = true;
     role = "agent";
-    serverAddr = "https://100.112.134.68:6443";
+    serverAddr = "https://${controlPlaneNodeIp}:${controlPlaneNodePort}";
     tokenFile = "/run/secrets/cluster_token";
     clusterInit = false;
     extraFlags = k3sExtraFlags;
