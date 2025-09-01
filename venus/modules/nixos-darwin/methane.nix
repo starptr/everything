@@ -128,6 +128,10 @@ in {
     useRoutingFeatures = "both";
   };
 
+  systemd.services.k3s = {
+    after = [ "tailscaled.service" ];
+    requires = [ "tailscaled.service" ];
+  };
   services.k3s = {
     enable = true;
     role = "server";
