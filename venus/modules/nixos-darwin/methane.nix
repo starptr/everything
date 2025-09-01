@@ -28,6 +28,7 @@ in {
     pkgs.vim
     pkgs.chaseln
     pkgs.htop
+    pkgs.dig
   ];
 
   nix = {
