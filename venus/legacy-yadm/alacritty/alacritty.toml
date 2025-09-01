@@ -396,10 +396,10 @@ chars = "\u001B|"
 key = "Backslash"
 mods = "Command|Shift"
 
-[[keyboard.bindings]]
-chars = "\u0000"
-key = "Space"
-mods = "Control"
+#[[keyboard.bindings]]
+#chars = "\u0000"
+#key = "Space"
+#mods = "Control"
 
 [schemes.my_bright_dark.cursor]
 cursor = "CellForeground"
