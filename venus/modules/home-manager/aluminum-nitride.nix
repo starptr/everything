@@ -28,7 +28,7 @@ in
   xdg = {
     enable = true;
     # Configure commands like `nix-shell` (eg. `allowUnfree`)
-    configFile."nixpkgs/config.nix".source = ./../configs/nixpkgs-config.nix;
+    configFile."nixpkgs/config.nix".source = ./../../../venus/app-configs/nixpkgs-config.nix;
   };
 
   # The home.packages option allows you to install Nix packages into your
@@ -165,7 +165,7 @@ in
 
   programs.starship = {
     enable = true;
-    settings = builtins.fromTOML (builtins.readFile ./../configs/starship.toml);
+    settings = builtins.fromTOML (builtins.readFile ./../../../venus/app-configs/starship.toml);
     enableFishIntegration = false;
   };
 
@@ -190,7 +190,7 @@ in
     # TODO: override src to control the pinned version (0.12.0) (5a72819)
     # Ideally, pin the package since alacritty is unstable
     # Then, use xdg to symlink to the yaml. Probably best to create a new homeManagerPartial for this.
-    settings = builtins.fromTOML (builtins.readFile ./../legacy-yadm/alacritty/alacritty.toml);
+    settings = builtins.fromTOML (builtins.readFile ./../../../venus/legacy-yadm/alacritty/alacritty.toml);
   };
 
   # FIXME: doesn't work on darwin
