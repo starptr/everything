@@ -48,4 +48,37 @@
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
   hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
+
+  # Set up GPU correctly.
+  # Details: https://wiki.nixos.org/wiki/NVIDIA
+
+  hardware.graphics.enable = true;
+  services.xserver.videoDrivers = [ "modesetting" "nvidia" ];
+  hardware.nvidia.open = false;
+
+  # Enable PRIME.
+  # This is pretty much necessary for systems with both iGPU and dGPU.
+  # By looking at lspci, we can see the PCI numbers:
+  # ```sh
+  # $ lspci -k | grep -EA3 'VGA|3D|Display'
+  # 00:02.0 VGA compatible controller: Intel Corporation CoffeeLake-H GT2 [UHD Graphics 630]
+  #         DeviceName:  Onboard IGD
+  #         Subsystem: Dell Device 0825
+  #         Kernel driver in use: i915
+  # --
+  # 01:00.0 VGA compatible controller: NVIDIA Corporation GP106M [GeForce GTX 1060 Mobile] (rev a1)
+  #         Subsystem: Dell Device 0825
+  #         Kernel driver in use: nouveau
+  #         Kernel modules: nvidiafb, nouveau
+  # ```
+  hardware.nvidia.prime = {
+    intelBusId = "PCI:0:2:0";
+    nvidiaBusId = "PCI:1:0:0";
+    # Enable Offload mode.
+    # Requires videoDrivers to have both "modesettings" (Intel iGPU driver) and "nvidia" (NVIDIA dGPU driver)
+    offload = {
+      enable = true;
+      enableOffloadCmd = true; # Prepend any shell expression with `nvidia-offload` to use the dGPU
+    };
+  };
 }
