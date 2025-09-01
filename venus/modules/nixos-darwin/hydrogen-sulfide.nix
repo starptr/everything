@@ -19,7 +19,8 @@ let
   ];
 in let
   k3sExtraFlags = [
-    "--node-ip=${tailscaleIp}"
+    "--node-external-ip=${tailscaleIp}"
+    "--flannel-iface=tailscale0"
     #"--advertise-address=${tailscaleIp}"
   ]; #++ (map (name: "--tls-san=${name}") tlsSans);
 in
