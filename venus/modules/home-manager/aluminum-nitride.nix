@@ -37,6 +37,7 @@ in
     # # Adds the 'hello' command to your environment. It prints a friendly
     # # "Hello, world!" when run.
     # pkgs.hello
+    pkgs.bottles
 
     # This should not throw if unfree is allowed
     pkgs.hello-unfree
