@@ -74,8 +74,8 @@
         ];
       };
 
-      deploy.nodes.aluminum-nitride = {
-        hostname = "aluminum-nitride";
+      deploy.nodes.yutos-aluminum-nitride = {
+        hostname = "yutos-aluminum-nitride";
         profilesOrder = [ "system" ];
         profiles.system = {
           user = "root";
@@ -84,5 +84,9 @@
           remoteBuild = true;
         };
       };
+
+      # This is highly advised, and will prevent many possible mistakes
+      # Disabled to avoid remote builder
+      #checks = builtins.mapAttrs (system: deployLib: deployLib.deployChecks self.deploy) inputs.deploy-rs.lib;
     };
 }
