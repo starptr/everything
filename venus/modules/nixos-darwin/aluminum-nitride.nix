@@ -153,6 +153,12 @@
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
+  # Disable sleep on idle
+  services.logind.extraConfig = ''
+    IdleAction=ignore
+    IdleActionSec=0
+  '';
+
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
