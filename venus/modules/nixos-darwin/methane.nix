@@ -15,8 +15,8 @@
   ];
 in let
   k3sExtraFlags = [
-    "--node-ip=${tailscaleIp}"
-    "--advertise-address=${tailscaleIp}"
+    #"--node-ip=${tailscaleIp}"
+    #"--advertise-address=${tailscaleIp}"
   ] ++ (map (name: "--tls-san=${name}") tlsSans);
 in {
   imports = lib.optional (builtins.pathExists ./do-userdata.nix) ./do-userdata.nix ++ [
