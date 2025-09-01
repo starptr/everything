@@ -2,6 +2,11 @@
   description = "Yuto's system profiles";
 
   inputs = {
+    deploy-rs = {
+      url = "github:serokell/deploy-rs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -49,27 +54,35 @@
       jellyfin-mpv-shim-darwin,
       soup,
       ...
-    }:
-    (
-      let
-        overlay-jellyfin-mpv-shim-for-aarch64-darwin = self: super: {
-          jellyfin-mpv-shim = jellyfin-mpv-shim-darwin.packages."aarch64-darwin".default;
+    }: let
+      overlay-jellyfin-mpv-shim-for-aarch64-darwin = self: super: {
+        jellyfin-mpv-shim = jellyfin-mpv-shim-darwin.packages."aarch64-darwin".default;
+      };
+    in
+    {
+      nixosConfigurations."Yutos-Aluminum-Nitride" = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          ./../../venus/modules/nixos-darwin/aluminum-nitride.nix
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.users.yuto = import ./../../venus/modules/home-manager/aluminum-nitride.nix;
+            home-manager.backupFileExtension = "hm-backup";
+          }
+        ];
+      };
+
+      deploy.nodes.aluminum-nitride = {
+        hostname = "aluminum-nitride";
+        profilesOrder = [ "system" ];
+        profiles.system = {
+          user = "root";
+          sshUser = "root";
+          path = inputs.deploy-rs.lib.x86_64-linux.activate.nixos self.nixosConfigurations."Yutos-Aluminum-Nitride";
+          remoteBuild = true;
         };
-      in
-      {
-        nixosConfigurations."Yutos-Aluminum-Nitride" = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          modules = [
-            ./../../venus/modules/nixos-darwin/aluminum-nitride.nix
-            home-manager.nixosModules.home-manager
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.users.yuto = import ./../../venus/modules/home-manager/aluminum-nitride.nix;
-              home-manager.backupFileExtension = "hm-backup";
-            }
-          ];
-        };
-      }
-    );
+      };
+    };
 }
