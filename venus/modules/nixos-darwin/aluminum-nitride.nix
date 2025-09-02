@@ -160,6 +160,9 @@
     IdleActionSec=0
   '';
 
+  # Enable flatpak
+  services.flatpak.enable = true;
+
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
