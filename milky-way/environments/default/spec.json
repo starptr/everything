@@ -1,0 +1,12 @@
+{
+  "apiVersion": "tanka.dev/v1alpha1",
+  "kind": "Environment",
+  "metadata": {
+    "name": "default"
+  },
+  "spec": {
+    "apiServer": "https://methane:6443",
+    "namespace": "default",
+    "injectLabels": true
+  }
+}
