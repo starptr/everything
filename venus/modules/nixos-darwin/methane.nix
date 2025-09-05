@@ -32,6 +32,7 @@ in {
     pkgs.dig
     pkgs.ghostty.terminfo
     pkgs.etcd
+    pkgs.lsof
   ];
 
   nix = {
