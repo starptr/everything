@@ -39,6 +39,7 @@
                     pkgs.jsonnet-language-server
                     pkgs.kubectl
                     pkgs.kubernetes-helm
+                    pkgs.yq-go
                   ];
 
                   enterShell = ''
