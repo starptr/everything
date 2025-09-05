@@ -7,6 +7,7 @@
   "spec": {
     "apiServer": "https://methane:6443",
     "namespace": "default",
-    "injectLabels": false
+    "injectLabels": false,
+    "applyStrategy": "server"
   }
 }
