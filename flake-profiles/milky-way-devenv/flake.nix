@@ -40,6 +40,7 @@
                     pkgs.kubectl
                     pkgs.kubernetes-helm
                     pkgs.yq-go
+                    pkgs.kubernetes-helm # For `helm show values` and related; do not run mutation commands!
                   ];
 
                   enterShell = ''
