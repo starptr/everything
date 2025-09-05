@@ -8,7 +8,7 @@
   imports = [
     # Include the results of the hardware scan.
     ./../../../venus/modules/nixos-darwin/hardware-configurations/aluminum-nitride.nix
-    ./use-all-terminfo.nix
+    ./use-all-info.nix
   ];
 
   # Bootloader.

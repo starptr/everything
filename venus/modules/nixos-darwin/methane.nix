@@ -30,6 +30,7 @@ in {
     pkgs.chaseln
     pkgs.htop
     pkgs.dig
+    pkgs.ghostty.terminfo
   ];
 
   nix = {
