@@ -31,6 +31,7 @@ in {
     pkgs.htop
     pkgs.dig
     pkgs.ghostty.terminfo
+    pkgs.etcd
   ];
 
   nix = {
