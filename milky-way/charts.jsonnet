@@ -17,4 +17,10 @@ local helm = tanka.helm.new(std.thisFile);
       },
     },
   }),
+  kubePrometheusStack: helm.template("kube-prometheus-stack", "./charts/kube-prometheus-stack", {
+    namespace: "monitoring",
+    values: {
+      persistence: { enabled: true },
+    },
+  }),
 }
