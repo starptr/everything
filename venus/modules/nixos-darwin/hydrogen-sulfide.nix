@@ -124,10 +124,10 @@ in
     useRoutingFeatures = "both";
   };
 
-  #systemd.services.k3s = {
-  #  after = [ "network-online.target" "tailscaled.service" ];
-  #  requires = [ "tailscaled.service" ];
-  #};
+  systemd.services.k3s = {
+    after = [ "tailscaled.service" ];
+    requires = [ "tailscaled.service" ];
+  };
   services.k3s = {
     enable = true;
     role = "agent";
