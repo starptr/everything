@@ -23,7 +23,7 @@ in let
     #"--node-external-ip=24.199.97.98"
     #"--advertise-address=${tailscaleIp}" # Not defined for agent nodes
     "--flannel-iface=tailscale0"
-    "--flannel-external-ip=true"
+    #"--flannel-external-ip=true" # Not defined for agent nodes
   ]; #++ (map (name: "--tls-san=${name}") tlsSans);
 in
 {
