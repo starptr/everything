@@ -15,6 +15,7 @@
   ];
 in let
   k3sExtraFlags = [
+    "--node-ip=${tailscaleIp}"
     #"--node-external-ip=${tailscaleIp}"
     "--advertise-address=${tailscaleIp}"
     "--flannel-iface=tailscale0"
