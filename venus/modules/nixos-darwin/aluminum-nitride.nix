@@ -156,10 +156,10 @@
   services.openssh.enable = true;
 
   # Disable sleep on idle
-  services.logind.extraConfig = ''
-    IdleAction=ignore
-    IdleActionSec=0
-  '';
+  services.logind.settings.Login = {
+    IdleAction = "ignore";
+    IdleActionSec = 0;
+  };
 
   # Enable flatpak
   services.flatpak.enable = true;
