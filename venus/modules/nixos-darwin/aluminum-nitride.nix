@@ -8,7 +8,6 @@
   imports = [
     # Include the results of the hardware scan.
     ./../../../venus/modules/nixos-darwin/hardware-configurations/aluminum-nitride.nix
-    ./use-all-info.nix
   ];
 
   # Bootloader.
@@ -134,6 +133,7 @@
     vim
     git
     pciutils
+    #ghostty.terminfo
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
