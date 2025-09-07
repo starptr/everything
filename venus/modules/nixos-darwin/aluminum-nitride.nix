@@ -133,7 +133,7 @@
     vim
     git
     pciutils
-    #ghostty.terminfo
+    ghostty.terminfo
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
