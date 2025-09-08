@@ -1,44 +1,51 @@
 local utils = import 'utils.jsonnet';
 local retainSC = import 'local-path-retain.jsonnet';
 {
+  /**
+   * Some assumptions:
+   * - Each call to new() creates an instance on a single node.
+   * - Therefore, there must only be 1 replica.
+   */
   new(
     nodeName,
+    hostPathConfig,
+    hostPathData,
     name='komga',
   ):: {
     local this = self,
-    configPVC: {
-      apiVersion: "v1",
-      kind: "PersistentVolumeClaim",
-      metadata: {
-        name: "%s-config-pvc" % name, // TODO: remove the "-pvc" suffix
-      },
-      spec: {
-        accessModes: ["ReadWriteOnce"],
-        resources: {
-          requests: {
-            storage: "1Gi",
-          },
-        },
-        storageClassName: "local-path",
-      },
-    },
+    #configPVC: {
+    #  apiVersion: "v1",
+    #  kind: "PersistentVolumeClaim",
+    #  metadata: {
+    #    name: "%s-config-pvc" % name, // TODO: remove the "-pvc" suffix
+    #  },
+    #  spec: {
+    #    accessModes: ["ReadWriteOnce"],
+    #    resources: {
+    #      requests: {
+    #        storage: "1Gi",
+    #      },
+    #    },
+    #    storageClassName: "local-path",
+    #  },
+    #},
 
-    dataPVC: {
-      apiVersion: "v1",
-      kind: "PersistentVolumeClaim",
-      metadata: {
-        name: "%s-data-pvc" % name, // TODO: remove the "-pvc" suffix
-      },
-      spec: {
-        accessModes: ["ReadWriteOnce"],
-        resources: {
-          requests: {
-            storage: "10Gi",
-          },
-        },
-        storageClassName: retainSC.nameRef,
-      },
-    },
+    #dataPVC: {
+    #  apiVersion: "v1",
+    #  kind: "PersistentVolumeClaim",
+    #  metadata: {
+    #    name: "%s-data-pvc" % name, // TODO: remove the "-pvc" suffix
+    #  },
+    #  spec: {
+    #    accessModes: ["ReadWriteOnce"],
+    #    resources: {
+    #      requests: {
+    #        storage: "10Gi",
+    #      },
+    #    },
+    #    storageClassName: retainSC.nameRef,
+    #  },
+    #},
 
     deployment: {
       apiVersion: "apps/v1",
@@ -92,14 +99,16 @@ local retainSC = import 'local-path-retain.jsonnet';
             volumes: [
               {
                 name: "config",
-                persistentVolumeClaim: {
-                  claimName: this.configPVC.metadata.name,
-                },
+                hostPath: {
+                  path: hostPathConfig,
+                  type: "Directory",
+                }
               },
               {
                 name: "data",
-                persistentVolumeClaim: {
-                  claimName: this.dataPVC.metadata.name,
+                hostPath: {
+                  path: hostPathData,
+                  type: "Directory",
                 },
               },
             ],
@@ -164,9 +173,6 @@ local retainSC = import 'local-path-retain.jsonnet';
 
     // Aggregate all components
     resources:: [
-      self.configPVC,
-      self.dataPV,
-      self.dataPVC,
       self.deployment,
       self.service,
       self.ingress,
