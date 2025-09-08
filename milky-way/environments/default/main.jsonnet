@@ -30,22 +30,22 @@ local komga = komgaLib.new(
   kubePrometheusStack: charts.kubePrometheusStack,
   myLocalPathRetainSC: retainSC.storageClass,
   coredns: coredns.new(), // TODO: specify nodeSelector and label nodes that should have the DNS
-  komga: komga,
-  syncthing: syncthingLib.new(
-    nodeName = 'hydrogen-sulfide',
-    extraVolumeMounts = [
-      {
-        name: 'komga-data',
-        mountPath: '/data/komga',
-      },
-    ],
-    extraVolumes = [
-      {
-        name: 'komga-data',
-        persistentVolumeClaim: {
-          claimName: komga.dataPVC.metadata.name,
-        },
-      },
-    ],
-  ),
+  #komga: komga,
+  #syncthing: syncthingLib.new(
+  #  nodeName = 'hydrogen-sulfide',
+  #  extraVolumeMounts = [
+  #    {
+  #      name: 'komga-data',
+  #      mountPath: '/data/komga',
+  #    },
+  #  ],
+  #  extraVolumes = [
+  #    {
+  #      name: 'komga-data',
+  #      persistentVolumeClaim: {
+  #        claimName: komga.dataPVC.metadata.name,
+  #      },
+  #    },
+  #  ],
+  #),
 }
