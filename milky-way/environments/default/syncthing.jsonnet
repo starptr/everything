@@ -64,7 +64,7 @@ local utils = import 'utils.jsonnet';
                 ],
                 volumeMounts: [
                   {
-                    name: utils.assertEqualAndReturn(this.statefulset.spec.volumeClaimTemplates[0].metadata.name, "syncthing-config"), // TODO: expected param should be passed in as a parameter to top-level new()
+                    name: utils.assertEqualAndReturn(this.statefulset.spec.template.spec.volumes[0].name, "syncthing-config"), // TODO: expected param should be passed in as a parameter to top-level new()
                     mountPath: '/config',
                   },
                 ] + extraVolumeMounts,
