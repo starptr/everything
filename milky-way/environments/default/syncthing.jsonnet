@@ -1,7 +1,13 @@
 local utils = import 'utils.jsonnet';
 {
+  /**
+   * Some assumptions:
+   * - Each call to new() creates an instance on a single node.
+   * - Therefore, there must only be 1 replica.
+   */
   new(
     nodeName,
+    hostPathConfig,
     extraVolumes=[],
     extraVolumeMounts=[],
     name='syncthing',
@@ -69,25 +75,17 @@ local utils = import 'utils.jsonnet';
                 ],
               },
             ],
-            volumes: [] + extraVolumes,
-          },
-        },
-        volumeClaimTemplates: [
-          {
-            metadata: {
-              name: "%s-config" % name,
-            },
-            spec: {
-              accessModes: ['ReadWriteOnce'],
-              resources: {
-                requests: {
-                  storage: '1Gi',
+            volumes: [
+              {
+                name: "%s-config" % name,
+                hostPath: {
+                  path: hostPathConfig,
+                  type: "Directory",
                 },
               },
-              storageClassName: 'local-path',
-            },
+            ] + extraVolumes,
           },
-        ],
+        },
       },
     },
 
