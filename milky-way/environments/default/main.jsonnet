@@ -32,23 +32,23 @@ local komga = komgaLib.new(
   kubePrometheusStack: charts.kubePrometheusStack,
   myLocalPathRetainSC: retainSC.storageClass,
   coredns: coredns.new(), // TODO: specify nodeSelector and label nodes that should have the DNS
-  #komga: komga,
-  #syncthing: syncthingLib.new(
-  #  nodeName = 'hydrogen-sulfide',
-  #  hostPathConfig = '/var/lib/rancher/k3s/storage/pvc-48fabed9-b3e4-46c6-b31b-75c05b012730_default_syncthing-config-syncthing-0',
-  #  extraVolumeMounts = [
-  #    {
-  #      name: 'komga-data',
-  #      mountPath: '/data/komga',
-  #    },
-  #  ],
-  #  extraVolumes = [
-  #    {
-  #      name: 'komga-data',
-  #      persistentVolumeClaim: {
-  #        claimName: komga.dataPVC.metadata.name,
-  #      },
-  #    },
-  #  ],
-  #),
+  komga: komga,
+  syncthing: syncthingLib.new(
+    nodeName = 'hydrogen-sulfide',
+    hostPathConfig = '/var/lib/rancher/k3s/storage/pvc-48fabed9-b3e4-46c6-b31b-75c05b012730_default_syncthing-config-syncthing-0',
+    extraVolumeMounts = [
+      {
+        name: 'komga-data',
+        mountPath: '/data/komga',
+      },
+    ],
+    extraVolumes = [
+      {
+        name: 'komga-data',
+        persistentVolumeClaim: {
+          claimName: komga.dataPVC.metadata.name,
+        },
+      },
+    ],
+  ),
 }
