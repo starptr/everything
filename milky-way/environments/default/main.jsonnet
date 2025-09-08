@@ -38,7 +38,7 @@ local komga = komgaLib.new(
   komga: komga,
   syncthing: syncthingLib.new(
     nodeName = 'hydrogen-sulfide',
-    hostPathConfig = '/var/lib/rancher/k3s/storage/pvc-48fabed9-b3e4-46c6-b31b-75c05b012730_default_syncthing-config-syncthing-0',
+    hostPathConfig = '/var/lib/rancher/k3s/storage/pvc-8822e108-ad02-44ac-8c72-c106bb6207de_default_syncthing-config-syncthing-0',
     extraVolumeMounts = [
       {
         name: 'komga-data',
