@@ -4,11 +4,14 @@ local syncthingLib = import 'syncthing.jsonnet';
 local retainSC = import 'local-path-retain.jsonnet';
 local charts = import '../../charts.jsonnet';
 local coredns = import 'coredns.libsonnet';
+local utils = import 'utils.jsonnet';
+
+local komgaHostPathData = '/var/lib/rancher/k3s/storage/pvc-ef5457f0-aae6-41c8-8924-d4a0770a5e9d_default_komga-data-pvc';
 
 local komga = komgaLib.new(
   nodeName = 'hydrogen-sulfide',  // Set this to the node where the media is
   hostPathConfig = '/var/lib/rancher/k3s/storage/pvc-4c4ef25f-7260-428d-919c-0c75898aefba_default_komga-config-pvc',
-  hostPathData = '/var/lib/rancher/k3s/storage/pvc-ef5457f0-aae6-41c8-8924-d4a0770a5e9d_default_komga-data-pvc',
+  hostPathData = komgaHostPathData,
 );
 
 {
@@ -43,12 +46,20 @@ local komga = komgaLib.new(
       },
     ],
     extraVolumes = [
+      # TODO: implement utils.assertAndReturn(value, predicate)
       {
         name: 'komga-data',
-        persistentVolumeClaim: {
-          claimName: komga.dataPVC.metadata.name,
+        hostPath: {
+          path: komgaHostPathData,
+          type: "Directory",
         },
       },
+      #{
+      #  name: 'komga-data',
+      #  persistentVolumeClaim: {
+      #    claimName: komga.dataPVC.metadata.name,
+      #  },
+      #},
     ],
   ),
 }
