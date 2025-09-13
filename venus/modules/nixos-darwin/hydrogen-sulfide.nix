@@ -29,6 +29,7 @@ in
 {
   imports = [
     ./use-tailscale-dns-redirect.nix
+    ./use-passwordless-shutdown.nix
   ];
   config = {
     system.stateVersion = "24.11";
