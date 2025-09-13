@@ -16,7 +16,10 @@
                 propagatedBuildInputs = [
                     pkgs.python3Packages.kubernetes
                 ];
-                format = "setuptools";
+                pyproject = true;
+                build-system = [
+                    pkgs.python3Packages.setuptools
+                ];
             };
         });
     };
