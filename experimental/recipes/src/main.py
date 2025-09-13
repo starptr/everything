@@ -24,25 +24,28 @@ def drain_node(v1, node_name, timeout=600, poll_interval=5):
     pods = v1.list_pod_for_all_namespaces(field_selector=field_selector).items
 
     # Evict pods one by one
-    policy = client.PolicyV1Api()
     for pod in pods:
-        # Skip mirror pods (static pods)
+        # Skip DaemonSets
         if pod.metadata.owner_references and any(
             owner.kind == "DaemonSet" for owner in pod.metadata.owner_references
         ):
             continue
+        # Skip mirror/static pods
         if pod.metadata.annotations and "kubernetes.io/config.mirror" in pod.metadata.annotations:
             continue
 
         eviction = client.V1Eviction(
-            metadata=client.V1ObjectMeta(name=pod.metadata.name, namespace=pod.metadata.namespace),
-            delete_options=client.V1DeleteOptions(grace_period_seconds=30)
+            metadata=client.V1ObjectMeta(
+                name=pod.metadata.name,
+                namespace=pod.metadata.namespace
+            ),
+            delete_options=client.V1DeleteOptions(grace_period_seconds=30),
         )
         try:
-            policy.create_namespaced_pod_eviction(
+            v1.create_namespaced_pod_eviction(
                 name=pod.metadata.name,
                 namespace=pod.metadata.namespace,
-                body=eviction
+                body=eviction,
             )
             print(f"Eviction requested: {pod.metadata.namespace}/{pod.metadata.name}")
         except Exception as e:
