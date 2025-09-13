@@ -16,6 +16,7 @@
                 propagatedBuildInputs = [
                     pkgs.python3Packages.kubernetes
                 ];
+                format = "setuptools";
             };
         });
     };
