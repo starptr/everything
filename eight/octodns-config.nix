@@ -255,6 +255,15 @@ in {
           type = "A";
           value = generated.nixie.ipAddress;
         };
+        "whoami.testpage" = {
+          octodns.cloudflare = {
+            auto-ttl = true;
+            comment = "Debug whoami page hosted in milky-way, should be publicly accessible";
+          };
+          ttl = 60;
+          type = "A";
+          value = generated.nixie.ipAddress;
+        };
       };
       "yuto.sh.yaml" = {
         "" = [
