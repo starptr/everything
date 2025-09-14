@@ -1,4 +1,3 @@
-local k = import 'k.libsonnet';
 local utils = import 'utils.jsonnet';
 local magic = {
   corednsPort: 1053,
