@@ -244,7 +244,7 @@ in {
           };
           ttl = 60;
           type = "A";
-          value = generated.serverref.ipAddress;
+          value = generated.nixie.ipAddress;
         };
         "public-tailscale.testpage" = {
           octodns.cloudflare = {
@@ -253,7 +253,7 @@ in {
           };
           ttl = 60;
           type = "A";
-          value = generated.serverref.ipAddress;
+          value = generated.nixie.ipAddress;
         };
       };
       "yuto.sh.yaml" = {
