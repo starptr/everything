@@ -30,6 +30,13 @@ local utils = import 'utils.jsonnet';
             labels: {} + this.deployment.spec.selector.matchLabels,
           },
           spec: {
+            tolerations: [
+              {
+                key: "ephemeral",
+                operator: "Exists",
+                effect: "NoSchedule",
+              },
+            ],
             containers: [{
               name: 'nginx',
               image: image,
