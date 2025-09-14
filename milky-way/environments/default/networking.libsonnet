@@ -9,6 +9,18 @@
       },
       spec: {
         valuesContent: std.manifestYamlDoc({
+          tolerations: [
+            {
+              key: "ephemeral",
+              operator: "Exists",
+              effect: "NoSchedule",
+            },
+            {
+              key: "node-role.kubernetes.io/control-plane",
+              operator: "Exists",
+              effect: "NoSchedule",
+            },
+          ],
           ports: {
             web: {
               forwardedHeaders: {
