@@ -165,7 +165,10 @@ local retainSC = import 'local-path-retain.jsonnet';
           },
           {
             host: "komga.sdts.local",
-            http: this.ingress.spec.rules[0].http, // TODO: somehow validate index
+            http: utils.assertAndReturn(this.ingress.spec.rules[0], function(value)
+              value.host == "hydrogen-sulfide.tail4c9a.ts.net",
+              message='Expected the first rule to be for hydrogen-sulfide.tail4c9a.ts.net'
+            ).http,
           },
         ],
       },
