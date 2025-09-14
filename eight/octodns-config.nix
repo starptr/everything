@@ -249,7 +249,7 @@ in {
         "public-tailscale.testpage" = {
           octodns.cloudflare = {
             auto-ttl = true;
-            comment = "Test page hosted in milky-way, should not be accessible without Tailscale";
+            comment = "Should not work because this record points to the public IP";
           };
           ttl = 60;
           type = "A";
@@ -263,6 +263,24 @@ in {
           ttl = 60;
           type = "A";
           value = generated.nixie.ipAddress;
+        };
+        "whoami.testpage.sdts" = {
+          octodns.cloudflare = {
+            auto-ttl = true;
+            comment = "Debug whoami page hosted in milky-way, should be publicly accessible";
+          };
+          ttl = 60;
+          type = "A";
+          value = "100.112.134.68"; # TODO: use magic / dump `tailscale status`
+        };
+        "tailscale.testpage" = {
+          octodns.cloudflare = {
+            auto-ttl = true;
+            comment = "Test page hosted in milky-way, should not be accessible without Tailscale";
+          };
+          ttl = 60;
+          type = "A";
+          value = "100.112.134.68"; # TODO: use magic / dump `tailscale status`
         };
       };
       "yuto.sh.yaml" = {
