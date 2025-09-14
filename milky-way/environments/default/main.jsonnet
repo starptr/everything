@@ -1,4 +1,3 @@
-local k = import 'k.libsonnet';
 local komgaLib = import 'komga.libsonnet';
 local syncthingLib = import 'syncthing.jsonnet';
 local retainSC = import 'local-path-retain.jsonnet';
