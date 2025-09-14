@@ -1,4 +1,4 @@
-local utils = import 'utils.libsonnet';
+local utils = import 'utils.jsonnet';
 # Ensure that internal services are not exposed to the public internet
 {
   local security = self,
