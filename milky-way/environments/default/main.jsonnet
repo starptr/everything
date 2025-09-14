@@ -3,6 +3,8 @@ local syncthingLib = import 'syncthing.jsonnet';
 local retainSC = import 'local-path-retain.jsonnet';
 local charts = import '../../charts.jsonnet';
 local coredns = import 'coredns.libsonnet';
+local security = import 'security.libsonnet';
+
 local utils = import 'utils.jsonnet';
 
 local komgaHostPathData = '/var/lib/rancher/k3s/storage/pvc-ef5457f0-aae6-41c8-8924-d4a0770a5e9d_default_komga-data-pvc';
@@ -60,5 +62,11 @@ local komga = komgaLib.new(
       #  },
       #},
     ],
+  ),
+  tailscaleOnlyMiddleware: security.newTailscaleOnlyMiddleware(),
+  testpages: security.newTestPages(
+    publicDomain='public.testpage.andref.app',
+    publicDomainForTailscalePage='public-tailscale.testpage.andref.app',
+    tailscaleDomain='tmp.local',
   ),
 }
