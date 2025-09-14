@@ -117,6 +117,7 @@ local utils = import 'utils.jsonnet';
     publicDomain, // Domain for the public test page. The DNS record should be public.
     publicDomainForTailscalePage, // Domain for the Tailscale-only test page (should be inaccessible unless the device has Tailscale). The DNS record should be public.
     tailscaleDomain, // Domain for the Tailscale-only test page (should be accessible via Tailscale). The DNS record should be private.
+    whoamiDomain, // Domain for the whoami debug page (should be accessible from everywhere). The DNS record should be public.
     name='security-testpages',
   ):: {
     local this = self,
@@ -174,6 +175,67 @@ local utils = import 'utils.jsonnet';
             match: 'Host(`%s`)' % publicDomainForTailscalePage,
           },
         ],
+      },
+    },
+
+    /**
+     * Debug this setup itself by deploying a "whoami" service that tells how the pod sees requests that go through this setup.
+     * This is useful because currently, requests go through multiple layers of proxies (IngressRoute -> Middleware -> Service -> Pod),
+     * and it's not always clear how the source IP and other headers are preserved or modified.
+     */
+    whoami: {
+      local whoami = self,
+      local name = '%s-whoami' % name,
+      deployment:  {
+        apiVersion: 'apps/v1',
+        kind: 'Deployment',
+        metadata: { name: name },
+        spec: {
+          replicas: 1,
+          selector: { matchLabels: { app: name } },
+          template: {
+            metadata: { labels: {} + whoami.deployment.spec.selector.matchLabels },
+            spec: {
+              tolerations: [
+                {
+                  key: "ephemeral",
+                  operator: "Exists",
+                  effect: "NoSchedule",
+                },
+              ],
+              containers: [{
+                name: 'web',
+                image: 'traefik/whoami@sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab',  // minimal whoami server
+                ports: [{ containerPort: 80 }],
+              }],
+            },
+          },
+        },
+      },
+      service: {
+        apiVersion: 'v1',
+        kind: 'Service',
+        metadata: { name: name },
+        spec: {
+          selector: { app: name },
+          ports: [{ port: 80, targetPort: whoami.deployment.spec.template.spec.containers[0].ports[0].containerPort }],
+        },
+      },
+      ingressRoute: {
+        apiVersion: 'traefik.io/v1alpha1',
+        kind: 'IngressRoute',
+        metadata: { name: name },
+        spec: {
+          entryPoints: ['web'],
+          routes: [{
+            match: 'Host(`%s`)' % whoamiDomain,
+            kind: 'Rule',
+            services: [{
+              name: whoami.service.metadata.name,
+              port: utils.assertEqualAndReturn(whoami.service.spec.ports[0].port, 80),
+            }],
+          }],
+        },
       },
     },
   },
