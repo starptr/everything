@@ -67,7 +67,7 @@ local komga = komgaLib.new(
   testpages: security.newTestPages(
     publicDomain='public.testpage.yuto.ink',
     publicDomainForTailscalePage='public-tailscale.testpage.yuto.ink',
-    tailscaleDomain='tmp.local',
+    tailscaleDomain='tailscale.testpage.yuto.ink',
     whoamiDomain='whoami.testpage.yuto.ink',
   ),
 }
