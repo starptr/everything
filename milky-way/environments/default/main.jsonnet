@@ -65,8 +65,8 @@ local komga = komgaLib.new(
   ),
   tailscaleOnlyMiddleware: security.newTailscaleOnlyMiddleware(),
   testpages: security.newTestPages(
-    publicDomain='public.testpage.andref.app',
-    publicDomainForTailscalePage='public-tailscale.testpage.andref.app',
+    publicDomain='public.testpage.yuto.ink',
+    publicDomainForTailscalePage='public-tailscale.testpage.yuto.ink',
     tailscaleDomain='tmp.local',
   ),
 }
