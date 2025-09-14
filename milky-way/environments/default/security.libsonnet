@@ -107,9 +107,9 @@ local utils = import 'utils.libsonnet';
    * In the future, this can be extended to deploy more test pages for other security scenarios.
    */
   newTestPages(
-    publicDomain, // Domain for the public test page
-    publicDomainForTailscalePage, // Domain for the Tailscale-only test page (should be inaccessible but have a DNS record)
-    tailscaleDomain, // Domain for the Tailscale-only test page (should be accessible via Tailscale)
+    publicDomain, // Domain for the public test page. The DNS record should be public.
+    publicDomainForTailscalePage, // Domain for the Tailscale-only test page (should be inaccessible unless the device has Tailscale). The DNS record should be public.
+    tailscaleDomain, // Domain for the Tailscale-only test page (should be accessible via Tailscale). The DNS record should be private.
     name='security-testpages',
   ):: {
     local this = self,
