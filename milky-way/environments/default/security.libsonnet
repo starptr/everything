@@ -91,7 +91,13 @@ local utils = import 'utils.jsonnet';
   },
 
   /**
-   * Middleware that only allows access from Tailscale IPs
+   * Middleware that only allows access from Tailscale IPs.
+   * Using this middleware on an IngressRoute is "safe"; it is not possible
+   * for a request coming from outside Tailscale to access a service through an IngressRoute using this middleware.
+   * However, using this middleware correctly (i.e. allowing requests from inside Tailscale to go through)
+   * is a bit tricky. To do so, ensure that requests to the cluster hit the Tailscale IP of the cluster, not the public IP.
+   * This ensures that the source IP is the Tailscale IP of the client.
+   * For example, a public DNS record pointing to the private Tailscale IP of the cluster can be used.
    */
   newTailscaleOnlyMiddleware():: {
     middleware: {
