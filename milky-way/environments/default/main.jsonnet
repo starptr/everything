@@ -4,6 +4,7 @@ local retainSC = import 'local-path-retain.jsonnet';
 local charts = import '../../charts.jsonnet';
 local coredns = import 'coredns.libsonnet';
 local security = import 'security.libsonnet';
+local networking = import 'networking.libsonnet';
 
 local utils = import 'utils.jsonnet';
 
@@ -70,4 +71,5 @@ local komga = komgaLib.new(
     tailscaleDomain='tailscale.testpage.yuto.ink',
     whoamiDomain='whoami.testpage.sdts.yuto.ink',
   ),
+  traefik: networking.newTraefikSane(),
 }
