@@ -135,7 +135,10 @@ local utils = import 'utils.jsonnet';
                     service: {
                       name: name,
                       port: {
-                        number: utils.assertEqualAndReturn(this.service.spec.ports[0].port, 8384), // TODO: verify name is 'gui' (actually, service should use ingress value)
+                        number: utils.assertAndReturn(this.service.spec.ports[0], function(mapping)
+                          mapping.name == 'gui',
+                          message='Expected mapping for the "gui" port'
+                        ).port,
                       },
                     },
                   },
