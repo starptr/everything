@@ -13,5 +13,9 @@ in {
       cd ${octodns-config.config-directory} # CWD must be the directory containing the config files
       ${octodns}/bin/octodns-sync --config-file ${octodns-config.config-directory}/production.yaml
     '';
+    eight-wet-run = pkgs.writeShellScriptBin "wet-run" ''
+      cd ${octodns-config.config-directory} # CWD must be the directory containing the config files
+      ${octodns}/bin/octodns-sync --config-file ${octodns-config.config-directory}/production.yaml --doit
+    '';
   });
 }
