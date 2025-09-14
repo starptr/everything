@@ -237,6 +237,24 @@ in {
           type = "CNAME";
           value = "fractal-cuttlefish.pikapod.net.";
         };
+        "public.testpage" = {
+          octodns.cloudflare = {
+            auto-ttl = true;
+            comment = "Test page hosted in milky-way, should be publicly accessible";
+          };
+          ttl = 60;
+          type = "A";
+          value = generated.serverref.ipAddress;
+        };
+        "public-tailscale.testpage" = {
+          octodns.cloudflare = {
+            auto-ttl = true;
+            comment = "Test page hosted in milky-way, should not be accessible without Tailscale";
+          };
+          ttl = 60;
+          type = "A";
+          value = generated.serverref.ipAddress;
+        };
       };
       "yuto.sh.yaml" = {
         "" = [
