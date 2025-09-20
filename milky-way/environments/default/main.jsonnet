@@ -71,5 +71,5 @@ local komga = komgaLib.new(
     tailscaleDomain='tailscale.testpage.yuto.ink',
     whoamiDomain='whoami.testpage.yuto.ink',
   ),
-  traefik: networking.newTraefikSane(),
+  #traefik: networking.newTraefikSane(),
 }
