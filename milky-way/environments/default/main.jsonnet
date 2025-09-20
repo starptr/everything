@@ -70,6 +70,7 @@ local komga = komgaLib.new(
     publicDomainForTailscalePage='public-tailscale.testpage.yuto.ink',
     tailscaleDomain='tailscale.testpage.yuto.ink',
     whoamiDomain='whoami.testpage.yuto.ink',
+    whoamiTailscaleDomain='whoami.testpage.sdts.yuto.ink',
   ),
   #traefik: networking.newTraefikSane(),
 }
