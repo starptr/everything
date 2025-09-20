@@ -124,6 +124,7 @@ local utils = import 'utils.jsonnet';
     publicDomainForTailscalePage, // Domain for the Tailscale-only test page (should be inaccessible unless the device has Tailscale). The DNS record should be public.
     tailscaleDomain, // Domain for the Tailscale-only test page (should be accessible via Tailscale). The DNS record should be private.
     whoamiDomain, // Domain for the whoami debug page (should be accessible from everywhere). The DNS record should be public.
+    whoamiTailscaleDomain, // Domain for the whoami debug page (should be accessible via Tailscale). The DNS record should be private.
     name='security-testpages',
   ):: {
     local this = self,
@@ -235,14 +236,21 @@ local utils = import 'utils.jsonnet';
           metadata: { name: name },
           spec: {
             entryPoints: ['web'],
-            routes: [{
-              match: 'Host(`%s`)' % whoamiDomain,
-              kind: 'Rule',
-              services: [{
-                name: whoami.service.metadata.name,
-                port: utils.assertEqualAndReturn(whoami.service.spec.ports[0].port, 80),
-              }],
-            }],
+            routes:
+              local baseRoute = {
+                kind: 'Rule',
+                services: [{
+                  name: whoami.service.metadata.name,
+                  port: utils.assertEqualAndReturn(whoami.service.spec.ports[0].port, 80),
+                }],
+              }; [
+                baseRoute {
+                  match: 'Host(`%s`)' % whoamiDomain,
+                },
+                baseRoute {
+                  match: 'Host(`%s`)' % whoamiTailscaleDomain,
+                },
+              ],
           },
         },
       },
