@@ -108,7 +108,12 @@ local utils = import 'utils.jsonnet';
       },
       spec: {
         ipWhiteList: {
-          sourceRange: ['100.64.0.0/10'],
+          /**
+           * If Traefik uses `externalTrafficPolicy: Local` and is a DaemonSet,
+           * the source IP of requests is preserved unless the request comes from Tailscale.
+           * If the request comes from Tailscale, the source IP is a pod IP for some reason.
+           */
+          sourceRange: ['10.42.2.0/24'],
         },
       },
     },
