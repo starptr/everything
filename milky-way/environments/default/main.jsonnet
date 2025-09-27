@@ -4,6 +4,7 @@ local retainSC = import 'local-path-retain.jsonnet';
 local charts = import '../../charts.jsonnet';
 local coredns = import 'coredns.libsonnet';
 local security = import 'security.libsonnet';
+local security2 = import 'security2.libsonnet';
 local networking = import 'networking.libsonnet';
 
 local utils = import 'utils.jsonnet';
@@ -64,13 +65,19 @@ local komga = komgaLib.new(
       #},
     ],
   ),
-  tailscaleOnlyMiddleware: security.newTailscaleOnlyMiddleware(),
-  testpages: security.newTestPages(
+  testpages: security2.newTestPages(
     publicDomain='public.testpage.yuto.ink',
-    publicDomainForTailscalePage='public-tailscale.testpage.yuto.ink',
-    tailscaleDomain='tailscale.testpage.yuto.ink',
+    tailscaleDomain='security2-testpage-tailscale-only',
     whoamiDomain='whoami.testpage.yuto.ink',
-    whoamiTailscaleDomain='whoami.testpage.sdts.yuto.ink',
+    whoamiTailscaleDomain='whoami-testpage-tailscale-only',
   ),
+  #tailscaleOnlyMiddleware: security.newTailscaleOnlyMiddleware(),
+  #testpages: security.newTestPages(
+  #  publicDomain='public.testpage.yuto.ink',
+  #  publicDomainForTailscalePage='public-tailscale.testpage.yuto.ink',
+  #  tailscaleDomain='tailscale.testpage.yuto.ink',
+  #  whoamiDomain='whoami.testpage.yuto.ink',
+  #  whoamiTailscaleDomain='whoami.testpage.sdts.yuto.ink',
+  #),
   #traefik: networking.newTraefikSane(),
 }
