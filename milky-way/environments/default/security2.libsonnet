@@ -199,6 +199,7 @@ local utils = import 'utils.jsonnet';
             name: "%s-annotated" % name,
             annotations: {
               "tailscale.com/expose": "true",
+              "tailscale.com/hostname": "example-custom-hostname",
             },
           },
           spec: {
