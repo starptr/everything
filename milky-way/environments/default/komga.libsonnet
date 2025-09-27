@@ -11,6 +11,8 @@ local retainSC = import 'local-path-retain.jsonnet';
     hostPathConfig,
     hostPathData,
     name='komga',
+    tailscaleServiceAnnotation=name,
+    tailscaleIngressHost='%s-secure' % name,
   ):: {
     local this = self,
     #configPVC: {
@@ -122,6 +124,10 @@ local retainSC = import 'local-path-retain.jsonnet';
       kind: "Service",
       metadata: {
         name: name,
+        annotations: {
+          "tailscale.com/expose": "true",
+          "tailscale.com/hostname": tailscaleServiceAnnotation,
+        },
       },
       spec: {
         // Note: a Deployment's selector is in .spec.selector.matchLabels, but a Service's selector is in .spec.selector directly.
@@ -139,15 +145,16 @@ local retainSC = import 'local-path-retain.jsonnet';
       kind: "Ingress",
       metadata: {
         name: name,
-        annotations: {
-          "kubernetes.io/ingress.class": "traefik",
-          "traefik.ingress.kubernetes.io/router.entrypoints": "web",
-        },
       },
       spec: {
+        ingressClassName: "tailscale",
+        tls: [
+          {
+            hosts: [tailscaleIngressHost],
+          },
+        ],
         rules: [
           {
-            host: "hydrogen-sulfide.tail4c9a.ts.net",
             http: {
               paths: [{
                 path: "/komga",
@@ -163,13 +170,13 @@ local retainSC = import 'local-path-retain.jsonnet';
               }],
             },
           },
-          {
-            host: "komga.sdts.local",
-            http: utils.assertAndReturn(this.ingress.spec.rules[0], function(value)
-              value.host == "hydrogen-sulfide.tail4c9a.ts.net",
-              message='Expected the first rule to be for hydrogen-sulfide.tail4c9a.ts.net'
-            ).http,
-          },
+          //{
+          //  host: "komga.sdts.local",
+          //  http: utils.assertAndReturn(this.ingress.spec.rules[0], function(value)
+          //    value.host == "hydrogen-sulfide.tail4c9a.ts.net",
+          //    message='Expected the first rule to be for hydrogen-sulfide.tail4c9a.ts.net'
+          //  ).http,
+          //},
         ],
       },
     },
