@@ -192,6 +192,20 @@ local utils = import 'utils.jsonnet';
             ports: [{ port: 80, targetPort: whoami.deployment.spec.template.spec.containers[0].ports[0].containerPort }],
           },
         },
+        annotatedService: {
+          apiVersion: 'v1',
+          kind: 'Service',
+          metadata: {
+            name: "%s-annotated" % name,
+            annotations: {
+              "tailscale.com/expose": "true",
+            },
+          },
+          spec: {
+            selector: { app: name },
+            ports: [{ port: 80, targetPort: whoami.deployment.spec.template.spec.containers[0].ports[0].containerPort }],
+          },
+        },
         ingressRoute: {
           apiVersion: 'traefik.io/v1alpha1',
           kind: 'IngressRoute',
