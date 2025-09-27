@@ -37,7 +37,7 @@ local komga = komgaLib.new(
   },
   kubePrometheusStack: charts.kubePrometheusStack,
   myLocalPathRetainSC: retainSC.storageClass,
-  coredns: coredns.new(), // TODO: specify nodeSelector and label nodes that should have the DNS
+  #coredns: coredns.new(), // TODO: specify nodeSelector and label nodes that should have the DNS
   komga: komga,
   syncthing: syncthingLib.new(
     nodeName = 'hydrogen-sulfide',
