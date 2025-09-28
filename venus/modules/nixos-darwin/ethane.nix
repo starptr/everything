@@ -8,7 +8,7 @@
 in {
   imports = lib.optional (builtins.pathExists ./do-userdata.nix) ./do-userdata.nix ++ [
     (modulesPath + "/virtualisation/digital-ocean-config.nix")
-    ./use-tailscale-dns-redirect.nix
+    #./use-tailscale-dns-redirect.nix
   ];
 
   environment.systemPackages = [
@@ -116,7 +116,7 @@ in {
   #};
 
   services.tailscale = {
-    enable = true;
+    enable = false;
     useRoutingFeatures = "both";
   };
 
