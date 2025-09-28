@@ -3,6 +3,10 @@
         "name": "nixie",
         "ipAddress": "24.199.97.98"
     },
+    "ethane": {
+        "name": "ethane",
+        "ipAddress": "134.199.230.121"
+    },
     "serverref": {
         "name": "serverref",
         "ipAddress": "143.198.229.127",
