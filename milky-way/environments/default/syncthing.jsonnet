@@ -11,6 +11,7 @@ local utils = import 'utils.jsonnet';
     extraVolumes=[],
     extraVolumeMounts=[],
     name='syncthing',
+    tailscaleServiceAnnotation=name,
     image='linuxserver/syncthing:latest',
   ):: {
     local this = self,
@@ -90,6 +91,7 @@ local utils = import 'utils.jsonnet';
       },
     },
 
+    // I think this service is needed to expose syncthing to peers
     service: {
       apiVersion: 'v1',
       kind: 'Service',
@@ -97,7 +99,7 @@ local utils = import 'utils.jsonnet';
         name: name,
         labels: {
           app: name,
-        }
+        },
       },
       spec: {
         clusterIP: 'None',  // This is a headless service for the StatefulSet
@@ -111,44 +113,63 @@ local utils = import 'utils.jsonnet';
       },
     },
 
-    ingress: {
-      apiVersion: "networking.k8s.io/v1",
-      kind: "Ingress",
+    // Separate service to expose the webapp to tailscale
+    webappService: {
+      apiVersion: 'v1',
+      kind: 'Service',
       metadata: {
-        name: name,
+        name: '%s-webapp-only' % name,
         annotations: {
-          "kubernetes.io/ingress.class": "traefik",
-          "traefik.ingress.kubernetes.io/router.entrypoints": "web",
-          "traefik.ingress.kubernetes.io/router.tls": "false",
+          "tailscale.com/expose": "true",
+          "tailscale.com/hostname": tailscaleServiceAnnotation,
         },
       },
       spec: {
-        rules: [
-          {
-            host: "syncthing.sdts.local",
-            http: {
-              paths: [
-                {
-                  path: "/",
-                  pathType: "Prefix",
-                  backend: {
-                    service: {
-                      name: name,
-                      port: {
-                        number: utils.assertAndReturn(this.service.spec.ports[0], function(mapping)
-                          mapping.name == 'gui',
-                          message='Expected mapping for the "gui" port'
-                        ).port,
-                      },
-                    },
-                  },
-                },
-              ],
-            },
-          },
+        selector: this.statefulset.spec.selector.matchLabels,
+        ports: [
+          { port: 80, targetPort: containerPortNames.gui, name: 'gui' },
         ],
       },
     },
+
+    //ingress: {
+    //  apiVersion: "networking.k8s.io/v1",
+    //  kind: "Ingress",
+    //  metadata: {
+    //    name: name,
+    //    annotations: {
+    //      "kubernetes.io/ingress.class": "traefik",
+    //      "traefik.ingress.kubernetes.io/router.entrypoints": "web",
+    //      "traefik.ingress.kubernetes.io/router.tls": "false",
+    //    },
+    //  },
+    //  spec: {
+    //    rules: [
+    //      {
+    //        host: "syncthing.sdts.local",
+    //        http: {
+    //          paths: [
+    //            {
+    //              path: "/",
+    //              pathType: "Prefix",
+    //              backend: {
+    //                service: {
+    //                  name: name,
+    //                  port: {
+    //                    number: utils.assertAndReturn(this.service.spec.ports[0], function(mapping)
+    //                      mapping.name == 'gui',
+    //                      message='Expected mapping for the "gui" port'
+    //                    ).port,
+    //                  },
+    //                },
+    //              },
+    //            },
+    //          ],
+    //        },
+    //      },
+    //    ],
+    //  },
+    //},
 
     resources:: [
       this.statefulset,
