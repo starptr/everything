@@ -139,6 +139,9 @@ in {
   systemd.services.k3s = {
     after = [ "tailscaled.service" ];
     requires = [ "tailscaled.service" ];
+    path = [
+      pkgs.tailscale # Required by the vpn-auth-file tailscale integration
+    ];
   };
   services.k3s = {
     enable = true;
