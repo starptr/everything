@@ -10,21 +10,6 @@ let
   controlPlaneNodeIp = "100.112.134.68";
   controlPlaneNodePort = "6443";
   # List of ways to refer to this server in Tailscale from the Tailscale dashboard
-  tlsSans = [
-    # First name is advertised to agents
-    "hydrogen-sulfide"
-    "100.110.15.98"
-    "hydrogen-sulfide.tail4c9a.ts.net"
-    "fd7a:115c:a1e0::ca34:f62"
-  ];
-in let
-  k3sExtraFlags = [
-    "--node-ip=${tailscaleIp}"
-    #"--node-external-ip=24.199.97.98"
-    #"--advertise-address=${tailscaleIp}" # Not defined for agent nodes
-    "--flannel-iface=tailscale0"
-    #"--flannel-external-ip=true" # Not defined for agent nodes
-  ]; #++ (map (name: "--tls-san=${name}") tlsSans);
 in
 {
   imports = [
