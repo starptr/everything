@@ -141,10 +141,13 @@ in {
     requires = [ "tailscaled.service" ];
   };
   services.k3s = {
-    enable = false;
+    enable = true;
     role = "server";
     clusterInit = false;
-    extraFlags = k3sExtraFlags;
+    extraFlags = [
+      "--vpn-auth-file=/run/secrets/k3s_vpn_auth"
+      "--node-external-ip=${tailscaleIp}"
+    ];
   };
 
   services.kubo = {
