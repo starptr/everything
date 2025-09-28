@@ -5,22 +5,6 @@
   # 1. the tailscale IP is stable
   # 2. it can be set in tailscale web dashboard to match this value
   tailscaleIp = "100.112.134.68"; 
-  # List of ways to refer to this server in Tailscale from the Tailscale dashboard
-  tlsSans = [
-    # First name is advertised to agents
-    "methane"
-    "100.112.134.68"
-    "methane.tail4c9a.ts.net"
-    "fd7a:115c:a1e0::4234:8644"
-  ];
-in let
-  k3sExtraFlags = [
-    "--node-ip=${tailscaleIp}"
-    #"--node-external-ip=24.199.97.98"
-    "--advertise-address=${tailscaleIp}"
-    "--flannel-iface=tailscale0"
-    #"--flannel-external-ip=true"
-  ] ++ (map (name: "--tls-san=${name}") tlsSans);
 in {
   imports = lib.optional (builtins.pathExists ./do-userdata.nix) ./do-userdata.nix ++ [
     (modulesPath + "/virtualisation/digital-ocean-config.nix")
