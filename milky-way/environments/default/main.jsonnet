@@ -28,14 +28,6 @@ local komga = komgaLib.new(
   #  },
   #},
   #nginx: charts.nginx,
-  kubePrometheusStackNS: {
-    apiVersion: "v1",
-    kind: "Namespace",
-    metadata: {
-      name: "monitoring",
-    },
-  },
-  kubePrometheusStack: charts.kubePrometheusStack,
   myLocalPathRetainSC: retainSC.storageClass,
   #coredns: coredns.new(), // TODO: specify nodeSelector and label nodes that should have the DNS
   komga: komga,
