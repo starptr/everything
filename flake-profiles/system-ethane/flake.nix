@@ -10,10 +10,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     systems.url = "github:nix-systems/default";
-    devenv.url = "github:cachix/devenv";
-    devenv.inputs.nixpkgs.follows = "nixpkgs";
 
     soup = {
       url = "github:starptr/soup";
@@ -21,14 +19,8 @@
         nixpkgs.follows = "nixpkgs";
         nixpkgs-devenv.follows = "nixpkgs";
         systems.follows = "systems";
-        devenv.follows = "devenv";
       };
     };
-  };
-
-  nixConfig = {
-    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=";
-    extra-substituters = "https://devenv.cachix.org";
   };
 
   outputs = { self, ... } @ inputs: let
