@@ -67,7 +67,7 @@ in
       requires = [ "tailscaled.service" ];
     };
     services.k3s = {
-      enable = true;
+      enable = false;
       role = "agent";
       serverAddr = "https://${controlPlaneNodeIp}:${controlPlaneNodePort}";
       tokenFile = "/run/secrets/cluster_token";
