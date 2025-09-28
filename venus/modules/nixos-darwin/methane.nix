@@ -141,7 +141,7 @@ in {
     requires = [ "tailscaled.service" ];
   };
   services.k3s = {
-    enable = true;
+    enable = false;
     role = "server";
     clusterInit = false;
     extraFlags = k3sExtraFlags;
