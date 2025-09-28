@@ -389,6 +389,17 @@ in {
           type = "A";
           value = nixie-ip-address;
         };
+        "ethane" = {
+          octodns = {
+            cloudflare = {
+              auto-ttl = true;
+              comment = "(From Eight) Shortcut to Ethane public IP";
+            };
+          };
+          ttl = 60;
+          type = "A";
+          value = generated.ethane.ipAddress;
+        };
         "hello-caddy.nixie" = {
           octodns = {
             cloudflare = {
