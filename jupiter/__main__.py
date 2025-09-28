@@ -39,6 +39,13 @@ nixie = do.Droplet("nixie",
     ssh_keys=ssh_public_keys,
     tags=[tag_pulumi_taco])
 
+ethane = do.Droplet("ethane",
+    image=image_nixos_yuto,
+    region=do.Region.SFO3,
+    size=do.DropletSlug.DROPLET_S1_VCPU1_GB,
+    ssh_keys=ssh_public_keys,
+    tags=[tag_pulumi_taco])
+
 serverref = do.Droplet("andref",
     image=image_nixos_yuto,
     region=do.Region.SFO3,
@@ -76,10 +83,15 @@ generated_data = pulumi.Output.all(
         nixie_ipv4_address=nixie.ipv4_address,
         serverref_ipv4_address=serverref.ipv4_address,
         volume_serverref_nix_store=volume_serverref_nix_store.name,
+        ethane_ipv4_address=ethane.ipv4_address,
     ).apply(lambda args: {
         'nixie': {
             'name': 'nixie',
             'ipAddress': args['nixie_ipv4_address'],
+        },
+        'ethane': {
+            'name': 'ethane',
+            'ipAddress': args['ethane_ipv4_address']
         },
         'serverref': {
             'name': 'serverref',
@@ -108,6 +120,7 @@ pulumi.export('tag_pulumi_taco', tag_pulumi_taco)
 pulumi.export('image_test', image_nixos_23_11_x86_64)
 pulumi.export('image_nixos_yuto', image_nixos_yuto)
 pulumi.export('droplet_nixie', nixie)
+pulumi.export('droplet_ethane', ethane)
 pulumi.export('droplet_serverref', serverref)
 pulumi.export('volume_serverref_nix_store', volume_serverref_nix_store)
 pulumi.export('attachment_serverref_nix_store', attachment_serverref_nix_store)
