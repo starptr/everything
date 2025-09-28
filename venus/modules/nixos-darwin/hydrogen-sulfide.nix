@@ -65,14 +65,20 @@ in
     systemd.services.k3s = {
       after = [ "tailscaled.service" ];
       requires = [ "tailscaled.service" ];
+      path = [
+        pkgs.tailscale # Required by the vpn-auth-file tailscale integration
+      ];
     };
     services.k3s = {
-      enable = false;
+      enable = true;
       role = "agent";
+      # Must be tailscale IP
       serverAddr = "https://${controlPlaneNodeIp}:${controlPlaneNodePort}";
       tokenFile = "/run/secrets/cluster_token";
-      clusterInit = false;
-      extraFlags = k3sExtraFlags;
+      extraFlags = [
+        "--vpn-auth-file=/run/secrets/k3s_vpn_auth"
+        "--node-external-ip=${tailscaleIp}"
+      ];
       gracefulNodeShutdown = {
         enable = true;
       };
