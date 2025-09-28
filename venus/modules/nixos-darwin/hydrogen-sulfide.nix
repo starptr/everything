@@ -105,6 +105,10 @@ in
         mode = "0400";
         sopsFile = ./../../../secrets/milky-way.json;
       };
+      secrets."k3s_vpn_auth" = {
+        mode = "0400";
+        sopsFile = ./../../../secrets/milky-way.json;
+      };
     };
   };
 }
