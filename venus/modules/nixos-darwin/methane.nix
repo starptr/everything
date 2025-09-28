@@ -163,4 +163,11 @@ in {
     #tls = config.security.acme.certs."sp.nixie.yuto.sh".directory;
     #extraArgs = [ "--tls" (builtins.trace "Here I am ${config.security.acme.certs."sp.nixie.yuto.sh".directory}" config.security.acme.certs."sp.nixie.yuto.sh".directory) ];
   };
+  
+  sops = {
+    secrets."k3s_vpn_auth" = {
+      mode = "0400";
+      sopsFile = ./../../../secrets/milky-way.json;
+    };
+  };
 }
