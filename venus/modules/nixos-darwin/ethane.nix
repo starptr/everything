@@ -116,7 +116,7 @@ in {
   #};
 
   services.tailscale = {
-    enable = false;
+    enable = true;
     useRoutingFeatures = "both";
   };
 
