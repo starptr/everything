@@ -59,8 +59,29 @@ in {
           config.Cmd = [ "curl" "--version" ];
         };
       };
+      mopidy = image-nix-artifacts {
+        name = "mopidy";
+        buildLayeredImageArg = {
+          tag = "latest";
+          contents = [
+            pkgs.mopidy
+            pkgs.mopidy-local
+            pkgs.mopidy-mpd
+            pkgs.mopidy-spotify
+          ];
+          config = {
+            Cmd = ["mopidy"];
+            ExposedPorts = {
+              "6600" = {};
+              "6680" = {};
+            };
+          };
+        };
+      };
     in {
       whale-example-image = example-artifacts.image;
       whale-push-example = example-artifacts.push-script;
+      mopidy-image = mopidy.image;
+      mopidy-push = mopidy.push-script;
     });
 }
