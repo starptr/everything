@@ -4,7 +4,9 @@
   # We can set this statically, since
   # 1. the tailscale IP is stable
   # 2. it can be set in tailscale web dashboard to match this value
-  #tailscaleIp = ""; 
+  tailscaleIp = "100.127.189.16"; 
+  controlPlaneNodeIp = "100.112.134.68";
+  controlPlaneNodePort = "6443";
 in {
   imports = lib.optional (builtins.pathExists ./do-userdata.nix) ./do-userdata.nix ++ [
     (modulesPath + "/virtualisation/digital-ocean-config.nix")
@@ -120,22 +122,27 @@ in {
     useRoutingFeatures = "both";
   };
 
-  #systemd.services.k3s = {
-  #  after = [ "tailscaled.service" ];
-  #  requires = [ "tailscaled.service" ];
-  #  path = [
-  #    pkgs.tailscale # Required by the vpn-auth-file tailscale integration
-  #  ];
-  #};
-  #services.k3s = {
-  #  enable = true;
-  #  role = "server";
-  #  clusterInit = false;
-  #  extraFlags = [
-  #    "--vpn-auth-file=/run/secrets/k3s_vpn_auth"
-  #    "--node-external-ip=${tailscaleIp}"
-  #  ];
-  #};
+  systemd.services.k3s = {
+    after = [ "tailscaled.service" ];
+    requires = [ "tailscaled.service" ];
+    path = [
+      pkgs.tailscale # Required by the vpn-auth-file tailscale integration
+    ];
+  };
+  services.k3s = {
+    enable = true;
+    role = "agent";
+    # Must be tailscale IP
+    serverAddr = "https://${controlPlaneNodeIp}:${controlPlaneNodePort}";
+    tokenFile = "/run/secrets/cluster_token";
+    extraFlags = [
+      "--vpn-auth-file=/run/secrets/k3s_vpn_auth"
+      "--node-external-ip=${tailscaleIp}"
+    ];
+    gracefulNodeShutdown = {
+      enable = true;
+    };
+  };
 
   sops = {
     secrets."cluster_token" = {
