@@ -42,7 +42,8 @@ nixie = do.Droplet("nixie",
 ethane = do.Droplet("ethane",
     image=image_nixos_yuto,
     region=do.Region.SFO3,
-    size=do.DropletSlug.DROPLET_S1_VCPU1_GB,
+    size=do.DropletSlug.DROPLET_S1_VCPU2_GB,
+    resize_disk=False,
     ssh_keys=ssh_public_keys,
     tags=[tag_pulumi_taco])
 
