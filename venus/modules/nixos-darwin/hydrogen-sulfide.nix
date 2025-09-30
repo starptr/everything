@@ -71,7 +71,7 @@ in
 
     services.pipewire = {
       enable = true;
-      socketActivation = false;
+      #socketActivation = false;
       systemWide = true;
       pulse.enable = true;
     };
