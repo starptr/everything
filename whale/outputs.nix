@@ -23,7 +23,9 @@ in {
               dest="docker://docker.io/yuto7/${name}:latest"
 
               echo "Checking credentials..."
-              if [[ -f "$HOME/.config/containers/auth.json" ]]; then
+              if [[ -f "$XDG_RUNTIME_DIR/containers/auth.json" ]]; then
+                echo "Using creds from $XDG_RUNTIME_DIR/containers/auth.json"
+              elif [[ -f "$HOME/.config/containers/auth.json" ]]; then
                 echo "Using creds from ~/.config/containers/auth.json"
               else
                 echo "Error: No credentials found."
