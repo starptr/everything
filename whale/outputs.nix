@@ -2,7 +2,7 @@
   magic = import ./../magic/common/constants.nix inputs.nixpkgs;
   machine = "sodium"; # Current machine name
   digests-directory-home-relative-pathstr = magic.relativePathStrings.${machine}.whale-digests;
-  forEachSystem = inputs.nixpkgs.lib.genAttrs (import inputs.systems);
+  forEachSystem = inputs.nixpkgs.lib.genAttrs ["x86_64-linux"];
 in {
   packages = forEachSystem (system: let
       pkgs = import nixpkgs { inherit system; };
