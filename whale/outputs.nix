@@ -66,6 +66,10 @@ in {
         buildLayeredImageArg = {
           tag = "latest";
           contents = [
+            pkgs.curl
+            pkgs.dumb-init
+            pkgs.gnupg
+
             pkgs.mopidy
             pkgs.mopidy-local
             pkgs.mopidy-mpd
