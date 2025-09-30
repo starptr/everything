@@ -69,6 +69,14 @@ in
       };
     };
 
+    services.pipewire = {
+      enable = true;
+      socketActivation = false;
+      systemWide = true;
+      pulse.enable = true;
+    };
+    users.users.mopidy.extraGroups = [ "pipewire" ];
+    systemd.services.mopidy.serviceConfig.SupplementaryGroups = [ "pipewire" ];
     services.mopidy = {
       enable = true;
       extensionPackages = let
