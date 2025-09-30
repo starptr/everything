@@ -71,12 +71,23 @@ in
 
     services.mopidy = {
       enable = true;
-      extensionPackages = [
+      extensionPackages = let
+        mopidy-overriden-pkgs = pkgs.mopidyPackages.overrideScope (prev: final: {
+          extraPkgs = pkgs: [
+            pkgs.yt-dlp
+          ];
+        });
+      in [
         pkgs.mopidy-local
         pkgs.mopidy-mpd
         pkgs.mopidy-spotify
         pkgs.mopidy-iris
+        mopidy-overriden-pkgs.mopidy-youtube
       ];
+      configuration = ''
+        [youtube]
+        youtube_dl_package = yt_dlp
+      '';
       # Must be a secret, since it contains credentials
       extraConfigFiles = [ "/run/secrets/mopidy-config" ];
     };
