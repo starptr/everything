@@ -69,6 +69,17 @@ in
       };
     };
 
+    services.mopidy = {
+      enable = true;
+      extensionPackages = [
+        pkgs.mopidy-local
+        pkgs.mopidy-mpd
+        pkgs.mopidy-spotify
+      ];
+      # Must be a secret, since it contains credentials
+      extraConfigFiles = [ "/run/secrets/mopidy-config" ];
+    };
+
     services.openssh = {
       enable = true;
     };
