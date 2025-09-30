@@ -75,6 +75,7 @@ in
         pkgs.mopidy-local
         pkgs.mopidy-mpd
         pkgs.mopidy-spotify
+        pkgs.mopidy-iris
       ];
       # Must be a secret, since it contains credentials
       extraConfigFiles = [ "/run/secrets/mopidy-config" ];
