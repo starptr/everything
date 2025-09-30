@@ -113,6 +113,7 @@ in
       };
       secrets."mopidy-config" = {
         format = "binary";
+        mode = "0444";
         sopsFile = ./../../../secrets/mopidy-config.toml.txt;
       };
     };
