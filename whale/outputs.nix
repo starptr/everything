@@ -34,7 +34,7 @@ in {
               fi
 
               echo "Pushing to $dest..."
-              skopeo copy "docker-archive:${image}" "$dest"
+              skopeo --insecure-policy copy "docker-archive:${image}" "$dest"
               echo "Done!"
 
               echo "Saving digest to $HOME/${digests-directory-home-relative-pathstr}/${name}.txt ..."
