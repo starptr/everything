@@ -1,0 +1,14 @@
+{
+  apiVersion: "v1",
+  kind: "Secret",
+  metadata: {
+    name: "mopidy-config",
+  },
+  type: "Opaque",
+  stringData: {
+    "mopidy.conf": |||
+      [mpd]
+      hostname = ::
+    |||,
+  },
+}
