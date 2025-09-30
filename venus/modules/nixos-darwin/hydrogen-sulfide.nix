@@ -100,6 +100,10 @@ in
         mode = "0400";
         sopsFile = ./../../../secrets/milky-way.json;
       };
+      secrets."mopidy-config" = {
+        format = "binary";
+        sopsFile = ./../../../secrets/mopidy-config.toml.txt;
+      };
     };
   };
 }
