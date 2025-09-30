@@ -4,7 +4,8 @@ local utils = import 'utils.jsonnet';
   new(
     name='mopidy',
     tailscaleServiceAnnotation=name,
-    image="yuto7/mopidy:latest", // TODO: pin using digests.libsonnet
+    image="jojo141185/mopidy:release",
+    #image="yuto7/mopidy:latest", // TODO: pin using digests.libsonnet
   ):: {
     local this = self,
 
@@ -31,6 +32,7 @@ local utils = import 'utils.jsonnet';
               name: "mopidy",
               image: image,
               imagePullPolicy: "Always",
+              command: ["mopidy"],
               args: ["--config", "/etc/mopidy/mopidy.conf"],
               ports: [{
                 containerPort: 6600,
