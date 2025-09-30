@@ -81,7 +81,7 @@ in {
     in {
       whale-example-image = example-artifacts.image;
       whale-push-example = example-artifacts.push-script;
-      #mopidy-image = mopidy.image;
-      #mopidy-push = mopidy.push-script;
+      mopidy-image = mopidy.image;
+      mopidy-push = mopidy.push-script;
     });
 }
