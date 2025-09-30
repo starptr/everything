@@ -6,6 +6,7 @@ local coredns = import 'coredns.libsonnet';
 local security = import 'security.libsonnet';
 local security2 = import 'security2.libsonnet';
 local networking = import 'networking.libsonnet';
+local mopidy = import 'mopidy.libsonnet';
 
 local utils = import 'utils.jsonnet';
 
@@ -63,6 +64,7 @@ local komga = komgaLib.new(
     whoamiDomain='whoami.testpage.yuto.ink',
     whoamiTailscaleDomain='whoami-testpage-tailscale-only',
   ),
+  mopidy: mopidy.new(),
   #tailscaleOnlyMiddleware: security.newTailscaleOnlyMiddleware(),
   #testpages: security.newTestPages(
   #  publicDomain='public.testpage.yuto.ink',
