@@ -45,12 +45,7 @@ export function home(props: Props) {
 }
 
 function content({ profile }: Props) {
-  return html`<div id="root">
-    <div class="error"></div>
-    <div id="header">
-      <h1>Statusphere</h1>
-      <p>Set your status on the Atmosphere.</p>
-    </div>
+  return html`
     <div class="container">
       <div class="card">
         ${profile
@@ -64,14 +59,12 @@ function content({ profile }: Props) {
               </div>
             </form>`
           : html`<div class="session-form">
-              <div><a href="/login">Log in</a> to set your status!</div>
               <div>
                 <a href="/login" class="button">Log in</a>
               </div>
             </div>`}
       </div>
-    </div>
-  </div>`
+    </div>`
 }
 
 function toBskyLink(did: string) {
