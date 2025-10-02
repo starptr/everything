@@ -3,11 +3,8 @@ import type http from 'node:http'
 import express, { type Express } from 'express'
 import { pino } from 'pino'
 import type { OAuthClient } from '@atproto/oauth-client-node'
-import { Firehose } from '@atproto/sync'
-
 import { createDb, migrateToLatest } from '#/db'
 import { env } from '#/lib/env'
-import { createIngester } from '#/ingester'
 import { createRouter } from '#/routes'
 import { createClient } from '#/auth/client'
 import { createBidirectionalResolver, createIdResolver, BidirectionalResolver } from '#/id-resolver'
@@ -17,7 +14,6 @@ import { IdResolver, MemoryCache } from '@atproto/identity'
 // Application state passed to the router and elsewhere
 export type AppContext = {
   db: Database
-  ingester: Firehose
   logger: pino.Logger
   oauthClient: OAuthClient
   resolver: BidirectionalResolver
@@ -41,18 +37,14 @@ export class Server {
     // Create the atproto utilities
     const oauthClient = await createClient(db)
     const baseIdResolver = createIdResolver()
-    const ingester = createIngester(db, baseIdResolver)
     const resolver = createBidirectionalResolver(baseIdResolver)
     const ctx = {
       db,
-      ingester,
       logger,
       oauthClient,
       resolver,
     }
 
-    // Subscribe to events on the firehose
-    ingester.start()
 
     // Create our server
     const app: Express = express()
@@ -75,7 +67,6 @@ export class Server {
 
   async close() {
     this.ctx.logger.info('sigint received, shutting down')
-    await this.ctx.ingester.destroy()
     return new Promise<void>((resolve) => {
       this.server.close(() => {
         this.ctx.logger.info('server closed')
