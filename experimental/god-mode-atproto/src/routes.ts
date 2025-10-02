@@ -150,8 +150,8 @@ export const createRouter = (ctx: AppContext) => {
       const agent = await getSessionAgent(req, res, ctx)
 
       if (!agent) {
-        // Serve the logged-out view
-        return res.type('html').send(page(home({})))
+        // Redirect to login
+        return res.redirect('/login')
       }
 
       // Fetch additional information about the logged-in user
