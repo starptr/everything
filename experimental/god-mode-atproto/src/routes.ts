@@ -149,30 +149,9 @@ export const createRouter = (ctx: AppContext) => {
       // If the user is signed in, get an agent which communicates with their server
       const agent = await getSessionAgent(req, res, ctx)
 
-      // Fetch data stored in our SQLite
-      const statuses = await ctx.db
-        .selectFrom('status')
-        .selectAll()
-        .orderBy('indexedAt', 'desc')
-        .limit(10)
-        .execute()
-      const myStatus = agent
-        ? await ctx.db
-            .selectFrom('status')
-            .selectAll()
-            .where('authorDid', '=', agent.assertDid)
-            .orderBy('indexedAt', 'desc')
-            .executeTakeFirst()
-        : undefined
-
-      // Map user DIDs to their domain-name handles
-      const didHandleMap = await ctx.resolver.resolveDidsToHandles(
-        statuses.map((s) => s.authorDid)
-      )
-
       if (!agent) {
         // Serve the logged-out view
-        return res.type('html').send(page(home({ statuses, didHandleMap })))
+        return res.type('html').send(page(home({})))
       }
 
       // Fetch additional information about the logged-in user
@@ -194,10 +173,7 @@ export const createRouter = (ctx: AppContext) => {
       return res.type('html').send(
         page(
           home({
-            statuses,
-            didHandleMap,
             profile,
-            myStatus,
           })
         )
       )
@@ -205,76 +181,62 @@ export const createRouter = (ctx: AppContext) => {
   )
 
   // "Set status" handler
-  router.post(
-    '/status',
-    handler(async (req, res) => {
-      // If the user is signed in, get an agent which communicates with their server
-      const agent = await getSessionAgent(req, res, ctx)
-      if (!agent) {
-        return res
-          .status(401)
-          .type('html')
-          .send('<h1>Error: Session required</h1>')
-      }
+  //router.post(
+  //  '/status',
+  //  handler(async (req, res) => {
+  //    // If the user is signed in, get an agent which communicates with their server
+  //    const agent = await getSessionAgent(req, res, ctx)
+  //    if (!agent) {
+  //      return res
+  //        .status(401)
+  //        .type('html')
+  //        .send('<h1>Error: Session required</h1>')
+  //    }
 
-      // Construct & validate their status record
-      const rkey = TID.nextStr()
-      const record = {
-        $type: 'xyz.statusphere.status',
-        status: req.body?.status,
-        createdAt: new Date().toISOString(),
-      }
-      if (!Status.validateRecord(record).success) {
-        return res
-          .status(400)
-          .type('html')
-          .send('<h1>Error: Invalid status</h1>')
-      }
+  //    // Construct & validate their status record
+  //    const rkey = TID.nextStr()
+  //    const record = {
+  //      $type: 'xyz.statusphere.status',
+  //      status: req.body?.status,
+  //      createdAt: new Date().toISOString(),
+  //    }
+  //    if (!Status.validateRecord(record).success) {
+  //      return res
+  //        .status(400)
+  //        .type('html')
+  //        .send('<h1>Error: Invalid status</h1>')
+  //    }
 
-      let uri
-      try {
-        // Write the status record to the user's repository
-        const res = await agent.com.atproto.repo.putRecord({
-          repo: agent.assertDid,
-          collection: 'xyz.statusphere.status',
-          rkey,
-          record,
-          validate: false,
-        })
-        uri = res.data.uri
-      } catch (err) {
-        ctx.logger.warn({ err }, 'failed to write record')
-        return res
-          .status(500)
-          .type('html')
-          .send('<h1>Error: Failed to write record</h1>')
-      }
+  //    let uri
+  //    try {
+  //      // Write the status record to the user's repository
+  //      const res = await agent.com.atproto.repo.putRecord({
+  //        repo: agent.assertDid,
+  //        collection: 'xyz.statusphere.status',
+  //        rkey,
+  //        record,
+  //        validate: false,
+  //      })
+  //      uri = res.data.uri
+  //    } catch (err) {
+  //      ctx.logger.warn({ err }, 'failed to write record')
+  //      return res
+  //        .status(500)
+  //        .type('html')
+  //        .send('<h1>Error: Failed to write record</h1>')
+  //    }
 
-      try {
-        // Optimistically update our SQLite
-        // This isn't strictly necessary because the write event will be
-        // handled in #/firehose/ingestor.ts, but it ensures that future reads
-        // will be up-to-date after this method finishes.
-        await ctx.db
-          .insertInto('status')
-          .values({
-            uri,
-            authorDid: agent.assertDid,
-            status: record.status,
-            createdAt: record.createdAt,
-            indexedAt: new Date().toISOString(),
-          })
-          .execute()
-      } catch (err) {
-        ctx.logger.warn(
-          { err },
-          'failed to update computed view; ignoring as it should be caught by the firehose'
-        )
-      }
+  //    try {
+  //      // Status successfully posted to user's repository
+  //      ctx.logger.info({ uri }, 'status record created')
+  //    } catch (err) {
+  //      // This would be a legitimate error since we're not using a local cache
+  //      ctx.logger.error({ err }, 'failed to create status record')
+  //    }
 
-      return res.redirect('/')
-    })
-  )
+  //    return res.redirect('/')
+  //  })
+  //)
 
   return router
 }
