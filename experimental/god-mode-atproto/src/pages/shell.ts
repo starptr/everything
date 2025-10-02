@@ -7,7 +7,14 @@ export function shell({ title, content }: { title: string; content: Hole }) {
       <link rel="stylesheet" href="/public/styles.css" />
     </head>
     <body>
-      ${content}
+      <div id="root">
+        <div class="error"></div>
+        <div id="header">
+          <h1>GodMode</h1>
+          <p>Edit your user data in your PDS.</p>
+        </div>
+        ${content}
+      </div>
     </body>
   </html>`
 }
