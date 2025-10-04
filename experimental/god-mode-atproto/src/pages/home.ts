@@ -34,7 +34,7 @@ const STATUS_OPTIONS = [
 ]
 
 type Props = {
-  profile?: { displayName?: string }
+  profile: { displayName?: string }
 }
 
 export function home(props: Props) {
