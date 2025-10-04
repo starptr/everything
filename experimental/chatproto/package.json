@@ -1,0 +1,36 @@
+{
+  "name": "statusphere-react",
+  "version": "0.0.1",
+  "description": "Statusphere React monorepo",
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:appview\" \"pnpm dev:client\"",
+    "dev:lexicon": "pnpm --filter @statusphere/lexicon dev",
+    "dev:appview": "pnpm --filter @statusphere/appview dev",
+    "dev:client": "pnpm --filter @statusphere/client dev",
+    "lexgen": "pnpm -r lexgen",
+    "build": "pnpm build:lexicon && pnpm build:client && pnpm build:appview",
+    "build:lexicon": "pnpm --filter @statusphere/lexicon build",
+    "build:appview": "pnpm --filter @statusphere/appview build",
+    "build:client": "pnpm --filter @statusphere/client build",
+    "start": "pnpm --filter @statusphere/appview start",
+    "start:dev": "pnpm -r start",
+    "start:appview": "pnpm --filter @statusphere/appview start",
+    "start:client": "pnpm --filter @statusphere/client start",
+    "clean": "pnpm -r clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@atproto/lex-cli": "^0.6.1",
+    "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.2",
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.8.2"
+  },
+  "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0"
+}
