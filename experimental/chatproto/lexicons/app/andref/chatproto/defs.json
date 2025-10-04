@@ -1,0 +1,38 @@
+{
+  "lexicon": 1,
+  "id": "app.andref.chatproto.defs",
+  "defs": {
+    "spaceView": {
+      "type": "object",
+      "required": ["uri", "name" ],
+      "properties": {
+        "uri": { "type": "string", "format": "at-uri" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxGraphemes": 128
+        }
+      }
+    },
+    "channelView": {
+      "type": "object",
+      "required": ["uri", "name" ],
+      "properties": {
+        "uri": { "type": "string", "format": "at-uri" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxGraphemes": 128
+        }
+      }
+    },
+    "profileView": {
+      "type": "object",
+      "required": ["did", "handle"],
+      "properties": {
+        "did": { "type": "string", "format": "did" },
+        "handle": { "type": "string", "format": "handle" }
+      }
+    }
+  }
+}
