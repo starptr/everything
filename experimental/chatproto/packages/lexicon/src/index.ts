@@ -5,6 +5,10 @@ import { FetchHandler, FetchHandlerOptions, XrpcClient } from '@atproto/xrpc'
 import { CID } from 'multiformats/cid'
 
 import { schemas } from './lexicons.js'
+import * as AppAndrefChatprotoChannel from './types/app/andref/chatproto/channel.js'
+import * as AppAndrefChatprotoDefs from './types/app/andref/chatproto/defs.js'
+import * as AppAndrefChatprotoMessage from './types/app/andref/chatproto/message.js'
+import * as AppAndrefChatprotoSpace from './types/app/andref/chatproto/space.js'
 import * as AppBskyActorDefs from './types/app/bsky/actor/defs.js'
 import * as AppBskyActorProfile from './types/app/bsky/actor/profile.js'
 import * as ComAtprotoLabelDefs from './types/com/atproto/label/defs.js'
@@ -47,6 +51,10 @@ export * as ComAtprotoRepoStrongRef from './types/com/atproto/repo/strongRef.js'
 export * as ComAtprotoRepoUploadBlob from './types/com/atproto/repo/uploadBlob.js'
 export * as AppBskyActorDefs from './types/app/bsky/actor/defs.js'
 export * as AppBskyActorProfile from './types/app/bsky/actor/profile.js'
+export * as AppAndrefChatprotoChannel from './types/app/andref/chatproto/channel.js'
+export * as AppAndrefChatprotoDefs from './types/app/andref/chatproto/defs.js'
+export * as AppAndrefChatprotoMessage from './types/app/andref/chatproto/message.js'
+export * as AppAndrefChatprotoSpace from './types/app/andref/chatproto/space.js'
 
 export class AtpBaseClient extends XrpcClient {
   xyz: XyzNS
@@ -319,10 +327,12 @@ export class ComAtprotoRepoNS {
 export class AppNS {
   _client: XrpcClient
   bsky: AppBskyNS
+  andref: AppAndrefNS
 
   constructor(client: XrpcClient) {
     this._client = client
     this.bsky = new AppBskyNS(client)
+    this.andref = new AppAndrefNS(client)
   }
 }
 
@@ -407,6 +417,225 @@ export class ProfileRecord {
       'com.atproto.repo.deleteRecord',
       undefined,
       { collection: 'app.bsky.actor.profile', ...params },
+      { headers },
+    )
+  }
+}
+
+export class AppAndrefNS {
+  _client: XrpcClient
+  chatproto: AppAndrefChatprotoNS
+
+  constructor(client: XrpcClient) {
+    this._client = client
+    this.chatproto = new AppAndrefChatprotoNS(client)
+  }
+}
+
+export class AppAndrefChatprotoNS {
+  _client: XrpcClient
+  channel: ChannelRecord
+  message: MessageRecord
+  space: SpaceRecord
+
+  constructor(client: XrpcClient) {
+    this._client = client
+    this.channel = new ChannelRecord(client)
+    this.message = new MessageRecord(client)
+    this.space = new SpaceRecord(client)
+  }
+}
+
+export class ChannelRecord {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  async list(
+    params: OmitKey<ComAtprotoRepoListRecords.QueryParams, 'collection'>,
+  ): Promise<{
+    cursor?: string
+    records: { uri: string; value: AppAndrefChatprotoChannel.Record }[]
+  }> {
+    const res = await this._client.call('com.atproto.repo.listRecords', {
+      collection: 'app.andref.chatproto.channel',
+      ...params,
+    })
+    return res.data
+  }
+
+  async get(
+    params: OmitKey<ComAtprotoRepoGetRecord.QueryParams, 'collection'>,
+  ): Promise<{
+    uri: string
+    cid: string
+    value: AppAndrefChatprotoChannel.Record
+  }> {
+    const res = await this._client.call('com.atproto.repo.getRecord', {
+      collection: 'app.andref.chatproto.channel',
+      ...params,
+    })
+    return res.data
+  }
+
+  async create(
+    params: OmitKey<
+      ComAtprotoRepoCreateRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppAndrefChatprotoChannel.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.andref.chatproto.channel'
+    const res = await this._client.call(
+      'com.atproto.repo.createRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async delete(
+    params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
+    headers?: Record<string, string>,
+  ): Promise<void> {
+    await this._client.call(
+      'com.atproto.repo.deleteRecord',
+      undefined,
+      { collection: 'app.andref.chatproto.channel', ...params },
+      { headers },
+    )
+  }
+}
+
+export class MessageRecord {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  async list(
+    params: OmitKey<ComAtprotoRepoListRecords.QueryParams, 'collection'>,
+  ): Promise<{
+    cursor?: string
+    records: { uri: string; value: AppAndrefChatprotoMessage.Record }[]
+  }> {
+    const res = await this._client.call('com.atproto.repo.listRecords', {
+      collection: 'app.andref.chatproto.message',
+      ...params,
+    })
+    return res.data
+  }
+
+  async get(
+    params: OmitKey<ComAtprotoRepoGetRecord.QueryParams, 'collection'>,
+  ): Promise<{
+    uri: string
+    cid: string
+    value: AppAndrefChatprotoMessage.Record
+  }> {
+    const res = await this._client.call('com.atproto.repo.getRecord', {
+      collection: 'app.andref.chatproto.message',
+      ...params,
+    })
+    return res.data
+  }
+
+  async create(
+    params: OmitKey<
+      ComAtprotoRepoCreateRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppAndrefChatprotoMessage.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.andref.chatproto.message'
+    const res = await this._client.call(
+      'com.atproto.repo.createRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async delete(
+    params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
+    headers?: Record<string, string>,
+  ): Promise<void> {
+    await this._client.call(
+      'com.atproto.repo.deleteRecord',
+      undefined,
+      { collection: 'app.andref.chatproto.message', ...params },
+      { headers },
+    )
+  }
+}
+
+export class SpaceRecord {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  async list(
+    params: OmitKey<ComAtprotoRepoListRecords.QueryParams, 'collection'>,
+  ): Promise<{
+    cursor?: string
+    records: { uri: string; value: AppAndrefChatprotoSpace.Record }[]
+  }> {
+    const res = await this._client.call('com.atproto.repo.listRecords', {
+      collection: 'app.andref.chatproto.space',
+      ...params,
+    })
+    return res.data
+  }
+
+  async get(
+    params: OmitKey<ComAtprotoRepoGetRecord.QueryParams, 'collection'>,
+  ): Promise<{
+    uri: string
+    cid: string
+    value: AppAndrefChatprotoSpace.Record
+  }> {
+    const res = await this._client.call('com.atproto.repo.getRecord', {
+      collection: 'app.andref.chatproto.space',
+      ...params,
+    })
+    return res.data
+  }
+
+  async create(
+    params: OmitKey<
+      ComAtprotoRepoCreateRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppAndrefChatprotoSpace.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.andref.chatproto.space'
+    const res = await this._client.call(
+      'com.atproto.repo.createRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async delete(
+    params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
+    headers?: Record<string, string>,
+  ): Promise<void> {
+    await this._client.call(
+      'com.atproto.repo.deleteRecord',
+      undefined,
+      { collection: 'app.andref.chatproto.space', ...params },
       { headers },
     )
   }

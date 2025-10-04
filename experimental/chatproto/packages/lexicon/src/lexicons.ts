@@ -1240,6 +1240,175 @@ export const schemaDict = {
       },
     },
   },
+  AppAndrefChatprotoChannel: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.channel',
+    defs: {
+      main: {
+        type: 'record',
+        key: 'nsid',
+        record: {
+          type: 'object',
+          required: ['name', 'channels', 'createdAt'],
+          properties: {
+            name: {
+              type: 'string',
+              minLength: 1,
+              maxGraphemes: 128,
+            },
+            channels: {
+              type: 'array',
+              items: {
+                type: 'string',
+                format: 'at-uri',
+              },
+            },
+            writers: {
+              type: 'array',
+              items: {
+                type: 'string',
+                format: 'at-identifier',
+              },
+            },
+            createdAt: {
+              type: 'string',
+              format: 'datetime',
+            },
+          },
+        },
+      },
+    },
+  },
+  AppAndrefChatprotoDefs: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.defs',
+    defs: {
+      spaceView: {
+        type: 'object',
+        required: ['uri', 'name'],
+        properties: {
+          uri: {
+            type: 'string',
+            format: 'at-uri',
+          },
+          name: {
+            type: 'string',
+            minLength: 1,
+            maxGraphemes: 128,
+          },
+        },
+      },
+      channelView: {
+        type: 'object',
+        required: ['uri', 'name'],
+        properties: {
+          uri: {
+            type: 'string',
+            format: 'at-uri',
+          },
+          name: {
+            type: 'string',
+            minLength: 1,
+            maxGraphemes: 128,
+          },
+        },
+      },
+      profileView: {
+        type: 'object',
+        required: ['did', 'handle'],
+        properties: {
+          did: {
+            type: 'string',
+            format: 'did',
+          },
+          handle: {
+            type: 'string',
+            format: 'handle',
+          },
+        },
+      },
+    },
+  },
+  AppAndrefChatprotoMessage: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.message',
+    defs: {
+      main: {
+        type: 'record',
+        key: 'tid',
+        record: {
+          type: 'object',
+          required: ['createdAt', 'channel'],
+          properties: {
+            plaintext: {
+              type: 'string',
+              minLength: 1,
+              maxGraphemes: 4000,
+            },
+            previous: {
+              type: 'string',
+              format: 'at-uri',
+            },
+            next: {
+              type: 'string',
+              format: 'at-uri',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'datetime',
+            },
+            channel: {
+              type: 'string',
+              format: 'at-uri',
+            },
+            replyTo: {
+              type: 'string',
+              format: 'at-uri',
+            },
+          },
+        },
+      },
+    },
+  },
+  AppAndrefChatprotoSpace: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.space',
+    defs: {
+      main: {
+        type: 'record',
+        key: 'nsid',
+        record: {
+          type: 'object',
+          required: ['name', 'channels', 'writers', 'createdAt'],
+          properties: {
+            name: {
+              type: 'string',
+              minLength: 1,
+              maxGraphemes: 128,
+            },
+            channels: {
+              type: 'array',
+              items: {
+                type: 'string',
+                format: 'at-uri',
+              },
+            },
+            writers: {
+              type: 'array',
+              items: {
+                type: 'string',
+                format: 'at-identifier',
+              },
+            },
+            createdAt: {
+              type: 'string',
+              format: 'datetime',
+            },
+          },
+        },
+      },
+    },
+  },
 } as const satisfies Record<string, LexiconDoc>
 
 export const schemas = Object.values(schemaDict) satisfies LexiconDoc[]
@@ -1294,4 +1463,8 @@ export const ids = {
   ComAtprotoRepoUploadBlob: 'com.atproto.repo.uploadBlob',
   AppBskyActorDefs: 'app.bsky.actor.defs',
   AppBskyActorProfile: 'app.bsky.actor.profile',
+  AppAndrefChatprotoChannel: 'app.andref.chatproto.channel',
+  AppAndrefChatprotoDefs: 'app.andref.chatproto.defs',
+  AppAndrefChatprotoMessage: 'app.andref.chatproto.message',
+  AppAndrefChatprotoSpace: 'app.andref.chatproto.space',
 } as const
