@@ -75,6 +75,11 @@ export const api = {
   createStatus(params: XyzStatusphereSendStatus.InputSchema) {
     return agent.xyz.statusphere.sendStatus(params)
   },
+
+  // Get messages in a channel
+  getMessages(params: Lexicon.AppAndrefChatprotoGetMessages.QueryParams) {
+    return agent.app.andref.chatproto.getMessages(params)
+  }
 }
 
 export default api
