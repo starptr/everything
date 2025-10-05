@@ -1,0 +1,13 @@
+{
+  "lexicon": 1,
+  "id": "app.andref.chatproto.writers",
+  "defs": {
+    "main": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "at-identifier"
+      }
+    }
+  }
+}

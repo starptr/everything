@@ -153,6 +153,7 @@ migrations['001'] = {
       .createTable('writers')
       .addColumn('writableUri', 'varchar', (col) => col.notNull())
       .addColumn('writer', 'varchar', (col) => col.notNull())
+      .addColumn('lastPulledAt', 'varchar', (col) => col)
       .addForeignKeyConstraint(
         'writableUri_fkey',
         ['writableUri'],
