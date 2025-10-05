@@ -2,12 +2,12 @@ import Header from '#/components/Header'
 import StatusForm, { STATUS_OPTIONS } from '#/components/StatusForm'
 import StatusList from '#/components/StatusList'
 import { useAuth } from '#/hooks/useAuth'
-import { useParams, useSearchParams } from 'react-router-dom'
+//import { useParams, useSearchParams } from 'react-router-dom'
 
 const Channel = () => {
-  const { channelNsid } = useParams();
-  const [searchParams] = useSearchParams();
-  const channelOwnerHint = searchParams.get('hintChannelOwner');
+  //const { channelNsid } = useParams();
+  //const [searchParams] = useSearchParams();
+  //const channelOwnerHint = searchParams.get('hintChannelOwner');
   const { user, loading, error } = useAuth()
 
   // Get a random emoji from the STATUS_OPTIONS array
