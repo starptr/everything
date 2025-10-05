@@ -1,6 +1,6 @@
 import { IdResolver } from '@atproto/identity'
 import { Firehose, MemoryRunner, type Event } from '@atproto/sync'
-import { XyzStatusphereStatus } from '@statusphere/lexicon'
+import { XyzStatusphereStatus, AppAndrefChatprotoChannel, AppAndrefChatprotoMessage } from '@statusphere/lexicon'
 import pino from 'pino'
 
 import type { Database } from '#/db'
@@ -47,46 +47,95 @@ export async function createFirehoseIngester(
         const now = new Date()
         const record = evt.record
 
-        // If the write is a valid status update
-        if (
-          evt.collection === 'xyz.statusphere.status' &&
-          XyzStatusphereStatus.isRecord(record)
-        ) {
-          const validatedRecord = XyzStatusphereStatus.validateRecord(record)
-          if (!validatedRecord.success) return
-          // Store the status in our SQLite
-          await db
-            .insertInto('status')
-            .values({
-              uri: evt.uri.toString(),
-              authorDid: evt.did,
-              status: validatedRecord.value.status,
-              createdAt: validatedRecord.value.createdAt,
-              indexedAt: now.toISOString(),
-            })
-            .onConflict((oc) =>
-              oc.column('uri').doUpdateSet({
-                status: validatedRecord.value.status,
+        switch (evt.collection) {
+          case 'xyz.statusphere.status': {
+            if (!XyzStatusphereStatus.isRecord(record)) return
+            const validatedRecord = XyzStatusphereStatus.validateRecord(record)
+            if (!validatedRecord.success) return
+              // Store the status in our SQLite
+              await db
+                .insertInto('status')
+                .values({
+                  uri: evt.uri.toString(),
+                  authorDid: evt.did,
+                  status: validatedRecord.value.status,
+                  createdAt: validatedRecord.value.createdAt,
+                  indexedAt: now.toISOString(),
+                })
+                .onConflict((oc) =>
+                  oc.column('uri').doUpdateSet({
+                    status: validatedRecord.value.status,
+                    indexedAt: now.toISOString(),
+                  }),
+                )
+                .execute()
+          }
+          case 'app.andref.chatproto.message': {
+            if (!AppAndrefChatprotoMessage.isRecord(record)) return
+            const validatedRecord = AppAndrefChatprotoMessage.validateRecord(record)
+            if (!validatedRecord.success) return
+            // Plaintext is required for now, since it is the only content type we support
+            if (validatedRecord.value.plaintext === undefined) return
+            // Store the status in our SQLite
+            await db
+              .insertInto('message')
+              .values({
+                uri: evt.uri.toString(),
+                authorDid: evt.did,
+                plaintext: validatedRecord.value.plaintext,
+                createdAt: validatedRecord.value.createdAt,
+                channelUri: validatedRecord.value.channel,
                 indexedAt: now.toISOString(),
-              }),
-            )
-            .execute()
+              })
+              .onConflict((oc) =>
+                oc.column('uri').doUpdateSet({
+                  plaintext: validatedRecord.value.plaintext,
+                  indexedAt: now.toISOString(),
+                }),
+              )
+              .execute()
+          }
+          case 'app.andref.chatproto.channel': {
+            if (!AppAndrefChatprotoChannel.isRecord(record)) return
+            const validatedRecord = AppAndrefChatprotoChannel.validateRecord(record)
+            if (!validatedRecord.success) return
+
+            // Channel is getting created or updated
+          }
         }
       } else if (
-        evt.event === 'delete' &&
-        evt.collection === 'xyz.statusphere.status'
+        evt.event === 'delete'
       ) {
-        // Remove the status from our SQLite
-        await db
-          .deleteFrom('status')
-          .where('uri', '=', evt.uri.toString())
-          .execute()
+        switch (evt.collection) {
+          case 'xyz.statusphere.status': {
+            // Remove the status from our SQLite
+            await db
+              .deleteFrom('status')
+              .where('uri', '=', evt.uri.toString())
+              .execute()
+          }
+          case 'app.andref.chatproto.message': {
+            // Remove the message from our SQLite
+            await db
+              .deleteFrom('message')
+              .where('uri', '=', evt.uri.toString())
+              .execute()
+          }
+          default: {
+            // Ignore other deletions
+          }
+        }
       }
     },
     onError: (err: Error) => {
       logger.error({ err }, 'error on firehose ingestion')
     },
-    filterCollections: ['xyz.statusphere.status'],
+    filterCollections: [
+      'xyz.statusphere.status',
+      'app.andref.chatproto.message',
+      'app.andref.chatproto.space',
+      'app.andref.chatproto.channel', 
+    ],
     excludeIdentity: true,
     excludeAccount: true,
   })
