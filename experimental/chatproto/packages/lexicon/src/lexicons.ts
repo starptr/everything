@@ -1345,10 +1345,19 @@ export const schemaDict = {
         description: 'Get a list of the most recent messages on the network.',
         parameters: {
           type: 'params',
+          required: ['channelNsid'],
           properties: {
+            channelNsid: {
+              type: 'string',
+              format: 'nsid',
+            },
             before: {
               type: 'string',
               format: 'tid',
+            },
+            hintChannelOwner: {
+              type: 'string',
+              format: 'at-identifier',
             },
           },
         },

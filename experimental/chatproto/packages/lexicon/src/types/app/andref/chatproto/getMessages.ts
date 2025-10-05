@@ -14,7 +14,9 @@ const is$typed = _is$typed,
 const id = 'app.andref.chatproto.getMessages'
 
 export interface QueryParams {
+  channelNsid: string
   before?: string
+  hintChannelOwner?: string
 }
 
 export type InputSchema = undefined
