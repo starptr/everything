@@ -7,21 +7,13 @@
       "key": "nsid",
       "record": {
         "type": "object",
-        "required": ["name", "createdAt"],
+        "required": ["name"],
         "properties": {
           "name": {
             "type": "string",
             "minLength": 1,
             "maxGraphemes": 128
-          },
-          "writers": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "at-identifier"
-            }
-          },
-          "createdAt": { "type": "string", "format": "datetime" }
+          }
         }
       }
     }

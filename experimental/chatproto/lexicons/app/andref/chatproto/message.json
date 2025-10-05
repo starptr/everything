@@ -14,11 +14,8 @@
             "minLength": 1,
             "maxGraphemes": 4000
           },
-          "previous": { "type": "string", "format": "at-uri" },
-          "next": { "type": "string", "format": "at-uri" },
           "createdAt": { "type": "string", "format": "datetime" },
-          "channel": { "type": "string", "format": "at-uri" },
-          "replyTo": { "type": "string", "format": "at-uri" }
+          "channel": { "type": "string", "format": "at-uri" }
         }
       }
     }

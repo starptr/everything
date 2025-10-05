@@ -1,0 +1,32 @@
+{
+  "lexicon": 1,
+  "id": "app.andref.chatproto.sendMessage",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Send a message into the ATmosphere.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["channel"],
+          "properties": {
+            "plaintext": {
+              "type": "string",
+              "minLength": 1,
+              "maxGraphemes": 4000
+            },
+            "channel": { "type": "string", "format": "at-uri" }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "app.andref.chatproto.defs#messageView"
+        }
+      }
+    }
+  }
+}

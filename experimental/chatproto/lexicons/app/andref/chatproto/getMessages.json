@@ -1,0 +1,35 @@
+{
+  "lexicon": 1,
+  "id": "app.andref.chatproto.getMessages",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Get a list of the most recent messages on the network.",
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "before": {
+            "type": "string",
+            "format": "tid"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["messages"],
+          "properties": {
+            "messages": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "app.andref.chatproto.defs#messageView"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
