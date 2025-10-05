@@ -7,16 +7,12 @@
       "key": "nsid",
       "record": {
         "type": "object",
-        "required": ["name", "channels", "createdAt"],
+        "required": ["name", "createdAt"],
         "properties": {
           "name": {
             "type": "string",
             "minLength": 1,
             "maxGraphemes": 128
-          },
-          "channels": {
-            "type": "array",
-            "items": { "type": "string", "format": "at-uri" }
           },
           "writers": {
             "type": "array",
