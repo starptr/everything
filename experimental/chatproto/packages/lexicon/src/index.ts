@@ -11,6 +11,7 @@ import * as AppAndrefChatprotoGetMessages from './types/app/andref/chatproto/get
 import * as AppAndrefChatprotoMessage from './types/app/andref/chatproto/message.js'
 import * as AppAndrefChatprotoSendMessage from './types/app/andref/chatproto/sendMessage.js'
 import * as AppAndrefChatprotoSpace from './types/app/andref/chatproto/space.js'
+import * as AppAndrefChatprotoWriters from './types/app/andref/chatproto/writers.js'
 import * as AppBskyActorDefs from './types/app/bsky/actor/defs.js'
 import * as AppBskyActorProfile from './types/app/bsky/actor/profile.js'
 import * as ComAtprotoLabelDefs from './types/com/atproto/label/defs.js'
@@ -59,6 +60,7 @@ export * as AppAndrefChatprotoGetMessages from './types/app/andref/chatproto/get
 export * as AppAndrefChatprotoMessage from './types/app/andref/chatproto/message.js'
 export * as AppAndrefChatprotoSendMessage from './types/app/andref/chatproto/sendMessage.js'
 export * as AppAndrefChatprotoSpace from './types/app/andref/chatproto/space.js'
+export * as AppAndrefChatprotoWriters from './types/app/andref/chatproto/writers.js'
 
 export class AtpBaseClient extends XrpcClient {
   xyz: XyzNS

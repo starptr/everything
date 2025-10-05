@@ -1451,6 +1451,10 @@ export const schemaDict = {
               minLength: 1,
               maxGraphemes: 128,
             },
+            writers: {
+              type: 'ref',
+              ref: 'lex:app.andref.chatproto.writers',
+            },
             channels: {
               type: 'array',
               items: {
@@ -1459,6 +1463,19 @@ export const schemaDict = {
               },
             },
           },
+        },
+      },
+    },
+  },
+  AppAndrefChatprotoWriters: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.writers',
+    defs: {
+      main: {
+        type: 'array',
+        items: {
+          type: 'string',
+          format: 'at-identifier',
         },
       },
     },
@@ -1523,4 +1540,5 @@ export const ids = {
   AppAndrefChatprotoMessage: 'app.andref.chatproto.message',
   AppAndrefChatprotoSendMessage: 'app.andref.chatproto.sendMessage',
   AppAndrefChatprotoSpace: 'app.andref.chatproto.space',
+  AppAndrefChatprotoWriters: 'app.andref.chatproto.writers',
 } as const
