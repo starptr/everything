@@ -14,6 +14,10 @@
             "minLength": 1,
             "maxGraphemes": 128
           },
+          "writers": {
+            "type": "ref",
+            "ref": "app.andref.chatproto.writers"
+          },
           "channels": {
             "type": "array",
             "items": { "type": "string", "format": "at-uri" }
