@@ -92,6 +92,46 @@ migrations['001'] = {
       .addColumn('indexedAt', 'varchar', (col) => col.notNull())
       .execute()
     await db.schema
+      .createTable('message')
+      .addColumn('uri', 'varchar', (col) => col.primaryKey())
+      .addColumn('authorDid', 'varchar', (col) => col.notNull())
+      .addColumn('plaintext', 'varchar', (col) => col.notNull())
+      .addColumn('createdAt', 'varchar', (col) => col.notNull())
+      .addColumn('indexedAt', 'varchar', (col) => col.notNull())
+      .addColumn('channelUri', 'varchar', (col) => col.notNull())
+      .execute()
+    await db.schema
+      .createTable('space')
+      .addColumn('uri', 'varchar', (col) => col.primaryKey())
+      .addColumn('name', 'varchar', (col) => col.notNull())
+      .execute()
+    await db.schema
+      .createTable('channel')
+      .addColumn('uri', 'varchar', (col) => col.primaryKey())
+      .addColumn('name', 'varchar', (col) => col.notNull())
+      .addColumn('useSpaceWriters', 'boolean', (col) => col.notNull().defaultTo(true))
+      .addColumn('spaceUri', 'varchar', (col) => col.notNull())
+      .addForeignKeyConstraint(
+        'spaceUri_fkey',
+        ['spaceUri'],
+        'space',
+        ['uri'],
+        (cb) => cb.onDelete('cascade'),
+      )
+      .execute()
+    await db.schema
+      .createTable('writers')
+      .addColumn('writableUri', 'varchar', (col) => col.notNull())
+      .addColumn('writer', 'varchar', (col) => col.notNull())
+      .addForeignKeyConstraint(
+        'writableUri_fkey',
+        ['writableUri'],
+        'space',
+        ['uri'],
+        (cb) => cb.onDelete('cascade'),
+      )
+      .execute()
+    await db.schema
       .createTable('auth_session')
       .addColumn('key', 'varchar', (col) => col.primaryKey())
       .addColumn('session', 'varchar', (col) => col.notNull())
@@ -105,6 +145,10 @@ migrations['001'] = {
   async down(db: Kysely<unknown>) {
     await db.schema.dropTable('auth_state').execute()
     await db.schema.dropTable('auth_session').execute()
+    await db.schema.dropTable('writers').execute()
+    await db.schema.dropTable('channel').execute()
+    await db.schema.dropTable('space').execute()
+    await db.schema.dropTable('message').execute()
     await db.schema.dropTable('status').execute()
   },
 }
