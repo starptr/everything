@@ -43,6 +43,25 @@ export function validateChannelView<V>(v: V) {
   return validate<ChannelView & V>(v, id, hashChannelView)
 }
 
+export interface MessageView {
+  $type?: 'app.andref.chatproto.defs#messageView'
+  tid: string
+  plaintext?: string
+  createdAt: string
+  channel: string
+  author: ProfileView
+}
+
+const hashMessageView = 'messageView'
+
+export function isMessageView<V>(v: V) {
+  return is$typed(v, id, hashMessageView)
+}
+
+export function validateMessageView<V>(v: V) {
+  return validate<MessageView & V>(v, id, hashMessageView)
+}
+
 export interface ProfileView {
   $type?: 'app.andref.chatproto.defs#profileView'
   did: string

@@ -1249,30 +1249,12 @@ export const schemaDict = {
         key: 'nsid',
         record: {
           type: 'object',
-          required: ['name', 'channels', 'createdAt'],
+          required: ['name'],
           properties: {
             name: {
               type: 'string',
               minLength: 1,
               maxGraphemes: 128,
-            },
-            channels: {
-              type: 'array',
-              items: {
-                type: 'string',
-                format: 'at-uri',
-              },
-            },
-            writers: {
-              type: 'array',
-              items: {
-                type: 'string',
-                format: 'at-identifier',
-              },
-            },
-            createdAt: {
-              type: 'string',
-              format: 'datetime',
             },
           },
         },
@@ -1313,6 +1295,31 @@ export const schemaDict = {
           },
         },
       },
+      messageView: {
+        type: 'object',
+        required: ['tid', 'createdAt', 'channel', 'author'],
+        properties: {
+          tid: {
+            type: 'string',
+            format: 'tid',
+          },
+          plaintext: {
+            type: 'string',
+          },
+          createdAt: {
+            type: 'string',
+            format: 'datetime',
+          },
+          channel: {
+            type: 'string',
+            format: 'at-uri',
+          },
+          author: {
+            type: 'ref',
+            ref: 'lex:app.andref.chatproto.defs#profileView',
+          },
+        },
+      },
       profileView: {
         type: 'object',
         required: ['did', 'handle'],
@@ -1324,6 +1331,41 @@ export const schemaDict = {
           handle: {
             type: 'string',
             format: 'handle',
+          },
+        },
+      },
+    },
+  },
+  AppAndrefChatprotoGetMessages: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.getMessages',
+    defs: {
+      main: {
+        type: 'query',
+        description: 'Get a list of the most recent messages on the network.',
+        parameters: {
+          type: 'params',
+          properties: {
+            before: {
+              type: 'string',
+              format: 'tid',
+            },
+          },
+        },
+        output: {
+          encoding: 'application/json',
+          schema: {
+            type: 'object',
+            required: ['messages'],
+            properties: {
+              messages: {
+                type: 'array',
+                items: {
+                  type: 'ref',
+                  ref: 'lex:app.andref.chatproto.defs#messageView',
+                },
+              },
+            },
           },
         },
       },
@@ -1345,14 +1387,6 @@ export const schemaDict = {
               minLength: 1,
               maxGraphemes: 4000,
             },
-            previous: {
-              type: 'string',
-              format: 'at-uri',
-            },
-            next: {
-              type: 'string',
-              format: 'at-uri',
-            },
             createdAt: {
               type: 'string',
               format: 'datetime',
@@ -1361,10 +1395,41 @@ export const schemaDict = {
               type: 'string',
               format: 'at-uri',
             },
-            replyTo: {
-              type: 'string',
-              format: 'at-uri',
+          },
+        },
+      },
+    },
+  },
+  AppAndrefChatprotoSendMessage: {
+    lexicon: 1,
+    id: 'app.andref.chatproto.sendMessage',
+    defs: {
+      main: {
+        type: 'procedure',
+        description: 'Send a message into the ATmosphere.',
+        input: {
+          encoding: 'application/json',
+          schema: {
+            type: 'object',
+            required: ['channel'],
+            properties: {
+              plaintext: {
+                type: 'string',
+                minLength: 1,
+                maxGraphemes: 4000,
+              },
+              channel: {
+                type: 'string',
+                format: 'at-uri',
+              },
             },
+          },
+        },
+        output: {
+          encoding: 'application/json',
+          schema: {
+            type: 'ref',
+            ref: 'lex:app.andref.chatproto.defs#messageView',
           },
         },
       },
@@ -1379,7 +1444,7 @@ export const schemaDict = {
         key: 'nsid',
         record: {
           type: 'object',
-          required: ['name', 'channels', 'writers', 'createdAt'],
+          required: ['name', 'channels'],
           properties: {
             name: {
               type: 'string',
@@ -1392,17 +1457,6 @@ export const schemaDict = {
                 type: 'string',
                 format: 'at-uri',
               },
-            },
-            writers: {
-              type: 'array',
-              items: {
-                type: 'string',
-                format: 'at-identifier',
-              },
-            },
-            createdAt: {
-              type: 'string',
-              format: 'datetime',
             },
           },
         },
@@ -1465,6 +1519,8 @@ export const ids = {
   AppBskyActorProfile: 'app.bsky.actor.profile',
   AppAndrefChatprotoChannel: 'app.andref.chatproto.channel',
   AppAndrefChatprotoDefs: 'app.andref.chatproto.defs',
+  AppAndrefChatprotoGetMessages: 'app.andref.chatproto.getMessages',
   AppAndrefChatprotoMessage: 'app.andref.chatproto.message',
+  AppAndrefChatprotoSendMessage: 'app.andref.chatproto.sendMessage',
   AppAndrefChatprotoSpace: 'app.andref.chatproto.space',
 } as const

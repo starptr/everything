@@ -14,9 +14,6 @@ const id = 'app.andref.chatproto.channel'
 export interface Record {
   $type: 'app.andref.chatproto.channel'
   name: string
-  channels: string[]
-  writers?: string[]
-  createdAt: string
   [k: string]: unknown
 }
 

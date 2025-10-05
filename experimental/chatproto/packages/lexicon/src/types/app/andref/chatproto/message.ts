@@ -14,11 +14,8 @@ const id = 'app.andref.chatproto.message'
 export interface Record {
   $type: 'app.andref.chatproto.message'
   plaintext?: string
-  previous?: string
-  next?: string
   createdAt: string
   channel: string
-  replyTo?: string
   [k: string]: unknown
 }
 

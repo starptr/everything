@@ -15,8 +15,6 @@ export interface Record {
   $type: 'app.andref.chatproto.space'
   name: string
   channels: string[]
-  writers: string[]
-  createdAt: string
   [k: string]: unknown
 }
 
