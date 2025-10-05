@@ -10,6 +10,8 @@ import {
 } from '@atproto/xrpc-server'
 
 import { schemas } from './lexicons.js'
+import * as AppAndrefChatprotoGetMessages from './types/app/andref/chatproto/getMessages.js'
+import * as AppAndrefChatprotoSendMessage from './types/app/andref/chatproto/sendMessage.js'
 import * as ComAtprotoRepoApplyWrites from './types/com/atproto/repo/applyWrites.js'
 import * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord.js'
 import * as ComAtprotoRepoDeleteRecord from './types/com/atproto/repo/deleteRecord.js'
@@ -234,10 +236,12 @@ export class ComAtprotoRepoNS {
 export class AppNS {
   _server: Server
   bsky: AppBskyNS
+  andref: AppAndrefNS
 
   constructor(server: Server) {
     this._server = server
     this.bsky = new AppBskyNS(server)
+    this.andref = new AppAndrefNS(server)
   }
 }
 
@@ -256,6 +260,46 @@ export class AppBskyActorNS {
 
   constructor(server: Server) {
     this._server = server
+  }
+}
+
+export class AppAndrefNS {
+  _server: Server
+  chatproto: AppAndrefChatprotoNS
+
+  constructor(server: Server) {
+    this._server = server
+    this.chatproto = new AppAndrefChatprotoNS(server)
+  }
+}
+
+export class AppAndrefChatprotoNS {
+  _server: Server
+
+  constructor(server: Server) {
+    this._server = server
+  }
+
+  getMessages<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      AppAndrefChatprotoGetMessages.Handler<ExtractAuth<AV>>,
+      AppAndrefChatprotoGetMessages.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'app.andref.chatproto.getMessages' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
+  sendMessage<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      AppAndrefChatprotoSendMessage.Handler<ExtractAuth<AV>>,
+      AppAndrefChatprotoSendMessage.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'app.andref.chatproto.sendMessage' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
   }
 }
 

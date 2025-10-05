@@ -1,6 +1,10 @@
 import { IdResolver } from '@atproto/identity'
 import { Firehose, MemoryRunner, type Event } from '@atproto/sync'
-import { XyzStatusphereStatus, AppAndrefChatprotoChannel, AppAndrefChatprotoMessage } from '@statusphere/lexicon'
+import {
+  AppAndrefChatprotoChannel,
+  AppAndrefChatprotoMessage,
+  XyzStatusphereStatus,
+} from '@statusphere/lexicon'
 import pino from 'pino'
 
 import type { Database } from '#/db'
@@ -52,27 +56,28 @@ export async function createFirehoseIngester(
             if (!XyzStatusphereStatus.isRecord(record)) return
             const validatedRecord = XyzStatusphereStatus.validateRecord(record)
             if (!validatedRecord.success) return
-              // Store the status in our SQLite
-              await db
-                .insertInto('status')
-                .values({
-                  uri: evt.uri.toString(),
-                  authorDid: evt.did,
+            // Store the status in our SQLite
+            await db
+              .insertInto('status')
+              .values({
+                uri: evt.uri.toString(),
+                authorDid: evt.did,
+                status: validatedRecord.value.status,
+                createdAt: validatedRecord.value.createdAt,
+                indexedAt: now.toISOString(),
+              })
+              .onConflict((oc) =>
+                oc.column('uri').doUpdateSet({
                   status: validatedRecord.value.status,
-                  createdAt: validatedRecord.value.createdAt,
                   indexedAt: now.toISOString(),
-                })
-                .onConflict((oc) =>
-                  oc.column('uri').doUpdateSet({
-                    status: validatedRecord.value.status,
-                    indexedAt: now.toISOString(),
-                  }),
-                )
-                .execute()
+                }),
+              )
+              .execute()
           }
           case 'app.andref.chatproto.message': {
             if (!AppAndrefChatprotoMessage.isRecord(record)) return
-            const validatedRecord = AppAndrefChatprotoMessage.validateRecord(record)
+            const validatedRecord =
+              AppAndrefChatprotoMessage.validateRecord(record)
             if (!validatedRecord.success) return
             // Plaintext is required for now, since it is the only content type we support
             if (validatedRecord.value.plaintext === undefined) return
@@ -97,15 +102,14 @@ export async function createFirehoseIngester(
           }
           case 'app.andref.chatproto.channel': {
             if (!AppAndrefChatprotoChannel.isRecord(record)) return
-            const validatedRecord = AppAndrefChatprotoChannel.validateRecord(record)
+            const validatedRecord =
+              AppAndrefChatprotoChannel.validateRecord(record)
             if (!validatedRecord.success) return
 
             // Channel is getting created or updated
           }
         }
-      } else if (
-        evt.event === 'delete'
-      ) {
+      } else if (evt.event === 'delete') {
         switch (evt.collection) {
           case 'xyz.statusphere.status': {
             // Remove the status from our SQLite
@@ -134,7 +138,7 @@ export async function createFirehoseIngester(
       'xyz.statusphere.status',
       'app.andref.chatproto.message',
       'app.andref.chatproto.space',
-      'app.andref.chatproto.channel', 
+      'app.andref.chatproto.channel',
     ],
     excludeIdentity: true,
     excludeAccount: true,

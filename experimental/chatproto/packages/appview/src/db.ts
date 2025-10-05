@@ -139,7 +139,9 @@ migrations['001'] = {
       .createTable('channel')
       .addColumn('uri', 'varchar', (col) => col.primaryKey())
       .addColumn('name', 'varchar', (col) => col.notNull())
-      .addColumn('useSpaceWriters', 'boolean', (col) => col.notNull().defaultTo(true))
+      .addColumn('useSpaceWriters', 'boolean', (col) =>
+        col.notNull().defaultTo(true),
+      )
       .addColumn('spaceUri', 'varchar', (col) => col.notNull())
       .addForeignKeyConstraint(
         'spaceUri_fkey',
