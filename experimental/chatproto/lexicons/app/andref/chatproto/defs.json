@@ -26,6 +26,17 @@
         }
       }
     },
+    "messageView": {
+      "type": "object",
+      "required": ["tid", "createdAt", "channel", "author"],
+      "properties": {
+        "tid": { "type": "string", "format": "tid" },
+        "plaintext": { "type": "string" },
+        "createdAt": { "type": "string", "format": "datetime" },
+        "channel": { "type": "string", "format": "at-uri" },
+        "author": { "type": "ref", "ref": "app.andref.chatproto.defs#profileView" }
+      }
+    },
     "profileView": {
       "type": "object",
       "required": ["did", "handle"],

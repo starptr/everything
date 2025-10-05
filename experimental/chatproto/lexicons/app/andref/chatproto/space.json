@@ -7,7 +7,7 @@
       "key": "nsid",
       "record": {
         "type": "object",
-        "required": ["name", "channels", "writers", "createdAt"],
+        "required": ["name", "channels"],
         "properties": {
           "name": {
             "type": "string",
@@ -17,15 +17,7 @@
           "channels": {
             "type": "array",
             "items": { "type": "string", "format": "at-uri" }
-          },
-          "writers": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "at-identifier"
-            }
-          },
-          "createdAt": { "type": "string", "format": "datetime" }
+          }
         }
       }
     }
