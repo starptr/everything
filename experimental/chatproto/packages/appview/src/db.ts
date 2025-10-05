@@ -11,6 +11,10 @@ import {
 
 export type DatabaseSchema = {
   status: Status
+  message: Message
+  space: Space
+  channel: Channel
+  writers: Writers
   auth_session: AuthSession
   auth_state: AuthState
   cursor: Cursor
@@ -22,6 +26,32 @@ export type Status = {
   status: string
   createdAt: string
   indexedAt: string
+}
+
+export type Message = {
+  uri: string
+  authorDid: string
+  plaintext: string
+  createdAt: string
+  indexedAt: string
+  channelUri: string
+}
+
+export type Space = {
+  uri: string
+  name: string
+}
+
+export type Channel = {
+  uri: string
+  name: string
+  useSpaceWriters: boolean
+  spaceUri: string
+}
+
+export type Writers = {
+  writableUri: string
+  writer: string
 }
 
 export type AuthSession = {
