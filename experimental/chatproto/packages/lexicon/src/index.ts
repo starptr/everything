@@ -7,7 +7,9 @@ import { CID } from 'multiformats/cid'
 import { schemas } from './lexicons.js'
 import * as AppAndrefChatprotoChannel from './types/app/andref/chatproto/channel.js'
 import * as AppAndrefChatprotoDefs from './types/app/andref/chatproto/defs.js'
+import * as AppAndrefChatprotoGetMessages from './types/app/andref/chatproto/getMessages.js'
 import * as AppAndrefChatprotoMessage from './types/app/andref/chatproto/message.js'
+import * as AppAndrefChatprotoSendMessage from './types/app/andref/chatproto/sendMessage.js'
 import * as AppAndrefChatprotoSpace from './types/app/andref/chatproto/space.js'
 import * as AppBskyActorDefs from './types/app/bsky/actor/defs.js'
 import * as AppBskyActorProfile from './types/app/bsky/actor/profile.js'
@@ -53,7 +55,9 @@ export * as AppBskyActorDefs from './types/app/bsky/actor/defs.js'
 export * as AppBskyActorProfile from './types/app/bsky/actor/profile.js'
 export * as AppAndrefChatprotoChannel from './types/app/andref/chatproto/channel.js'
 export * as AppAndrefChatprotoDefs from './types/app/andref/chatproto/defs.js'
+export * as AppAndrefChatprotoGetMessages from './types/app/andref/chatproto/getMessages.js'
 export * as AppAndrefChatprotoMessage from './types/app/andref/chatproto/message.js'
+export * as AppAndrefChatprotoSendMessage from './types/app/andref/chatproto/sendMessage.js'
 export * as AppAndrefChatprotoSpace from './types/app/andref/chatproto/space.js'
 
 export class AtpBaseClient extends XrpcClient {
@@ -443,6 +447,30 @@ export class AppAndrefChatprotoNS {
     this.channel = new ChannelRecord(client)
     this.message = new MessageRecord(client)
     this.space = new SpaceRecord(client)
+  }
+
+  getMessages(
+    params?: AppAndrefChatprotoGetMessages.QueryParams,
+    opts?: AppAndrefChatprotoGetMessages.CallOptions,
+  ): Promise<AppAndrefChatprotoGetMessages.Response> {
+    return this._client.call(
+      'app.andref.chatproto.getMessages',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  sendMessage(
+    data?: AppAndrefChatprotoSendMessage.InputSchema,
+    opts?: AppAndrefChatprotoSendMessage.CallOptions,
+  ): Promise<AppAndrefChatprotoSendMessage.Response> {
+    return this._client.call(
+      'app.andref.chatproto.sendMessage',
+      opts?.qp,
+      data,
+      opts,
+    )
   }
 }
 
