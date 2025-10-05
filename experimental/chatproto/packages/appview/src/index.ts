@@ -36,8 +36,8 @@ export class Server {
     // Create the atproto utilities
     const oauthClient = await createClient(db)
     const baseIdResolver = createIdResolver()
-    const ingester = await createJetstreamIngester(db)
-    // Alternative: const ingester = await createFirehoseIngester(db, baseIdResolver)
+    //const ingester = await createJetstreamIngester(db)
+    const ingester = await createFirehoseIngester(db, baseIdResolver)
     const resolver = createBidirectionalResolver(baseIdResolver)
     const ctx = {
       db,
