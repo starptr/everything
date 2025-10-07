@@ -13,17 +13,20 @@ export default function (server: Server, ctx: AppContext) {
     handler: async ({ params, req, res }) => {
       // TODO: handle pagination
       if (params.before !== undefined) {
+        ctx.logger.error("Pagination is not supported yet");
         throw new Error('Pagination is not supported yet');
       }
 
       // TODO: use cached data stored in DB
       if (params.hintChannelOwner === undefined) {
+        ctx.logger.error("hintChannelOwner is required for now");
         throw new Error('hintChannelOwner is required for now');
       }
 
       const agent = await getSessionAgent(req, res, ctx);
       if (!agent) {
         // TODO: is auth required?
+        ctx.logger.error("Authentication required");
         throw new Error('Authentication required');
       }
 
@@ -32,15 +35,18 @@ export default function (server: Server, ctx: AppContext) {
         collection: 'app.andref.chatproto.channel',
         rkey: params.channelNsid,
       }).catch(() => {
+        ctx.logger.error("Channel not found");
         throw new Error('Channel not found');
       });
       if (!channel.success) {
+        ctx.logger.error(`Getting channel record failed:\nHeaders:\n${channel.headers}\nData:\n${channel.data}`);
         throw new Error(`Getting channel record failed:\nHeaders:\n${channel.headers}\nData:\n${channel.data}`);
       }
 
       // TODO: think about whether it makes sense to require the channel's belonging space to be owned by the same hintChannelOwner
       const validatedChannel = AppAndrefChatprotoChannel.validateRecord(channel.data);
       if (!validatedChannel.success) {
+        ctx.logger.error(`Channel record validation failed:\n${validatedChannel.error}`);
         throw new Error(`Channel record validation failed:\n${validatedChannel.error}`);
       }
       const parts = params.channelNsid.split('.');
@@ -51,13 +57,16 @@ export default function (server: Server, ctx: AppContext) {
         collection: 'app.andref.chatproto.space',
         rkey: spaceNsid,
       }).catch(() => {
+        ctx.logger.error("Space not found");
         throw new Error('Space not found');
       });
       if (!space.success) {
+        ctx.logger.error(`Getting space record failed:\nHeaders:\n${space.headers}\nData:\n${space.data}`);
         throw new Error(`Getting space record failed:\nHeaders:\n${space.headers}\nData:\n${space.data}`);
       }
       const validatedSpace = AppAndrefChatprotoSpace.validateRecord(space.data);
       if (!validatedSpace.success) {
+        ctx.logger.error(`Space record validation failed:\n${validatedSpace.error}`);
         throw new Error(`Space record validation failed:\n${validatedSpace.error}`);
       }
       const writers = validatedSpace.value.writers ?? [];
@@ -69,6 +78,7 @@ export default function (server: Server, ctx: AppContext) {
           reverse: true,
         });
         if (!messagesFromWriter.success) {
+          ctx.logger.error(`Listing messages from ${writer} failed:\nHeaders:\n${messagesFromWriter.headers}\nData:\n${messagesFromWriter.data}`);
           throw new Error(`Listing messages from ${writer} failed:\nHeaders:\n${messagesFromWriter.headers}\nData:\n${messagesFromWriter.data}`);
         }
         const validatedMessageRkeyPairs = messagesFromWriter.data.records.map((entry) => {
@@ -76,6 +86,7 @@ export default function (server: Server, ctx: AppContext) {
           const rkey = uri.rkey;
           const validatedMessage = AppAndrefChatprotoMessage.validateRecord(entry.value);
           if (!validatedMessage.success) {
+            ctx.logger.error(`Message record validation failed:\n${validatedMessage.error}`);
             throw new Error(`Message record validation failed:\n${validatedMessage.error}`);
           }
           return {
@@ -103,6 +114,7 @@ export default function (server: Server, ctx: AppContext) {
       // Convert writer to did and handle
       const messagesWithAuthorViews = await Promise.all(messages.map(async ({ writer, message, rkey }) => {
         if (!isValidDidDoc(writer) && !isValidHandle(writer)) {
+          ctx.logger.error(`Invalid at-identifier: ${writer}`);
           throw new Error(`Invalid at-identifier: ${writer}`);
         }
         let did: string;
@@ -113,6 +125,7 @@ export default function (server: Server, ctx: AppContext) {
           const handleResolver = new HandleResolver({});
           const resolved = await handleResolver.resolve(writer);
           if (resolved === undefined) {
+            ctx.logger.error(`Failed to resolve handle: ${writer}`);
             throw new Error(`Failed to resolve handle: ${writer}`);
           }
           did = resolved;
