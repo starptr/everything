@@ -10,8 +10,7 @@
         "required": ["channelNsid"],
         "properties": {
           "channelNsid": {
-            "type": "string",
-            "format": "nsid"
+            "type": "string"
           },
           "before": {
             "type": "string",
