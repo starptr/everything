@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@atproto/lex-cli':
-        specifier: ^0.6.1
-        version: 0.6.1
+        specifier: ^0.6.2
+        version: 0.6.2
       '@ianvs/prettier-plugin-sort-imports':
         specifier: ^4.4.1
         version: 4.4.1(prettier@3.5.2)
@@ -94,8 +94,8 @@ importers:
         version: 8.18.1
     devDependencies:
       '@atproto/lex-cli':
-        specifier: ^0.6.1
-        version: 0.6.1
+        specifier: ^0.6.2
+        version: 0.6.2
       '@types/better-sqlite3':
         specifier: ^7.6.12
         version: 7.6.12
@@ -228,8 +228,8 @@ importers:
         version: 13.3.2
     devDependencies:
       '@atproto/lex-cli':
-        specifier: ^0.6.1
-        version: 0.6.1
+        specifier: ^0.6.2
+        version: 0.6.2
       '@types/node':
         specifier: ^22.13.8
         version: 22.13.8
@@ -311,16 +311,13 @@ packages:
   '@atproto/jwk@0.1.3':
     resolution: {integrity: sha512-5rBgA8Fk4fg6MfNyEQvUnwq1MRn5xZOXYj4oxLuZ549XeNp2Rm2v+psuEkICD+o6pfIoMX4Hw7UTlXDrpsKKlQ==}
 
-  '@atproto/lex-cli@0.6.1':
-    resolution: {integrity: sha512-fUZSx/l8J50Nxe9J/bF996PjV79oUmkShNewNvbuYgsOVZJtO3gu9jPMYX8+bhJ4eQkCwHbm8edVQDJx5rW3eg==}
+  '@atproto/lex-cli@0.6.2':
+    resolution: {integrity: sha512-YbypfXBOYdZQATgQRRMpTwcG42/JmRs3iYnN6hQH4ljjn+t5nbDtdZjUF5okiWI7LK+yvOrgagxosIAjjjSe8Q==}
     engines: {node: '>=18.7.0'}
     hasBin: true
 
   '@atproto/lexicon@0.4.14':
     resolution: {integrity: sha512-jiKpmH1QER3Gvc7JVY5brwrfo+etFoe57tKPQX/SmPwjvUsFnJAow5xLIryuBaJgFAhnTZViXKs41t//pahGHQ==}
-
-  '@atproto/lexicon@0.4.7':
-    resolution: {integrity: sha512-/x6h3tAiDNzSi4eXtC8ke65B7UzsagtlGRHmUD95698x5lBRpDnpizj0fZWTZVYed5qnOmz/ZEue+v3wDmO61g==}
 
   '@atproto/oauth-client-node@0.2.11':
     resolution: {integrity: sha512-nWc4hatkuBISkkj+5LtJd56imwR/xawSAR5PxeeqRn7fLdmsEjY0/gwAS1EkTlBdHHxDW3yx8Cmy+i6Q1o4ZVw==}
@@ -342,6 +339,9 @@ packages:
 
   '@atproto/syntax@0.3.3':
     resolution: {integrity: sha512-F1LZweesNYdBbZBXVa72N/cSvchG8Q1tG4/209ZXbIuM3FwQtkgn+zgmmV4P4ORmhOeXPBNXvMBpcqiwx/gEQQ==}
+
+  '@atproto/syntax@0.3.4':
+    resolution: {integrity: sha512-8CNmi5DipOLaVeSMPggMe7FCksVag0aO6XZy9WflbduTKM4dFZVCs4686UeMLfGRXX+X966XgwECHoLYrovMMg==}
 
   '@atproto/syntax@0.4.1':
     resolution: {integrity: sha512-CJdImtLAiFO+0z3BWTtxwk6aY5w4t8orHTMVJgkf++QRJWTxPbIFko/0hrkADB7n2EruDxDSeAgfUGehpH6ngw==}
@@ -2956,10 +2956,10 @@ snapshots:
       multiformats: 9.9.0
       zod: 3.24.2
 
-  '@atproto/lex-cli@0.6.1':
+  '@atproto/lex-cli@0.6.2':
     dependencies:
-      '@atproto/lexicon': 0.4.7
-      '@atproto/syntax': 0.3.3
+      '@atproto/lexicon': 0.4.14
+      '@atproto/syntax': 0.3.4
       chalk: 4.1.2
       commander: 9.5.0
       prettier: 3.5.2
@@ -2971,14 +2971,6 @@ snapshots:
     dependencies:
       '@atproto/common-web': 0.4.3
       '@atproto/syntax': 0.4.1
-      iso-datestring-validator: 2.2.2
-      multiformats: 9.9.0
-      zod: 3.24.2
-
-  '@atproto/lexicon@0.4.7':
-    dependencies:
-      '@atproto/common-web': 0.4.0
-      '@atproto/syntax': 0.3.3
       iso-datestring-validator: 2.2.2
       multiformats: 9.9.0
       zod: 3.24.2
@@ -3044,6 +3036,8 @@ snapshots:
       - utf-8-validate
 
   '@atproto/syntax@0.3.3': {}
+
+  '@atproto/syntax@0.3.4': {}
 
   '@atproto/syntax@0.4.1': {}
 

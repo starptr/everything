@@ -24,7 +24,7 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "@atproto/lex-cli": "^0.6.1",
+    "@atproto/lex-cli": "^0.6.2",
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
     "concurrently": "^9.1.2",
     "prettier": "^3.5.2",
