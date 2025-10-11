@@ -23,6 +23,7 @@ const Channel = () => {
   const { data, isPending, isError, error: queryError } = useQuery({
     queryKey: ['channel', channelNsid, hintChannelOwner],
     queryFn: async () => {
+      console.debug(`Debug: channelNsid: ${channelNsid}, hintChannelOwner: ${hintChannelOwner}`);
       const { data } = await api.getMessages({
         channelNsid,
         ...(hintChannelOwner !== null && { hintChannelOwner }), // Set field only if non-null
@@ -34,6 +35,7 @@ const Channel = () => {
   });
   useEffect(() => {
     if (queryError) {
+      console.error(`Debug: channelNsid: ${channelNsid}, hintChannelOwner: ${hintChannelOwner}`);
       console.error(queryError);
     }
   }, [queryError]);
