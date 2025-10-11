@@ -1349,7 +1349,6 @@ export const schemaDict = {
           properties: {
             channelNsid: {
               type: 'string',
-              format: 'nsid',
             },
             before: {
               type: 'string',

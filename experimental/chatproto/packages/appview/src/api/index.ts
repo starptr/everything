@@ -1,9 +1,9 @@
 import { AppContext } from '#/context'
 import { Server } from '#/lexicons'
+import getMessages from './lexicons/getMessages'
 import getStatuses from './lexicons/getStatuses'
 import getUser from './lexicons/getUser'
 import sendStatus from './lexicons/sendStatus'
-import getMessages from './lexicons/getMessages'
 
 export * as health from './health'
 export * as oauth from './oauth'
