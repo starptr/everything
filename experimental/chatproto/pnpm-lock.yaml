@@ -42,8 +42,8 @@ importers:
         specifier: ^0.4.6
         version: 0.4.6
       '@atproto/lexicon':
-        specifier: ^0.4.7
-        version: 0.4.7
+        specifier: ^0.4.14
+        version: 0.4.14
       '@atproto/oauth-client-node':
         specifier: ^0.2.11
         version: 0.2.11
@@ -215,8 +215,8 @@ importers:
         specifier: ^0.14.7
         version: 0.14.7
       '@atproto/lexicon':
-        specifier: ^0.4.7
-        version: 0.4.7
+        specifier: ^0.4.14
+        version: 0.4.14
       '@atproto/syntax':
         specifier: ^0.3.3
         version: 0.3.3
@@ -284,6 +284,9 @@ packages:
   '@atproto/common-web@0.4.0':
     resolution: {integrity: sha512-ZYL0P9myHybNgwh/hBY0HaBzqiLR1B5/ie5bJpLQAg0whRzNA28t8/nU2vh99tbsWcAF0LOD29M8++LyENJLNQ==}
 
+  '@atproto/common-web@0.4.3':
+    resolution: {integrity: sha512-nRDINmSe4VycJzPo6fP/hEltBcULFxt9Kw7fQk6405FyAWZiTluYHlXOnU7GkQfeUK44OENG1qFTBcmCJ7e8pg==}
+
   '@atproto/common@0.4.8':
     resolution: {integrity: sha512-/etCtnWQGLcfiGhIPwxAWrzgzoGB22nMWMeQcU6xZgRT4Cqrfg3A08jAMIHqve/AQpL+6D82lHYp36CG7a5G0w==}
     engines: {node: '>=18.7.0'}
@@ -313,6 +316,9 @@ packages:
     engines: {node: '>=18.7.0'}
     hasBin: true
 
+  '@atproto/lexicon@0.4.14':
+    resolution: {integrity: sha512-jiKpmH1QER3Gvc7JVY5brwrfo+etFoe57tKPQX/SmPwjvUsFnJAow5xLIryuBaJgFAhnTZViXKs41t//pahGHQ==}
+
   '@atproto/lexicon@0.4.7':
     resolution: {integrity: sha512-/x6h3tAiDNzSi4eXtC8ke65B7UzsagtlGRHmUD95698x5lBRpDnpizj0fZWTZVYed5qnOmz/ZEue+v3wDmO61g==}
 
@@ -336,6 +342,9 @@ packages:
 
   '@atproto/syntax@0.3.3':
     resolution: {integrity: sha512-F1LZweesNYdBbZBXVa72N/cSvchG8Q1tG4/209ZXbIuM3FwQtkgn+zgmmV4P4ORmhOeXPBNXvMBpcqiwx/gEQQ==}
+
+  '@atproto/syntax@0.4.1':
+    resolution: {integrity: sha512-CJdImtLAiFO+0z3BWTtxwk6aY5w4t8orHTMVJgkf++QRJWTxPbIFko/0hrkADB7n2EruDxDSeAgfUGehpH6ngw==}
 
   '@atproto/xrpc-server@0.7.11':
     resolution: {integrity: sha512-kywMZMw2FbUFk0xBCtSI1mik+dc3uSvloNndI+N4X/+Qv1FGvoCRMi//9TqaSL13MFevTOynVoMVmaZbnaDG9A==}
@@ -2885,7 +2894,7 @@ snapshots:
   '@atproto/api@0.14.7':
     dependencies:
       '@atproto/common-web': 0.4.0
-      '@atproto/lexicon': 0.4.7
+      '@atproto/lexicon': 0.4.14
       '@atproto/syntax': 0.3.3
       '@atproto/xrpc': 0.6.9
       await-lock: 2.2.2
@@ -2894,6 +2903,13 @@ snapshots:
       zod: 3.24.2
 
   '@atproto/common-web@0.4.0':
+    dependencies:
+      graphemer: 1.4.0
+      multiformats: 9.9.0
+      uint8arrays: 3.0.0
+      zod: 3.24.2
+
+  '@atproto/common-web@0.4.3':
     dependencies:
       graphemer: 1.4.0
       multiformats: 9.9.0
@@ -2951,6 +2967,14 @@ snapshots:
       yesno: 0.4.0
       zod: 3.24.2
 
+  '@atproto/lexicon@0.4.14':
+    dependencies:
+      '@atproto/common-web': 0.4.3
+      '@atproto/syntax': 0.4.1
+      iso-datestring-validator: 2.2.2
+      multiformats: 9.9.0
+      zod: 3.24.2
+
   '@atproto/lexicon@0.4.7':
     dependencies:
       '@atproto/common-web': 0.4.0
@@ -2996,7 +3020,7 @@ snapshots:
       '@atproto/common': 0.4.8
       '@atproto/common-web': 0.4.0
       '@atproto/crypto': 0.4.4
-      '@atproto/lexicon': 0.4.7
+      '@atproto/lexicon': 0.4.14
       '@ipld/car': 3.2.4
       '@ipld/dag-cbor': 7.0.3
       multiformats: 9.9.0
@@ -3007,7 +3031,7 @@ snapshots:
     dependencies:
       '@atproto/common': 0.4.8
       '@atproto/identity': 0.4.6
-      '@atproto/lexicon': 0.4.7
+      '@atproto/lexicon': 0.4.14
       '@atproto/repo': 0.7.0
       '@atproto/syntax': 0.3.3
       '@atproto/xrpc-server': 0.7.11
@@ -3021,11 +3045,13 @@ snapshots:
 
   '@atproto/syntax@0.3.3': {}
 
+  '@atproto/syntax@0.4.1': {}
+
   '@atproto/xrpc-server@0.7.11':
     dependencies:
       '@atproto/common': 0.4.8
       '@atproto/crypto': 0.4.4
-      '@atproto/lexicon': 0.4.7
+      '@atproto/lexicon': 0.4.14
       '@atproto/xrpc': 0.6.9
       cbor-x: 1.6.0
       express: 4.21.2
@@ -3042,7 +3068,7 @@ snapshots:
 
   '@atproto/xrpc@0.6.9':
     dependencies:
-      '@atproto/lexicon': 0.4.7
+      '@atproto/lexicon': 0.4.14
       zod: 3.24.2
 
   '@babel/code-frame@7.26.2':

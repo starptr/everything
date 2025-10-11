@@ -19,7 +19,7 @@
     "@atproto/api": "^0.14.7",
     "@atproto/common": "^0.4.8",
     "@atproto/identity": "^0.4.6",
-    "@atproto/lexicon": "^0.4.7",
+    "@atproto/lexicon": "^0.4.14",
     "@atproto/oauth-client-node": "^0.2.11",
     "@atproto/sync": "^0.1.15",
     "@atproto/syntax": "^0.3.3",
