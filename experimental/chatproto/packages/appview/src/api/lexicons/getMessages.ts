@@ -47,6 +47,7 @@ export default function (server: Server, ctx: AppContext) {
       const validatedChannel = AppAndrefChatprotoChannel.validateRecord(channel.data);
       if (!validatedChannel.success) {
         ctx.logger.error(`Channel record validation failed:\n${validatedChannel.error}`);
+        ctx.logger.error(`Channel record data:\n${JSON.stringify(channel.data, null, 2)}`);
         throw new Error(`Channel record validation failed:\n${validatedChannel.error}`);
       }
       const parts = params.channelNsid.split('.');
