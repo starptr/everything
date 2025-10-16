@@ -34,7 +34,7 @@ export default function (server: Server, ctx: AppContext) {
         throw new Error('Authentication required')
       }
 
-      const channel = await agent.com.atproto.repo
+      const channelResponse = await agent.com.atproto.repo
         .getRecord({
           repo: params.hintChannelOwner,
           collection: 'app.andref.chatproto.channel',
@@ -44,25 +44,27 @@ export default function (server: Server, ctx: AppContext) {
           ctx.logger.error('Channel not found')
           throw new Error('Channel not found')
         })
-      if (!channel.success) {
+      if (!channelResponse.success) {
         ctx.logger.error(
-          `Getting channel record failed:\nHeaders:\n${channel.headers}\nData:\n${channel.data}`,
+          `Getting channel record failed:\nHeaders:\n${channelResponse.headers}\nData:\n${channelResponse.data}`,
         )
         throw new Error(
-          `Getting channel record failed:\nHeaders:\n${channel.headers}\nData:\n${channel.data}`,
+          `Getting channel record failed:\nHeaders:\n${channelResponse.headers}\nData:\n${channelResponse.data}`,
         )
       }
 
+      const channel = channelResponse.data;
+
       // TODO: think about whether it makes sense to require the channel's belonging space to be owned by the same hintChannelOwner
       const validatedChannel = AppAndrefChatprotoChannel.validateRecord(
-        channel.data,
+        channel.value,
       )
       if (!validatedChannel.success) {
         ctx.logger.error(
           `Channel record validation failed:\n${validatedChannel.error}`,
         )
         ctx.logger.error(
-          `Channel record data:\n${JSON.stringify(channel.data, null, 2)}`,
+          `Channel object:\n${JSON.stringify(channel, null, 2)}`,
         )
         throw new Error(
           `Channel record validation failed:\n${validatedChannel.error}`,
@@ -71,7 +73,7 @@ export default function (server: Server, ctx: AppContext) {
       const parts = params.channelNsid.split('.')
       parts.pop()
       const spaceNsid = parts.join('.')
-      const space = await agent.com.atproto.repo
+      const spaceResponse = await agent.com.atproto.repo
         .getRecord({
           repo: params.hintChannelOwner,
           collection: 'app.andref.chatproto.space',
@@ -81,15 +83,16 @@ export default function (server: Server, ctx: AppContext) {
           ctx.logger.error('Space not found')
           throw new Error('Space not found')
         })
-      if (!space.success) {
+      if (!spaceResponse.success) {
         ctx.logger.error(
-          `Getting space record failed:\nHeaders:\n${space.headers}\nData:\n${space.data}`,
+          `Getting space record failed:\nHeaders:\n${spaceResponse.headers}\nData:\n${spaceResponse.data}`,
         )
         throw new Error(
-          `Getting space record failed:\nHeaders:\n${space.headers}\nData:\n${space.data}`,
+          `Getting space record failed:\nHeaders:\n${spaceResponse.headers}\nData:\n${spaceResponse.data}`,
         )
       }
-      const validatedSpace = AppAndrefChatprotoSpace.validateRecord(space.data)
+      const space = spaceResponse.data;
+      const validatedSpace = AppAndrefChatprotoSpace.validateRecord(space.value)
       if (!validatedSpace.success) {
         ctx.logger.error(
           `Space record validation failed:\n${validatedSpace.error}`,
@@ -101,21 +104,21 @@ export default function (server: Server, ctx: AppContext) {
       const writers = validatedSpace.value.writers ?? []
       const messagesByWriter = await Promise.all(
         writers.map(async (writer) => {
-          const messagesFromWriter = await agent.com.atproto.repo.listRecords({
+          const messagesFromWriterResponse = await agent.com.atproto.repo.listRecords({
             repo: writer,
             collection: 'app.andref.chatproto.message',
             limit: 50,
             reverse: true,
           })
-          if (!messagesFromWriter.success) {
+          if (!messagesFromWriterResponse.success) {
             ctx.logger.error(
-              `Listing messages from ${writer} failed:\nHeaders:\n${messagesFromWriter.headers}\nData:\n${messagesFromWriter.data}`,
+              `Listing messages from ${writer} failed:\nHeaders:\n${messagesFromWriterResponse.headers}\nData:\n${messagesFromWriterResponse.data}`,
             )
             throw new Error(
-              `Listing messages from ${writer} failed:\nHeaders:\n${messagesFromWriter.headers}\nData:\n${messagesFromWriter.data}`,
+              `Listing messages from ${writer} failed:\nHeaders:\n${messagesFromWriterResponse.headers}\nData:\n${messagesFromWriterResponse.data}`,
             )
           }
-          const validatedMessageRkeyPairs = messagesFromWriter.data.records.map(
+          const validatedMessageRkeyPairs = messagesFromWriterResponse.data.records.map(
             (entry) => {
               const uri = new AtUri(entry.uri)
               const rkey = uri.rkey
@@ -202,6 +205,10 @@ export default function (server: Server, ctx: AppContext) {
             handle,
           },
         }),
+      )
+
+      ctx.logger.info(
+        `Returning ${messagesToReturn.length} messages for channel ${params.channelNsid} in space ${spaceNsid}: ${JSON.stringify(messagesToReturn, null, 2)}`,
       )
 
       return {

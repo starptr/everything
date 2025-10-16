@@ -24,11 +24,17 @@ const Channel = () => {
     queryKey: ['channel', channelNsid, hintChannelOwner],
     queryFn: async () => {
       console.debug(`Debug: channelNsid: ${channelNsid}, hintChannelOwner: ${hintChannelOwner}`);
-      const { data } = await api.getMessages({
-        channelNsid,
-        ...(hintChannelOwner !== null && { hintChannelOwner }), // Set field only if non-null
-      });
-      return data;
+      try {
+        const { data } = await api.getMessages({
+          channelNsid,
+          ...(hintChannelOwner !== null && { hintChannelOwner }), // Set field only if non-null
+        });
+        console.log("Fetched data:", data);
+        return data;
+      } catch (err) {
+        console.error("Error thrown while fetching messages:", err);
+        throw err;
+      }
     },
     placeholderData: (previousData) => previousData, // Use previous data while refetching
     refetchInterval: 30e3, // Refresh every second
@@ -36,7 +42,7 @@ const Channel = () => {
   useEffect(() => {
     if (queryError) {
       console.error(`Debug: channelNsid: ${channelNsid}, hintChannelOwner: ${hintChannelOwner}`);
-      console.error(queryError);
+      console.error("queryError:", queryError);
     }
   }, [queryError]);
 
