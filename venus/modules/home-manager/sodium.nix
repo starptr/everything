@@ -115,6 +115,10 @@
         sopsFile = ./../../../secrets/personal/restic-repo-passwords.yaml;
         path = "${config.magic.absolutePathStrings.sodium.home}/.config/resticprofile/password.txt";
       };
+      secrets.restic_machine_backups = {
+        sopsFile = ./../../../secrets/personal/restic-repo-passwords.yaml;
+        path = "${config.magic.absolutePathStrings.sodium.home}/.config/resticprofile/machine_backups_pw.txt";
+      };
       secrets.syncthing_pw = {
         sopsFile = ./../../../secrets/personal/passwords.yaml;
       };

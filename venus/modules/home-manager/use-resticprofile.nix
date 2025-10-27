@@ -33,6 +33,7 @@
       repositories = {
         main-restic-repo-via-s3 = "rclone:storj-baks:backup-repos/main-restic-backups";
         main-restic-repo-via-native = "rclone:storj-baks-native:backup-repos/main-restic-backups";
+        machine-backups = "sftp:fm1942s5@fm1942s5.rsync.net:machine-backups";
       };
       config-partials = {
         base = {
@@ -45,6 +46,18 @@
       };
       config = {
         version = "1";
+        # Usage: resticprofile --name full-machine-sodium backup
+        full-machine-sodium = {
+          password-file = "machine_backups_pw.txt";
+          backup = {
+            verbose = true;
+          };
+          repository = self.repositories.machine-backups;
+          backup.tag = [ "sodium" "full-machine" ];
+          backup.source = [
+            "/"
+          ];
+        };
         default = lib.recursiveUpdate self.config-partials.base {
           repository = self.repositories.main-restic-repo-via-s3;
           backup.tag = [ "sodium" "ryujinx" "blue3ds-checkpoint" ];
