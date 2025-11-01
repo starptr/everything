@@ -25,6 +25,7 @@ in {
         inherit generated;
         configurations-by-file = self;
       };
+      "yuto.tel.yaml" = {};
       "production.yaml" = {
         providers = {
           config = {
@@ -55,7 +56,6 @@ in {
           "andref.app." = self."production.yaml".zones."yart.me.";
         };
       };
-      "yuto.tel.yaml" = {};
       "yuto.wiki.yaml" = {
         "" = [
           {
