@@ -26,6 +26,10 @@ in {
         configurations-by-file = self;
       };
       "yuto.tel.yaml" = {};
+      "yuto.wiki.yaml" = import ./per-domain/yuto.wiki.nix {
+        inherit generated;
+        configurations-by-file = self;
+      };
       "production.yaml" = {
         providers = {
           config = {
@@ -55,63 +59,6 @@ in {
           "yut.to." = self."production.yaml".zones."yart.me.";
           "andref.app." = self."production.yaml".zones."yart.me.";
         };
-      };
-      "yuto.wiki.yaml" = {
-        "" = [
-          {
-            octodns = {
-              cloudflare = {
-                auto-ttl = true;
-                proxied = true;
-                ignored = true;
-              };
-            };
-            ttl = 300;
-            type = "AAAA";
-            value = "100::";
-          }
-          {
-            octodns = {
-              cloudflare = {
-                auto-ttl = true;
-              };
-            };
-            ttl = 300;
-            type = "MX";
-            values = [
-              {
-                exchange = "eforward1.registrar-servers.com.";
-                preference = 10;
-              }
-              {
-                exchange = "eforward2.registrar-servers.com.";
-                preference = 10;
-              }
-              {
-                exchange = "eforward3.registrar-servers.com.";
-                preference = 10;
-              }
-              {
-                exchange = "eforward4.registrar-servers.com.";
-                preference = 15;
-              }
-              {
-                exchange = "eforward5.registrar-servers.com.";
-                preference = 20;
-              }
-            ];
-          }
-          {
-            octodns = {
-              cloudflare = {
-                auto-ttl = true;
-              };
-            };
-            ttl = 300;
-            type = "TXT";
-            value = "v=spf1 include:spf.efwd.registrar-servers.com ~all";
-          }
-        ];
       };
     });
     configuration-files = builtins.mapAttrs (key: value:
