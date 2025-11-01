@@ -1,4 +1,4 @@
-{ configurations-by-file, generated }: {
+{ configurations-by-file, generated, handles-to-records, atproto-handles }: {
   "" = [
     {
       octodns.cloudflare = {
@@ -171,3 +171,5 @@
   #  value = generated.serverref.ipAddress;
   #};
 }
+//
+(handles-to-records atproto-handles)
