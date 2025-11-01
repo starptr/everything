@@ -5,7 +5,7 @@ in {
     generated = builtins.fromJSON (builtins.readFile ./../exports/jupiter/generated.json);
     nixie-ip-address = generated.nixie.ipAddress;
     configurations-by-file = lib.fix (self: {
-      "andref.app.yaml" = import ./per-domain/andref.yaml.nix {
+      "andref.app.yaml" = import ./per-domain/andref.app.nix {
         inherit generated;
         configurations-by-file = self;
       };
