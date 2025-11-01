@@ -3,10 +3,26 @@
 in {
   config-directory = let
     generated = builtins.fromJSON (builtins.readFile ./../exports/jupiter/generated.json);
+    atproto-handles-all-domains = builtins.fromTOML (builtins.readFile ./per-domain/atproto-handles.toml);
+    # Given a mapping of atproto handles to dids, converts it into a mapping of octodns atproto subdomains to TXT records
+    handles-to-records = lib.mapAttrs' # mapAttrs' :: (String -> Any -> { name :: String; value :: Any; }) -> AttrSet -> AttrSet
+      (handle: did: lib.nameValuePair
+        ("_atproto.${handle}")
+        ({
+          octodns.cloudflare = {
+            auto-ttl = true;
+            comment = "Set by Eight.";
+          };
+          ttl = 60;
+          type = "TXT";
+          value = did;
+        })
+      );
     configurations-by-file = lib.fix (self: {
       "andref.app.yaml" = import ./per-domain/andref.app.nix {
-        inherit generated;
+        inherit generated handles-to-records;
         configurations-by-file = self;
+        atproto-handles = atproto-handles-all-domains."andref.app";
       };
       "yart.me.yaml" = import ./per-domain/yart.me.nix {
         inherit generated;
