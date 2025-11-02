@@ -49,14 +49,18 @@
         # Usage: resticprofile --name full-machine-sodium backup
         full-machine-sodium = {
           password-file = "machine_backups_pw.txt";
+          exclude = [
+            "/System/Volumes/Data/Users/yuto/Library/CloudStorage"
+          ];
+          # Custom command
           backup = {
             verbose = true;
+            tag = [ "sodium" "full-machine" ];
+            source = [
+              "/"
+            ];
           };
           repository = self.repositories.machine-backups;
-          backup.tag = [ "sodium" "full-machine" ];
-          backup.source = [
-            "/"
-          ];
         };
         default = lib.recursiveUpdate self.config-partials.base {
           repository = self.repositories.main-restic-repo-via-s3;
