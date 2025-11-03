@@ -51,6 +51,7 @@
           password-file = "machine_backups_pw.txt";
           exclude = [
             "/System/Volumes/Data/Users/yuto/Library/CloudStorage"
+            "/Users/yuto/Library/CloudStorage"
           ];
           # Custom command
           backup = {
