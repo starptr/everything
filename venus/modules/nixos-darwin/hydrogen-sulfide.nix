@@ -20,6 +20,7 @@ in
     system.stateVersion = "24.11";
     wsl.enable = true;
     wsl.defaultUser = "nixos"; # Do not change https://nix-community.github.io/NixOS-WSL/how-to/change-username.html
+    wsl.docker.enable = true; # Requires Docker Desktop installed on Windows host
 
     networking.hostName = "Hydrogen-Sulfide";
 
