@@ -240,6 +240,10 @@
             useheading = true;
             userewrite = 1;
           };
+          plugins = [
+            pkgs.dokuwiki-plugin-oauth
+            pkgs.dokuwiki-plugin-oauthdiscordserver
+          ];
         };
       };
     };
