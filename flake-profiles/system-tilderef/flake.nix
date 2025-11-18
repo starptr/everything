@@ -12,6 +12,16 @@
       url = "github:strickczq/nixos-cursor-server";
       inputs.nixpkgs.follows = "nixpkgs-tilderef";
     };
+
+    dokuwiki-plugin-oauth = {
+      url = "github:cosmocode/dokuwiki-plugin-oauth";
+      flake = false;
+    };
+
+    dokuwiki-plugin-oauthdiscordserver = {
+      url = "github:GeorgeTR1/dokuwiki-plugin-oauthdiscordserver";
+      flake = false;
+    };
   };
   nixConfig = {
     extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=";
@@ -24,6 +34,7 @@
       deploy-rs,
       systems,
       cursor-server,
+      ...
     }@inputs:
     let
       generated = builtins.fromJSON (builtins.readFile ./../../exports/jupiter/generated.json);
@@ -34,6 +45,28 @@
       nixosConfigurations.serverref = nixpkgs-tilderef.lib.nixosSystem {
         system = "x86_64-linux";
         modules = [ 
+          {
+            nixpkgs = {
+              overlays = [
+                (final: super: {
+                  # TODO: consider moving to soup
+                  dokuwiki-plugin-oauth = final.stdenv.mkDerivation {
+                    name = "oauth";
+                    src = inputs.dokuwiki-plugin-oauth;
+                    sourceRoot = ".";
+                    installPhase = "mkdir -p $out; cp -R . $out/";
+                  };
+                  dokuwiki-plugin-oauthdiscordserver = final.stdenv.mkDerivation {
+                    name = "oauthdiscord";
+                    src = inputs.dokuwiki-plugin-oauthdiscordserver;
+                    sourceRoot = ".";
+                    installPhase = "mkdir -p $out; cp -R . $out/";
+                  };
+                })
+              ];
+              config = import ./../../venus/app-configs/nixpkgs-config.nix; # Configures pkgs for evaluating this nixosConfiguration ("buildtime" config)
+            };
+          }
           cursor-server.nixosModules.default
           ./../../venus/modules/nixos-darwin/tilderef.nix
         ];
