@@ -1,6 +1,10 @@
 {
   inputs = {
-    nixpkgs-tilderef.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-tilderef = {
+      # Pinned to the latest commit with dokuwiki set to Kaos version
+      # TODO: add dokuwiki to soup
+      url = "github:NixOS/nixpkgs/44f19a926ca198652d3640a2281feff75d3b1164";
+    };
     deploy-rs = {
       url = "github:serokell/deploy-rs";
       inputs.nixpkgs.follows = "nixpkgs-tilderef";
