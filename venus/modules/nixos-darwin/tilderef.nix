@@ -280,4 +280,19 @@
         ExecStart = ''/home/yuto/src/fleeting/target/debug/fleeting'';
       };
     };
+
+    sops = {
+      secrets."client_id" = {
+        mode = "0400";
+        sopsFile = ./../../../secrets/discord-oauth/wikiref.yaml;
+      };
+      secrets."client_secret" = {
+        mode = "0400";
+        sopsFile = ./../../../secrets/discord-oauth/wikiref.yaml;
+      };
+      secrets."server_id" = {
+        mode = "0400";
+        sopsFile = ./../../../secrets/discord/andref.yaml;
+      };
+    };
   }
