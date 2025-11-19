@@ -8,6 +8,11 @@
 
     systems.url = "github:nix-systems/default";
 
+    sops-nix = {
+      url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs-tilderef";
+    };
+
     cursor-server = {
       url = "github:strickczq/nixos-cursor-server";
       inputs.nixpkgs.follows = "nixpkgs-tilderef";
@@ -69,6 +74,7 @@
           }
           cursor-server.nixosModules.default
           ./../../venus/modules/nixos-darwin/tilderef.nix
+          inputs.sops-nix.nixosModules.sops
         ];
       };
       deploy.nodes.serverref = {
