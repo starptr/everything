@@ -29,9 +29,11 @@ creation_rules:
     key_groups:
     - age:
       - *main_pub
+      - *venus_1p
       - *tilderef_root
   - path_regex: secrets/discord/andref.yaml
     key_groups:
     - age:
       - *main_pub
+      - *venus_1p
       - *tilderef_root
