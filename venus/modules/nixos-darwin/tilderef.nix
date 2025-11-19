@@ -246,12 +246,12 @@
             };
             plugin.oauthdiscordserver = {
               # Client ID
-              #key = "";
+              key._file = config.sops.secrets.wikiref_discord_oauth_client_id.path;
               # Client Secret
-              #secret = "";
+              secret._file = config.sops.secrets.wikiref_discord_oauth_client_secret.path;
               # Ensure that the redirect URL is set on the Discord dev portal: https://discord.com/developers/applications/779903945065234442/oauth2
               # Server ID
-              #serverID = "";
+              serverID._file = config.sops.secrets.andref_discord_server_id.path;
             };
           };
           plugins = [
