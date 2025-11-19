@@ -231,7 +231,6 @@
       webserver = "nginx";
       sites = {
         "wiki.andref.app" = {
-          enable = true;
           settings = {
             #baseurl = "https://wiki.andref.app";
             title = "wikiref";
