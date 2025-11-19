@@ -132,7 +132,28 @@
         "dokuwiki-plugin-oauth": "dokuwiki-plugin-oauth",
         "dokuwiki-plugin-oauthdiscordserver": "dokuwiki-plugin-oauthdiscordserver",
         "nixpkgs-tilderef": "nixpkgs-tilderef",
+        "sops-nix": "sops-nix",
         "systems": "systems_3"
+      }
+    },
+    "sops-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-tilderef"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763509310,
+        "narHash": "sha256-s2WzTAD3vJtPACBCZXezNUMTG/wC6SFsU9DxazB9wDI=",
+        "owner": "Mic92",
+        "repo": "sops-nix",
+        "rev": "3ee33c0ed7c5aa61b4e10484d2ebdbdc98afb03e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Mic92",
+        "repo": "sops-nix",
+        "type": "github"
       }
     },
     "systems": {
