@@ -239,6 +239,7 @@
             superuser = "admin";
             useheading = true;
             userewrite = 1;
+            authtype = "oauth";
           };
           plugins = [
             (builtins.trace "Path to dokuwiki-plugin-oauth: ${pkgs.dokuwiki-plugin-oauth.outPath}" pkgs.dokuwiki-plugin-oauth)
