@@ -7,6 +7,7 @@ keys:
   - &hydrogen_sulfide age13v28wrk4qqhxhux86rvrp9p9e675qcgg3lcxc0tjhgxyx99vc44smcgxyw # ed25519 host pub key to age
   - &methane_root age165lra392e9ssuktvzf22yk63vjke8kfkmn6wrd0kvukwt8w7p5aqzx7exj # ed25519 root pub key to age
   - &ethane_root age18ueht6ascr4y68s9n43f9jf40eve4ghsx848mp7hm86dmydqpgws0xxnqa # ed25519 root pub key to age
+  - &tilderef_root age1n8lz243js77lvrscpwxh5lh5ha3nacdrvlxzf8f9v00jugvg3d2qkq4cnk # ed25519 tilderef root pub key to age
 creation_rules:
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini|txt)$
     key_groups:
@@ -24,3 +25,13 @@ creation_rules:
       age:
       - *main_pub
       - *venus_1p
+  - path_regex: secrets/discord-oauth/wikiref.yaml
+    key_groups:
+    - age:
+      - *main_pub
+      - *tilderef_root
+  - path_regex: secrets/discord/andref.yaml
+    key_groups:
+    - age:
+      - *main_pub
+      - *tilderef_root
