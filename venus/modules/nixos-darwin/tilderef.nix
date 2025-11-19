@@ -283,15 +283,15 @@
 
     sops = {
       secrets."wikiref_discord_oauth_client_id" = {
-        mode = "0400";
+        mode = "0444"; # dokuwiki needs read access
         sopsFile = ./../../../secrets/discord-oauth/wikiref.yaml;
       };
       secrets."wikiref_discord_oauth_client_secret" = {
-        mode = "0400";
+        mode = "0444"; # dokuwiki needs read access
         sopsFile = ./../../../secrets/discord-oauth/wikiref.yaml;
       };
       secrets."andref_discord_server_id" = {
-        mode = "0400";
+        mode = "0444"; # dokuwiki needs read access
         sopsFile = ./../../../secrets/discord/andref.yaml;
       };
     };
