@@ -281,15 +281,15 @@
     };
 
     sops = {
-      secrets."client_id" = {
+      secrets."wikiref_discord_oauth_client_id" = {
         mode = "0400";
         sopsFile = ./../../../secrets/discord-oauth/wikiref.yaml;
       };
-      secrets."client_secret" = {
+      secrets."wikiref_discord_oauth_client_secret" = {
         mode = "0400";
         sopsFile = ./../../../secrets/discord-oauth/wikiref.yaml;
       };
-      secrets."server_id" = {
+      secrets."andref_discord_server_id" = {
         mode = "0400";
         sopsFile = ./../../../secrets/discord/andref.yaml;
       };
