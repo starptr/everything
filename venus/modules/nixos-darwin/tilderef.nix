@@ -241,7 +241,7 @@
             userewrite = 1;
           };
           plugins = [
-            pkgs.dokuwiki-plugin-oauth
+            (builtins.trace "Path to dokuwiki-plugin-oauth: ${pkgs.dokuwiki-plugin-oauth.outPath}" pkgs.dokuwiki-plugin-oauth)
             pkgs.dokuwiki-plugin-oauthdiscordserver
           ];
         };
