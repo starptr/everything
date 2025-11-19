@@ -227,6 +227,8 @@
     };
     systemd.services.nginx.serviceConfig.ProtectHome = false;
 
+    # Debugging PHP issues is hard since I don't have any experience.
+    # See https://claude.ai/share/8358d407-974a-4157-8e77-164f802b9d84 towards the end for strategies.
     services.dokuwiki = {
       webserver = "nginx";
       sites = {
