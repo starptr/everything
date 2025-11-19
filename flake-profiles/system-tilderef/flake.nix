@@ -54,13 +54,13 @@
                     name = "oauth";
                     src = inputs.dokuwiki-plugin-oauth;
                     sourceRoot = ".";
-                    installPhase = "mkdir -p $out; cp -R . $out/";
+                    installPhase = "mkdir -p $out; cp -aR source/. $out/";
                   };
                   dokuwiki-plugin-oauthdiscordserver = final.stdenv.mkDerivation {
                     name = "oauthdiscord";
                     src = inputs.dokuwiki-plugin-oauthdiscordserver;
                     sourceRoot = ".";
-                    installPhase = "mkdir -p $out; cp -R . $out/";
+                    installPhase = "mkdir -p $out; cp -aR source/. $out/";
                   };
                 })
               ];
