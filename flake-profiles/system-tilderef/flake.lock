@@ -43,6 +43,38 @@
         "type": "github"
       }
     },
+    "dokuwiki-plugin-oauth": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1761260619,
+        "narHash": "sha256-sU++8Al86/k2fIrO63h5APJrdYAXnnegy17GkN8OGWU=",
+        "owner": "cosmocode",
+        "repo": "dokuwiki-plugin-oauth",
+        "rev": "b56122840102e06c1d2e7d2cbea856d441db652d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cosmocode",
+        "repo": "dokuwiki-plugin-oauth",
+        "type": "github"
+      }
+    },
+    "dokuwiki-plugin-oauthdiscordserver": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1743759686,
+        "narHash": "sha256-iUMJvt6k9IB7Od7aR4p5kD268EHojycbBZr8KAu7AjM=",
+        "owner": "GeorgeTR1",
+        "repo": "dokuwiki-plugin-oauthdiscordserver",
+        "rev": "f36efb41858c77a4e7d344ba1b378785874a2bd6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GeorgeTR1",
+        "repo": "dokuwiki-plugin-oauthdiscordserver",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -97,6 +129,8 @@
       "inputs": {
         "cursor-server": "cursor-server",
         "deploy-rs": "deploy-rs",
+        "dokuwiki-plugin-oauth": "dokuwiki-plugin-oauth",
+        "dokuwiki-plugin-oauthdiscordserver": "dokuwiki-plugin-oauthdiscordserver",
         "nixpkgs-tilderef": "nixpkgs-tilderef",
         "systems": "systems_3"
       }
