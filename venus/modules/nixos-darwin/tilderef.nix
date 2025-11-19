@@ -240,6 +240,20 @@
             useheading = true;
             userewrite = 1;
             authtype = "oauth";
+            showuseras = "username_link";
+            disableactions = [ "register" "profile" ];
+            plugin.oauth = {
+              register-on-auth = true;
+            };
+            plugin.oauthdiscordserver = {
+              # Client ID
+              #key = "";
+              # Client Secret
+              #secret = "";
+              # Ensure that the redirect URL is set on the Discord dev portal: https://discord.com/developers/applications/779903945065234442/oauth2
+              # Server ID
+              #serverID = "";
+            };
           };
           plugins = [
             (builtins.trace "Path to dokuwiki-plugin-oauth: ${pkgs.dokuwiki-plugin-oauth.outPath}" pkgs.dokuwiki-plugin-oauth)
