@@ -243,7 +243,7 @@
             disableactions = [ "register" "profile" ];
             plugin.oauth = {
               register-on-auth = true;
-              singleService = false;
+              singleService = true;
             };
             plugin.oauthdiscordserver = {
               # Client ID
