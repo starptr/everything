@@ -57,7 +57,7 @@
                     installPhase = "mkdir -p $out; cp -aR source/. $out/";
                   };
                   dokuwiki-plugin-oauthdiscordserver = final.stdenv.mkDerivation {
-                    name = "oauthdiscord";
+                    name = "oauthdiscordserver";
                     src = inputs.dokuwiki-plugin-oauthdiscordserver;
                     sourceRoot = ".";
                     installPhase = "mkdir -p $out; cp -aR source/. $out/";
