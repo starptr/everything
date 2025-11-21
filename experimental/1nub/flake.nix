@@ -34,6 +34,15 @@
                   '';
 
                   processes.hello.exec = "hello";
+
+                  languages.javascript = {
+                    enable = true;
+                    npm.enable = true;
+                  };
+
+                  languages.typescript = {
+                    enable = true;
+                  };
                 }
               ];
             };
