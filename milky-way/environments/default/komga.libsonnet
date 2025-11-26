@@ -127,7 +127,6 @@ local retainSC = import 'local-path-retain.jsonnet';
         annotations: {
           "tailscale.com/expose": "true",
           "tailscale.com/hostname": tailscaleServiceAnnotation,
-          "tailscale.com/funnel": "true",
         },
       },
       spec: {
@@ -146,6 +145,9 @@ local retainSC = import 'local-path-retain.jsonnet';
       kind: "Ingress",
       metadata: {
         name: name,
+        annotations: {
+          "tailscale.com/funnel": "true",
+        },
       },
       spec: {
         ingressClassName: "tailscale",
