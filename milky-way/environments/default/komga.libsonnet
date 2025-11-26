@@ -146,7 +146,7 @@ local retainSC = import 'local-path-retain.jsonnet';
       metadata: {
         name: name,
         annotations: {
-          "tailscale.com/funnel": "true",
+          "tailscale.com/funnel": "false",
         },
       },
       spec: {
