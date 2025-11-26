@@ -127,7 +127,7 @@ local retainSC = import 'local-path-retain.jsonnet';
         annotations: {
           "tailscale.com/expose": "true",
           "tailscale.com/hostname": tailscaleServiceAnnotation,
-          "tailscale.com/funnel": "true",
+          "tailscale.com/funnel": "false",
         },
       },
       spec: {
