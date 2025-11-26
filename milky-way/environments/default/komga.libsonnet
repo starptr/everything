@@ -157,7 +157,7 @@ local retainSC = import 'local-path-retain.jsonnet';
           {
             http: {
               paths: [{
-                path: "/komga",
+                path: "/",
                 pathType: "Prefix",
                 backend: {
                   service: {
