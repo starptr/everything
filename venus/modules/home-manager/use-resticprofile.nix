@@ -52,6 +52,7 @@
           exclude = [
             "/System/Volumes/Data/Users/yuto/Library/CloudStorage"
             "/Users/yuto/Library/CloudStorage"
+            "/Users/yuto/mnt"
           ];
           # Custom command
           backup = {
