@@ -53,6 +53,7 @@
             "/System/Volumes/Data/Users/yuto/Library/CloudStorage"
             "/Users/yuto/Library/CloudStorage"
             "/Users/yuto/mnt"
+            "/Users/yuto/Library/Mobile\ Documents"
           ];
           # Custom command
           backup = {
