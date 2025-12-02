@@ -52,7 +52,9 @@
           exclude = [
             "/System/Volumes/Data/Users/yuto/Library/CloudStorage"
             "/Users/yuto/Library/CloudStorage"
+            "/System/Volumes/Data/Users/yuto/mnt"
             "/Users/yuto/mnt"
+            "/System/Volumes/Data/Users/yuto/Library/Mobile\ Documents"
             "/Users/yuto/Library/Mobile\ Documents"
           ];
           # Custom command
