@@ -56,6 +56,8 @@
             "/Users/yuto/mnt"
             "/System/Volumes/Data/Users/yuto/Library/Mobile\ Documents"
             "/Users/yuto/Library/Mobile\ Documents"
+            "/System/Volumes/Data/Users/yuto/Library/Caches/restic"
+            "/Users/yuto/Library/Caches/restic"
           ];
           # Custom command
           backup = {
