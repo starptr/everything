@@ -1,3 +1,5 @@
+Implement this design doc:
+
 # One Night Ultimate Werewolf — Design Doc
 
 ## Goals
@@ -372,3 +374,5 @@ interface RoleDefinition {
 - Keep role modules pure and testable: functions that accept `G`, `ctx`, `args` and mutate `G` deterministically.
 - Keep `G` shape explicit and minimal. Avoid storing derived values when possible — compute them when needed.
 - Document everything in code headers so new contributors can add roles safely.
+
+Documentation for boardgame.io is available at https://boardgame.io/documentation.
