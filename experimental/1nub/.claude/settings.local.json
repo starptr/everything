@@ -3,7 +3,9 @@
     "allow": [
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(nix develop:*)"
+      "Bash(nix develop:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm test)"
     ],
     "deny": [],
     "ask": []
