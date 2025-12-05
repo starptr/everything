@@ -5,29 +5,51 @@ import { GState, DEFAULT_ROLES } from '../../server/types';
 interface LobbyProps extends Pick<BoardProps<GState>, 'G' | 'ctx' | 'moves' | 'playerID' | 'isActive'> {}
 
 const Lobby: React.FC<LobbyProps> = ({ G, ctx, moves, playerID }) => {
-  const [playerName, setPlayerName] = useState('');
+  const [playerName, setPlayerName] = useState<string>('');
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const currentPlayer = playerID ? G.players[playerID] : null;
+  // Add null checks for game state
+  const safeG = G || {
+    players: {},
+    center: [],
+    votes: {},
+    nightActions: [],
+    currentNightStep: 0,
+    nightOrder: [],
+    gameOptions: { enabledRoles: [] },
+    revealed: null,
+    timers: {}
+  } as GState;
+  
+  const safeMoves = moves || {};
+  const currentPlayer = playerID && safeG.players ? safeG.players[playerID] : null;
   const isSeated = currentPlayer !== null;
 
-  const handleSeatPlayer = () => {
-    if (selectedSeat !== null && playerName && moves.seatPlayer) {
-      moves.seatPlayer({ seat: selectedSeat, playerName });
-      setSelectedSeat(null);
-      setPlayerName('');
+  const handleSeatPlayer = async () => {
+    if (selectedSeat !== null && playerName.trim() && safeMoves.seatPlayer && !isLoading) {
+      setIsLoading(true);
+      try {
+        safeMoves.seatPlayer(selectedSeat, playerName.trim());
+        setSelectedSeat(null);
+        setPlayerName('');
+      } catch (error) {
+        console.error('Error seating player:', error);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleLeaveSeat = () => {
-    if (moves.leaveSeat) {
-      moves.leaveSeat();
+    if (safeMoves.leaveSeat && !isLoading) {
+      safeMoves.leaveSeat();
     }
   };
 
   const handleStartGame = () => {
-    if (moves.startGame) {
-      moves.startGame({
+    if (safeMoves.startGame && !isLoading) {
+      safeMoves.startGame({
         gameOptions: {
           enabledRoles: DEFAULT_ROLES,
           nightTimeLimit: 300000,
@@ -38,8 +60,8 @@ const Lobby: React.FC<LobbyProps> = ({ G, ctx, moves, playerID }) => {
     }
   };
 
-  const occupiedSeats = new Set(Object.values(G.players).map(p => p.seat));
-  const numPlayers = Object.keys(G.players).length;
+  const occupiedSeats = new Set(Object.values(safeG.players || {}).map((p: any) => p?.seat).filter(seat => seat !== undefined));
+  const numPlayers = Object.keys(safeG.players || {}).length;
   const canStartGame = numPlayers >= 3 && numPlayers <= 10;
 
   return (
@@ -67,14 +89,16 @@ const Lobby: React.FC<LobbyProps> = ({ G, ctx, moves, playerID }) => {
               <input
                 type="text"
                 placeholder="Enter your name"
-                value={playerName}
+                value={playerName || ''}
                 onChange={(e) => setPlayerName(e.target.value)}
+                disabled={isLoading}
                 style={{
                   width: '100%',
                   padding: '10px',
                   border: '1px solid #ccc',
                   borderRadius: '4px',
-                  fontSize: '16px'
+                  fontSize: '16px',
+                  opacity: isLoading ? 0.7 : 1
                 }}
               />
             </div>
@@ -109,19 +133,20 @@ const Lobby: React.FC<LobbyProps> = ({ G, ctx, moves, playerID }) => {
             </div>
             <button
               onClick={handleSeatPlayer}
-              disabled={!playerName || selectedSeat === null}
+              disabled={!playerName.trim() || selectedSeat === null || isLoading}
               style={{
                 width: '100%',
                 padding: '12px',
-                backgroundColor: '#28a745',
+                backgroundColor: isLoading ? '#6c757d' : '#28a745',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
                 fontSize: '16px',
-                cursor: playerName && selectedSeat ? 'pointer' : 'not-allowed'
+                cursor: (playerName.trim() && selectedSeat !== null && !isLoading) ? 'pointer' : 'not-allowed',
+                opacity: isLoading ? 0.8 : 1
               }}
             >
-              Take Seat
+              {isLoading ? 'Taking Seat...' : 'Take Seat'}
             </button>
           </div>
         ) : (
@@ -153,9 +178,10 @@ const Lobby: React.FC<LobbyProps> = ({ G, ctx, moves, playerID }) => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
             gap: '10px'
           }}>
-            {Object.values(G.players)
-              .sort((a, b) => a.seat - b.seat)
-              .map(player => (
+            {Object.values(safeG.players || {})
+              .filter((player: any) => player && player.id && player.name)
+              .sort((a: any, b: any) => (a.seat || 0) - (b.seat || 0))
+              .map((player: any) => (
                 <div
                   key={player.id}
                   style={{

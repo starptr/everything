@@ -10,16 +10,42 @@ import RevealPhase from './RevealPhase';
 interface GameBoardProps extends BoardProps<GState> {}
 
 const Board: React.FC<GameBoardProps> = ({ G, ctx, moves, playerID, isActive }) => {
-  const currentPlayer = playerID ? G.players[playerID] : null;
+  // Add defensive checks for game state - only apply defensive fallbacks if G or ctx is null/undefined
+  const safeG = G || {
+    players: {},
+    center: [],
+    votes: {},
+    nightActions: [],
+    currentNightStep: 0,
+    nightOrder: [],
+    gameOptions: { enabledRoles: [] },
+    revealed: null,
+    timers: {}
+  } as GState;
+  
+  const safeCtx = ctx || {
+    phase: 'lobby',
+    numPlayers: 0,
+    playOrder: [],
+    playOrderPos: 0,
+    activePlayers: null,
+    currentPlayer: null,
+    turn: 0,
+    gameover: undefined
+  } as any;
+  
+  const safeMoves = moves || {};
+  
+  const currentPlayer = playerID && safeG.players ? safeG.players[playerID] : null;
 
   const renderPhase = () => {
-    switch (ctx.phase) {
+    switch (safeCtx.phase) {
       case 'lobby':
         return (
           <Lobby
-            G={G}
-            ctx={ctx}
-            moves={moves}
+            G={safeG}
+            ctx={safeCtx}
+            moves={safeMoves}
             playerID={playerID}
             isActive={isActive}
           />
@@ -27,9 +53,9 @@ const Board: React.FC<GameBoardProps> = ({ G, ctx, moves, playerID, isActive }) 
       case 'night':
         return (
           <NightPhase
-            G={G}
-            ctx={ctx}
-            moves={moves}
+            G={safeG}
+            ctx={safeCtx}
+            moves={safeMoves}
             playerID={playerID}
             isActive={isActive}
             currentPlayer={currentPlayer}
@@ -38,9 +64,9 @@ const Board: React.FC<GameBoardProps> = ({ G, ctx, moves, playerID, isActive }) 
       case 'day':
         return (
           <DayPhase
-            G={G}
-            ctx={ctx}
-            moves={moves}
+            G={safeG}
+            ctx={safeCtx}
+            moves={safeMoves}
             playerID={playerID}
             currentPlayer={currentPlayer}
           />
@@ -48,9 +74,9 @@ const Board: React.FC<GameBoardProps> = ({ G, ctx, moves, playerID, isActive }) 
       case 'voting':
         return (
           <VotingPhase
-            G={G}
-            ctx={ctx}
-            moves={moves}
+            G={safeG}
+            ctx={safeCtx}
+            moves={safeMoves}
             playerID={playerID}
             currentPlayer={currentPlayer}
           />
@@ -58,14 +84,14 @@ const Board: React.FC<GameBoardProps> = ({ G, ctx, moves, playerID, isActive }) 
       case 'reveal':
         return (
           <RevealPhase
-            G={G}
-            ctx={ctx}
-            moves={moves}
+            G={safeG}
+            ctx={safeCtx}
+            moves={safeMoves}
             playerID={playerID}
           />
         );
       default:
-        return <div>Unknown phase: {ctx.phase}</div>;
+        return <div>Unknown phase: {safeCtx.phase}</div>;
     }
   };
 
@@ -97,7 +123,7 @@ const Board: React.FC<GameBoardProps> = ({ G, ctx, moves, playerID, isActive }) 
           fontSize: '14px',
           color: '#666'
         }}>
-          <span>Phase: <strong>{ctx.phase}</strong></span>
+          <span>Phase: <strong>{safeCtx.phase || 'loading'}</strong></span>
           {currentPlayer && (
             <span>You are: <strong>{currentPlayer.name}</strong></span>
           )}
