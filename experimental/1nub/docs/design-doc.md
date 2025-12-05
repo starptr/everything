@@ -6,6 +6,11 @@
 - Modular role system so adding/changing roles is declarative and low-friction.
 - Use `boardgame.io` for authoritative game state, moves, phases, and multiplayer.
 - Use `parcel` to produce simple, fast dev builds and minimal config.
+- Use best practices for code maintainability.
+  - Use TypeScript for strong typing.
+  - Use React for client UI.
+  - Don't use express; boardgame.io has a built-in Koa server.
+  - Don't use extra tools like ts-node; instead, keep it simple: compile with tsc and run with node.
 - Clear low-level structure so future contributors can easily edit rules and UI.
 - Robust reconnect, lobby, and spectating support.
 
