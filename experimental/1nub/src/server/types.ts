@@ -1,7 +1,21 @@
 import { Ctx } from 'boardgame.io';
 
 export type PlayerID = string;
-export type RoleId = string;
+const ROLES = [
+  //"copycat",
+  //"doppelganger",
+  "werewolf",
+  //"minion",
+  "seer",
+  "robber",
+  "troublemaker",
+  "villager",
+  "tanner",
+  "hunter",
+  "mason",
+  "insomniac",
+] as const;
+export type RoleId = typeof ROLES[number];
 
 export interface NightActionSpec {
   uiPrompt?: {
