@@ -24,7 +24,6 @@ const OneNightWerewolf: Game<GState> = {
     timers: {}
   }),
 
-
   phases: {
     lobby: {
       start: true,
@@ -45,7 +44,7 @@ const OneNightWerewolf: Game<GState> = {
             connected: true
           };
         },
-        startGame: ({ G }: any) => {
+        startGame: ({ G }) => {
           const playerIds = Object.keys(G.players);
           const numPlayers = playerIds.length;
           
