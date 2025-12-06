@@ -26,7 +26,7 @@ const OneNightWerewolf: Game = {
     lobby: {
       start: true,
       moves: {
-        seatPlayer: ({ G, playerID }: any, seat: number, playerName: string) => {
+        seatPlayer: ({ G, playerID }, seat: number, playerName: string): void => {
           if (G.players[playerID]) return;
           
           const existingPlayer = Object.values(G.players).find((p: any) => p.seat === seat);
@@ -162,7 +162,7 @@ const OneNightWerewolf: Game = {
     }
   },
 
-  playerView: ({ G, ctx, playerID }: any) => {
+  playerView: ({ G, ctx, playerID }) => {
     const view = JSON.parse(JSON.stringify(G));
     
     // Hide other players' private info
