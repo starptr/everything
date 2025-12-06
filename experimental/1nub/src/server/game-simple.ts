@@ -1,4 +1,5 @@
 import { Game } from 'boardgame.io';
+import { PlayerView } from 'boardgame.io/core';
 import { GState, DEFAULT_ROLES } from './types';
 
 const OneNightWerewolf: Game<GState> = {
@@ -6,10 +7,12 @@ const OneNightWerewolf: Game<GState> = {
   
   setup: () => ({
     players: {},
-    center: [],
+    secret: {
+      center: [],
+      nightActions: [],
+      currentNightStep: 0,
+    },
     votes: {},
-    nightActions: [],
-    currentNightStep: 0,
     nightOrder: [],
     gameOptions: {
       enabledRoles: DEFAULT_ROLES,
@@ -162,21 +165,9 @@ const OneNightWerewolf: Game<GState> = {
     }
   },
 
-  playerView: ({ G, ctx, playerID }) => {
-    const view = JSON.parse(JSON.stringify(G));
-    
-    // Hide other players' private info
-    Object.keys(view.players).forEach((id: string) => {
-      if (id !== playerID) {
-        view.players[id].privateLog = [];
-        if (ctx.phase !== 'reveal') {
-          view.players[id].role = '?';
-        }
-      }
-    });
-    
-    return view;
-  }
+  // Use the built-in player view to strip secret information.
+  // This will strip the `secret` property and any entry in `players` that is not the current player.
+  playerView: PlayerView.STRIP_SECRETS,
 };
 
 export default OneNightWerewolf;
