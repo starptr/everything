@@ -1,7 +1,7 @@
 import { Game } from 'boardgame.io';
 import { GState, DEFAULT_ROLES } from './types';
 
-const OneNightWerewolf: Game = {
+const OneNightWerewolf: Game<GState> = {
   name: 'OneNightWerewolf',
   
   setup: () => ({
