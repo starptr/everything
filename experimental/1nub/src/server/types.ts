@@ -51,10 +51,12 @@ export interface GameOptions {
 
 export interface GState {
   players: Record<PlayerID, PlayerState>;
-  center: RoleId[];
+  secret: {
+    center: RoleId[];
+    nightActions: NightActionRecord[];
+    currentNightStep: number;
+  },
   votes: Record<PlayerID, PlayerID>;
-  nightActions: NightActionRecord[];
-  currentNightStep: number;
   nightOrder: RoleId[];
   gameOptions: GameOptions;
   revealed: {
