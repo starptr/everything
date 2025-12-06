@@ -11,22 +11,15 @@
     "test": "jest",
     "test:watch": "jest --watch"
   },
-  "keywords": [
-    "boardgame",
-    "werewolf",
-    "multiplayer",
-    "react",
-    "typescript"
-  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "boardgame.io": "^0.50.2",
-    "koa": "^2.14.2",
+    "express": "^5.2.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
