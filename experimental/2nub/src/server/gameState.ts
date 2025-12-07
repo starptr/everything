@@ -79,7 +79,7 @@ class GameStateManager {
   }
 
   private generateGameId(): string {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+    return Math.random().toString(10).substring(2, 8);
   }
 
   private generatePlayerId(): string {
