@@ -22,8 +22,8 @@ describe('Game API Routes', () => {
     });
 
     it('should return all games', async () => {
-      gameStateManager.createGame('Game 1', 4);
-      gameStateManager.createGame('Game 2', 6);
+      gameStateManager.createGame('Game 1');
+      gameStateManager.createGame('Game 2');
       
       const response = await request(app).get('/api/games');
       
@@ -35,7 +35,7 @@ describe('Game API Routes', () => {
 
   describe('POST /api/games', () => {
     it('should create a new game', async () => {
-      const gameData = { name: 'Test Game', maxPlayers: 4 };
+      const gameData = { name: 'Test Game' };
       
       const response = await request(app)
         .post('/api/games')
@@ -44,11 +44,10 @@ describe('Game API Routes', () => {
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
       expect(response.body.data.name).toBe('Test Game');
-      expect(response.body.data.maxPlayers).toBe(4);
     });
 
     it('should reject invalid game data', async () => {
-      const invalidData = { name: '', maxPlayers: 15 };
+      const invalidData = { name: '' };
       
       const response = await request(app)
         .post('/api/games')
@@ -62,7 +61,7 @@ describe('Game API Routes', () => {
 
   describe('GET /api/games/:gameId', () => {
     it('should return a specific game', async () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       const response = await request(app).get(`/api/games/${game.id}`);
       
@@ -82,7 +81,7 @@ describe('Game API Routes', () => {
 
   describe('POST /api/games/:gameId/join', () => {
     it('should add a player to a game', async () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       const response = await request(app)
         .post(`/api/games/${game.id}/join`)
@@ -95,7 +94,7 @@ describe('Game API Routes', () => {
     });
 
     it('should reject empty player name', async () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       const response = await request(app)
         .post(`/api/games/${game.id}/join`)
@@ -119,7 +118,7 @@ describe('Game API Routes', () => {
 
   describe('DELETE /api/games/:gameId/players/:playerId', () => {
     it('should remove a player from a game', async () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       const player = gameStateManager.addPlayer(game.id, 'Alice');
       
       const response = await request(app)
@@ -131,7 +130,7 @@ describe('Game API Routes', () => {
     });
 
     it('should return 404 for non-existent player', async () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       const response = await request(app)
         .delete(`/api/games/${game.id}/players/INVALID`);
@@ -144,7 +143,7 @@ describe('Game API Routes', () => {
 
   describe('DELETE /api/games/:gameId', () => {
     it('should delete a game', async () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       const response = await request(app).delete(`/api/games/${game.id}`);
       

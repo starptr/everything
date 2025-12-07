@@ -83,7 +83,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
                       ID: <strong>{game.id}</strong>
                     </span>
                     <span style={{ fontSize: '14px', color: '#666' }}>
-                      Players: <strong>{Object.keys(game.players).length}/{game.maxPlayers}</strong>
+                      Players: <strong>{game.players.length}</strong>
                     </span>
                     <span style={{ 
                       fontSize: '12px', 
@@ -97,11 +97,11 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
                     </span>
                   </div>
                   
-                  {Object.keys(game.players).length > 0 && (
+                  {game.players.length > 0 && (
                     <div style={{ marginBottom: '10px' }}>
                       <strong style={{ fontSize: '14px' }}>Players:</strong>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' }}>
-                        {Object.values(game.players).map((player) => (
+                        {game.players.map((player) => (
                           <span key={player.id} style={{
                             fontSize: '12px',
                             padding: '2px 6px',
@@ -110,7 +110,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
                             borderRadius: '4px',
                             border: `1px solid ${player.connected ? '#c3e6cb' : '#f5c6cb'}`
                           }}>
-                            {player.name} (Seat {player.seat})
+                            {player.name} (Seat {game.players.indexOf(player) + 1})
                           </span>
                         ))}
                       </div>
@@ -169,19 +169,18 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
                   ) : (
                     <button
                       onClick={() => handleJoinClick(game.id)}
-                      disabled={Object.keys(game.players).length >= game.maxPlayers || game.status !== 'waiting'}
+                      disabled={game.status !== 'waiting'}
                       style={{
                         padding: '8px 16px',
-                        backgroundColor: Object.keys(game.players).length >= game.maxPlayers || game.status !== 'waiting' ? '#6c757d' : '#28a745',
+                        backgroundColor: game.status !== 'waiting' ? '#6c757d' : '#28a745',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
                         fontSize: '14px',
-                        cursor: Object.keys(game.players).length >= game.maxPlayers || game.status !== 'waiting' ? 'not-allowed' : 'pointer'
+                        cursor: game.status !== 'waiting' ? 'not-allowed' : 'pointer'
                       }}
                     >
-                      {Object.keys(game.players).length >= game.maxPlayers ? 'Full' : 
-                       game.status !== 'waiting' ? 'In Progress' : 'Join'}
+                      {game.status !== 'waiting' ? 'In Progress' : 'Join'}
                     </button>
                   )}
                 </div>

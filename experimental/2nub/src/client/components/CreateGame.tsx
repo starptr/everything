@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 
 interface CreateGameProps {
-  onCreateGame: (name: string, maxPlayers: number) => void;
+  onCreateGame: (name: string) => void;
 }
 
 export const CreateGame: React.FC<CreateGameProps> = ({ onCreateGame }) => {
   const [gameName, setGameName] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState(4);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (gameName.trim()) {
-      onCreateGame(gameName.trim(), maxPlayers);
+      onCreateGame(gameName.trim());
       setGameName('');
     }
   };
@@ -43,26 +42,6 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onCreateGame }) => {
             }}
             required
           />
-        </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            Max Players:
-          </label>
-          <select
-            value={maxPlayers}
-            onChange={(e) => setMaxPlayers(parseInt(e.target.value))}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '16px'
-            }}
-          >
-            {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-              <option key={num} value={num}>{num} players</option>
-            ))}
-          </select>
         </div>
         <button
           type="submit"

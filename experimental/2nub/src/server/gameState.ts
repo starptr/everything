@@ -3,13 +3,12 @@ import { GameState, Player } from '../types';
 class GameStateManager {
   private games: Map<string, GameState> = new Map();
 
-  createGame(name: string, maxPlayers: number): GameState {
+  createGame(name: string): GameState {
     const id = this.generateGameId();
     const game: GameState = {
       id,
       name,
-      players: {},
-      maxPlayers,
+      players: [],
       status: 'waiting',
       createdAt: new Date(),
       lastActivity: new Date()
@@ -35,21 +34,15 @@ class GameStateManager {
     const game = this.games.get(gameId);
     if (!game) return null;
 
-    if (Object.keys(game.players).length >= game.maxPlayers) {
-      return null;
-    }
-
     const playerId = this.generatePlayerId();
-    const seat = this.getNextAvailableSeat(game);
     
     const player: Player = {
       id: playerId,
       name: playerName,
-      seat,
       connected: true
     };
 
-    game.players[playerId] = player;
+    game.players.push(player);
     game.lastActivity = new Date();
 
     return player;
@@ -57,12 +50,15 @@ class GameStateManager {
 
   removePlayer(gameId: string, playerId: string): boolean {
     const game = this.games.get(gameId);
-    if (!game || !game.players[playerId]) return false;
+    if (!game) return false;
 
-    delete game.players[playerId];
+    const playerIndex = game.players.findIndex(p => p.id === playerId);
+    if (playerIndex === -1) return false;
+
+    game.players.splice(playerIndex, 1);
     game.lastActivity = new Date();
 
-    if (Object.keys(game.players).length === 0) {
+    if (game.players.length === 0) {
       this.games.delete(gameId);
     }
 
@@ -71,9 +67,12 @@ class GameStateManager {
 
   updatePlayerConnection(gameId: string, playerId: string, connected: boolean): boolean {
     const game = this.games.get(gameId);
-    if (!game || !game.players[playerId]) return false;
+    if (!game) return false;
 
-    game.players[playerId].connected = connected;
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return false;
+
+    player.connected = connected;
     game.lastActivity = new Date();
     return true;
   }
@@ -86,15 +85,6 @@ class GameStateManager {
     return Math.random().toString(36).substring(2, 15);
   }
 
-  private getNextAvailableSeat(game: GameState): number {
-    const takenSeats = new Set(Object.values(game.players).map(p => p.seat));
-    for (let seat = 1; seat <= game.maxPlayers; seat++) {
-      if (!takenSeats.has(seat)) {
-        return seat;
-      }
-    }
-    return 1;
-  }
 }
 
 export const gameStateManager = new GameStateManager();

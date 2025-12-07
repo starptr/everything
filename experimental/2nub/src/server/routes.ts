@@ -35,9 +35,9 @@ export function setupRoutes(): Router {
   });
 
   router.post('/games', (req, res) => {
-    const { name, maxPlayers }: CreateGameRequest = req.body;
+    const { name }: CreateGameRequest = req.body;
     
-    if (!name || !maxPlayers || maxPlayers < 2 || maxPlayers > 10) {
+    if (!name || name.trim().length === 0) {
       const response: ApiResponse = {
         success: false,
         error: 'Invalid game parameters'
@@ -45,7 +45,7 @@ export function setupRoutes(): Router {
       return res.status(400).json(response);
     }
 
-    const game = gameStateManager.createGame(name, maxPlayers);
+    const game = gameStateManager.createGame(name.trim());
     
     broadcastToAll({
       type: 'gameCreated',
