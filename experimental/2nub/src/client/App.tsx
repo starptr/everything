@@ -35,7 +35,7 @@ const App: React.FC = () => {
   }, [currentGame]);
 
   const onGameCreated = useCallback((game: GameState) => {
-    setGames(prevGames => [...prevGames, game]);
+    setGames(prevGames => [game, ...prevGames]);
   }, []);
 
   const onGameDeleted = useCallback((data: { gameId: string }) => {
