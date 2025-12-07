@@ -10,7 +10,7 @@ const wss = new WebSocketServer({ server });
 
 app.use(express.json());
 
-app.use('/api', setupRoutes(wss));
+app.use('/api', setupRoutes());
 
 setupWebSocket(wss);
 

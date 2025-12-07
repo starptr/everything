@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { WebSocketServer } from 'ws';
 import { gameStateManager } from './gameState';
 import { broadcastToGame, broadcastToAll } from './websocket';
 import { CreateGameRequest, JoinGameRequest, ApiResponse } from '../types';
 
-export function setupRoutes(wss: WebSocketServer): Router {
+export function setupRoutes(): Router {
   const router = Router();
 
   router.get('/games', (req, res) => {
