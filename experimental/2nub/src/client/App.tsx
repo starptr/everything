@@ -109,12 +109,22 @@ const App: React.FC = () => {
     return false;
   };
 
-  const joinGame = async (gameId: string, playerName: string) => {
+  const joinGame = async (gameId: string, playerName?: string, existingPlayerId?: string) => {
     try {
+      const requestBody: any = {};
+      if (existingPlayerId) {
+        requestBody.existingPlayerId = existingPlayerId;
+      } else if (playerName) {
+        requestBody.playerName = playerName;
+      } else {
+        console.error('Either playerName or existingPlayerId must be provided');
+        return;
+      }
+
       const response = await fetch(buildApiUrl(`api/games/${gameId}/join`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerName })
+        body: JSON.stringify(requestBody)
       });
       const result = await response.json();
       if (result.success) {
@@ -128,6 +138,8 @@ const App: React.FC = () => {
           type: 'joinGame',
           data: { gameId, playerId: result.data.player.id }
         });
+      } else {
+        console.error('Failed to join game:', result.error);
       }
     } catch (error) {
       console.error('Failed to join game:', error);

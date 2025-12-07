@@ -102,7 +102,7 @@ describe('Game API Routes', () => {
       
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Player name is required');
+      expect(response.body.error).toBe('Player name is required when joining as new player');
     });
 
     it('should reject joining non-existent game', async () => {
@@ -113,6 +113,49 @@ describe('Game API Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toBe('Game not found or full');
+    });
+
+    it('should allow joining as disconnected player via existingPlayerId', async () => {
+      const game = gameStateManager.createGame('Test Game');
+      const player = gameStateManager.addPlayer(game.id, 'Alice')!;
+      
+      // Disconnect the player
+      gameStateManager.updatePlayerConnection(game.id, player.id, false);
+      
+      const response = await request(app)
+        .post(`/api/games/${game.id}/join`)
+        .send({ existingPlayerId: player.id });
+      
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.player.id).toBe(player.id);
+      expect(response.body.data.player.connected).toBe(true);
+    });
+
+    it('should reject joining as already connected player', async () => {
+      const game = gameStateManager.createGame('Test Game');
+      const player = gameStateManager.addPlayer(game.id, 'Alice')!;
+      
+      // Player is already connected by default
+      const response = await request(app)
+        .post(`/api/games/${game.id}/join`)
+        .send({ existingPlayerId: player.id });
+      
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBe('Game or player not found, or player is already connected');
+    });
+
+    it('should reject joining with invalid existingPlayerId', async () => {
+      const game = gameStateManager.createGame('Test Game');
+      
+      const response = await request(app)
+        .post(`/api/games/${game.id}/join`)
+        .send({ existingPlayerId: 'INVALID_ID' });
+      
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBe('Game or player not found, or player is already connected');
     });
   });
 

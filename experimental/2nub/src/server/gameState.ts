@@ -86,6 +86,9 @@ class GameStateManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) return null;
 
+    // Only allow rejoining if player is currently disconnected
+    if (player.connected) return null;
+
     player.connected = true;
     game.lastActivity = new Date();
 
