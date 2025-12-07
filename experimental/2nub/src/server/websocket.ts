@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { gameStateManager } from './gameState';
-import { ClientToServerEvents, ServerToClientEvents } from '../types';
+import { ClientToServerEvents, ServerToClientEvents, ServerToClientEventShapes } from '../types';
 
 interface ExtendedSocket extends Socket<ClientToServerEvents, ServerToClientEvents> {
   gameId?: string;
@@ -65,16 +65,18 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
   });
 }
 
-export function broadcastToGame(gameId: string, event: keyof ServerToClientEvents, data: any) {
+export function broadcastToGame<K extends keyof ServerToClientEventShapes>(gameId: string, event: K, data: ServerToClientEventShapes[K]) {
   const io = global.io as Server<ClientToServerEvents, ServerToClientEvents>;
   if (io) {
+    // @ts-expect-error -- TS cannot infer that event is a valid key here
     io.to(gameId).emit(event, data);
   }
 }
 
-export function broadcastToAll(event: keyof ServerToClientEvents, data: any) {
+export function broadcastToAll<K extends keyof ServerToClientEventShapes>(event: K, data: ServerToClientEventShapes[K]) {
   const io = global.io as Server<ClientToServerEvents, ServerToClientEvents>;
   if (io) {
+    // @ts-expect-error -- TS cannot infer that event is a valid key here
     io.emit(event, data);
   }
 }

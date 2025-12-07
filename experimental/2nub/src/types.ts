@@ -81,14 +81,18 @@ export interface JoinGameRequest {
   existingPlayerId?: Player["id"];
 }
 
+export interface ServerToClientEventShapes {
+  gameState: GameState;
+  playerJoined: { game: GameState; player: Player };
+  playerLeft: { game: GameState; playerId: string };
+  gameCreated: GameState;
+  gameDeleted: { gameId: string };
+  error: { error: string };
+}
+
 // Socket.io event interfaces
-export interface ServerToClientEvents {
-  gameState: (gameState: GameState) => void;
-  playerJoined: (data: { game: GameState; player: Player }) => void;
-  playerLeft: (data: { game: GameState; playerId: string }) => void;
-  gameCreated: (game: GameState) => void;
-  gameDeleted: (data: { gameId: string }) => void;
-  error: (data: { error: string }) => void;
+export type ServerToClientEvents = {
+  [K in keyof ServerToClientEventShapes]: (data: ServerToClientEventShapes[K]) => void;
 }
 
 export interface ClientToServerEvents {
