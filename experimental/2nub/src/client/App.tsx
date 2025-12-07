@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GameBoard } from './components/GameBoard';
 import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
-import { useWebSocket } from './hooks/useWebSocket';
+import { useGameEvents } from './hooks/useGameEvents';
 import { GameState, WebSocketMessage } from '../types';
 import { buildApiUrl } from './config/api';
 import { sessionStorage } from './utils/sessionStorage';
@@ -13,19 +13,7 @@ const App: React.FC = () => {
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'game'>('list');
 
-  const handleGameState = useCallback((gameState: GameState) => {
-    if (gameState?.id === currentGame?.id) {
-      setCurrentGame(gameState);
-    }
-  }, [currentGame]);
-
-  const { isConnected, joinGame: socketJoinGame, connect } = useWebSocket({
-    onGameState: handleGameState,
-    onConnect: () => console.log('Connected to Socket.io'),
-    onDisconnect: () => console.log('Disconnected from Socket.io'),
-  });
-
-  const fetchGames = async () => {
+  const fetchGames = useCallback(async () => {
     try {
       const response = await fetch(buildApiUrl('api/games'));
       console.debug('Fetch games status:', response.status);
@@ -38,7 +26,55 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Failed to fetch games:', error);
     }
-  };
+  }, []);
+
+  const handleGameState = useCallback((gameState: GameState) => {
+    if (gameState?.id === currentGame?.id) {
+      setCurrentGame(gameState);
+    }
+  }, [currentGame]);
+
+  const handleGameCreated = useCallback((game: GameState) => {
+    setGames(prevGames => [...prevGames, game]);
+  }, []);
+
+  const handleGameDeleted = useCallback((data: { gameId: string }) => {
+    setGames(prevGames => prevGames.filter(game => game.id !== data.gameId));
+    
+    // If the current game was deleted, return to list view
+    if (currentGame?.id === data.gameId) {
+      setCurrentGame(null);
+      setCurrentPlayerId(null);
+      setView('list');
+      sessionStorage.clearPlayerSession();
+    }
+  }, [currentGame]);
+
+  const handlePlayerJoined = useCallback(() => {
+    // Refresh games list to show updated player counts
+    fetchGames();
+  }, [fetchGames]);
+
+  const handlePlayerLeft = useCallback(() => {
+    // Refresh games list to show updated player counts  
+    fetchGames();
+  }, [fetchGames]);
+
+  const handleServerError = useCallback((data: { error: string }) => {
+    console.error('Server error:', data.error);
+    // Could show a toast notification or error banner here
+  }, []);
+
+  const { isConnected, joinGame: socketJoinGame, connect } = useGameEvents({
+    onGameState: handleGameState,
+    onGameCreated: handleGameCreated,
+    onGameDeleted: handleGameDeleted,
+    onPlayerJoined: handlePlayerJoined,
+    onPlayerLeft: handlePlayerLeft,
+    onServerError: handleServerError,
+    onConnect: () => console.log('Connected to Socket.io'),
+    onDisconnect: () => console.log('Disconnected from Socket.io'),
+  });
 
   const createGame = async (name: string) => {
     try {
