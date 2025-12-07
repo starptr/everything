@@ -77,8 +77,12 @@ export interface CreateGameRequest {
 
 export interface JoinGameRequest {
   gameId: GameState["id"];
-  playerName?: Player["name"];
-  existingPlayerId?: Player["id"];
+  playerName: Player["name"];
+}
+
+export interface RejoinGameRequest {
+  gameId: GameState["id"];
+  playerId: Player["id"];
 }
 
 export interface ServerToClientEventShapes {

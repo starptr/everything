@@ -3,11 +3,12 @@ import { GameState } from '../../types';
 
 interface GameListProps {
   games: GameState[];
-  onJoinGame: (gameId: string, playerName?: string, existingPlayerId?: string) => void;
+  onJoinGame: (gameId: string, playerName: string) => void;
+  onRejoinGame: (gameId: string, playerId: string) => Promise<boolean>;
   onRefresh: () => void;
 }
 
-export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh }) => {
+export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinGame, onRefresh }) => {
   const [playerName, setPlayerName] = useState('');
   const [joiningGameId, setJoiningGameId] = useState<string | null>(null);
   const [selectedExistingPlayer, setSelectedExistingPlayer] = useState<string | null>(null);
@@ -18,16 +19,21 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
     setPlayerName('');
   };
 
-  const handleJoinSubmit = (e: React.FormEvent, gameId: string) => {
+  const handleJoinSubmit = async (e: React.FormEvent, gameId: string) => {
     e.preventDefault();
     if (selectedExistingPlayer) {
-      onJoinGame(gameId, undefined, selectedExistingPlayer);
+      const success = await onRejoinGame(gameId, selectedExistingPlayer);
+      if (success) {
+        setPlayerName('');
+        setJoiningGameId(null);
+        setSelectedExistingPlayer(null);
+      }
     } else if (playerName.trim()) {
       onJoinGame(gameId, playerName.trim());
+      setPlayerName('');
+      setJoiningGameId(null);
+      setSelectedExistingPlayer(null);
     }
-    setPlayerName('');
-    setJoiningGameId(null);
-    setSelectedExistingPlayer(null);
   };
 
   const handleExistingPlayerSelect = (playerId: string) => {

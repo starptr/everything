@@ -140,22 +140,12 @@ const App: React.FC = () => {
     return false;
   };
 
-  const joinGame = async (gameId: string, playerName?: string, existingPlayerId?: string) => {
+  const joinGame = async (gameId: string, playerName: string) => {
     try {
-      const requestBody: any = {};
-      if (existingPlayerId) {
-        requestBody.existingPlayerId = existingPlayerId;
-      } else if (playerName) {
-        requestBody.playerName = playerName;
-      } else {
-        console.error('Either playerName or existingPlayerId must be provided');
-        return;
-      }
-
       const response = await fetch(buildApiUrl(`api/games/${gameId}/join`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ playerName })
       });
       const result = await response.json();
       if (result.success) {
@@ -283,7 +273,7 @@ const App: React.FC = () => {
       {view === 'list' ? (
         <div style={{ display: 'grid', gap: '30px', gridTemplateColumns: '1fr 2fr' }}>
           <CreateGame onCreateGame={createGame} />
-          <GameList games={games} onJoinGame={joinGame} onRefresh={fetchGames} />
+          <GameList games={games} onJoinGame={joinGame} onRejoinGame={attemptRejoin} onRefresh={fetchGames} />
         </div>
       ) : (
         <GameBoard 
