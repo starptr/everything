@@ -3,15 +3,15 @@ import { useWebSocket } from './useWebSocket';
 import { GameState, Player, ServerToClientEvents } from '../../types';
 
 interface UseGameEventsOptions {
-  onGameState?: (gameState: GameState) => void;
-  onPlayerJoined?: (data: { game: GameState; player: Player }) => void;
-  onPlayerLeft?: (data: { game: GameState; playerId: string }) => void;
-  onGameCreated?: (game: GameState) => void;
-  onGameDeleted?: (data: { gameId: string }) => void;
-  onServerError?: (data: { error: string }) => void;
-  onConnect?: () => void;
-  onDisconnect?: () => void;
-  onConnectionError?: (error: any) => void;
+  onGameState: (gameState: GameState) => void;
+  onPlayerJoined: (data: { game: GameState; player: Player }) => void;
+  onPlayerLeft: (data: { game: GameState; playerId: string }) => void;
+  onGameCreated: (game: GameState) => void;
+  onGameDeleted: (data: { gameId: string }) => void;
+  onServerError: (data: { error: string }) => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onConnectionError: (error: any) => void;
 }
 
 interface UseGameEventsReturn {
@@ -21,9 +21,7 @@ interface UseGameEventsReturn {
   disconnect: () => void;
 }
 
-const createEventHandler = <T>(handler: ((data: T) => void) | undefined, eventName: string) => {
-  if (!handler) return undefined;
-  
+const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
   return (data: T) => {
     try {
       handler(data);
@@ -33,7 +31,7 @@ const createEventHandler = <T>(handler: ((data: T) => void) | undefined, eventNa
   };
 };
 
-export function useGameEvents(options: UseGameEventsOptions = {}): UseGameEventsReturn {
+export function useGameEvents(options: UseGameEventsOptions): UseGameEventsReturn {
   const {
     onGameState,
     onPlayerJoined,
@@ -63,26 +61,23 @@ export function useGameEvents(options: UseGameEventsOptions = {}): UseGameEvents
   useEffect(() => {
     if (!socket) return;
 
-    const eventHandlers = {
-      gameState: createEventHandler(onGameState, 'gameState'),
-      playerJoined: createEventHandler(onPlayerJoined, 'playerJoined'),
-      playerLeft: createEventHandler(onPlayerLeft, 'playerLeft'),
-      gameCreated: createEventHandler(onGameCreated, 'gameCreated'),
-      gameDeleted: createEventHandler(onGameDeleted, 'gameDeleted'),
-      error: createEventHandler(onServerError, 'error')
+    // The type signature require that all keys of ServerToClientEvents are specified, and nothing more
+    const eventHandlers: Record<keyof ServerToClientEvents, any> = {
+      gameState: createEventHandler('gameState', onGameState),
+      playerJoined: createEventHandler('playerJoined', onPlayerJoined),
+      playerLeft: createEventHandler('playerLeft', onPlayerLeft),
+      gameCreated: createEventHandler('gameCreated', onGameCreated),
+      gameDeleted: createEventHandler('gameDeleted', onGameDeleted),
+      error: createEventHandler('error', onServerError),
     };
 
     Object.entries(eventHandlers).forEach(([event, handler]) => {
-      if (handler) {
-        socket.on(event, handler);
-      }
+      socket.on(event, handler);
     });
 
     return () => {
       Object.entries(eventHandlers).forEach(([event, handler]) => {
-        if (handler) {
-          socket.off(event, handler);
-        }
+        socket.off(event, handler);
       });
     };
   }, [socket, onGameState, onPlayerJoined, onPlayerLeft, onGameCreated, onGameDeleted, onServerError]);

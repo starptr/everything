@@ -74,6 +74,7 @@ const App: React.FC = () => {
     onServerError: handleServerError,
     onConnect: () => console.log('Connected to Socket.io'),
     onDisconnect: () => console.log('Disconnected from Socket.io'),
+    onConnectionError: (error) => console.error('Socket.io connection error:', error)
   });
 
   const createGame = async (name: string) => {
