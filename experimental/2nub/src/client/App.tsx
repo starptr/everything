@@ -265,23 +265,6 @@ const App: React.FC = () => {
               Reconnect
             </button>
           )}
-        </div>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '15px',
-          marginBottom: '20px'
-        }}>
-          <div style={{ 
-            padding: '5px 10px', 
-            borderRadius: '15px', 
-            fontSize: '12px',
-            backgroundColor: isConnected ? '#d4edda' : '#f8d7da',
-            color: isConnected ? '#155724' : '#721c24',
-            border: `1px solid ${isConnected ? '#c3e6cb' : '#f5c6cb'}`
-          }}>
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </div>
           {view === 'game' && (
             <button onClick={leaveGame} style={{
               padding: '5px 15px',
