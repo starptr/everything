@@ -1,4 +1,4 @@
-import { GameState, Player } from '../types';
+import { GameState, Player, StateLobby } from '../types';
 
 class GameStateManager {
   private games: Map<string, GameState> = new Map();
@@ -9,7 +9,9 @@ class GameStateManager {
       id,
       name,
       players: [],
-      status: 'waiting',
+      roleOrder: [],
+      gameLog: [],
+      state: { state: 'lobby' } as StateLobby,
       createdAt: new Date(),
       lastActivity: new Date()
     };

@@ -59,11 +59,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
             <span style={{ 
               padding: '2px 8px', 
               borderRadius: '12px', 
-              backgroundColor: game.status === 'waiting' ? '#28a745' : '#ffc107',
+              backgroundColor: game.state.state === 'lobby' ? '#28a745' : '#ffc107',
               color: 'white',
               textTransform: 'capitalize'
             }}>
-              {game.status}
+              {game.state.state === 'lobby' ? 'Waiting' : game.state.state}
             </span>
           </div>
         </div>
