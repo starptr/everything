@@ -79,6 +79,19 @@ class GameStateManager {
     return true;
   }
 
+  rejoinPlayer(gameId: string, playerId: string): { player: Player; game: GameState } | null {
+    const game = this.games.get(gameId);
+    if (!game) return null;
+
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return null;
+
+    player.connected = true;
+    game.lastActivity = new Date();
+
+    return { player, game };
+  }
+
   private generateGameId(): string {
     return Math.random().toString(10).substring(2, 8);
   }
