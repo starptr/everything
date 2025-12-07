@@ -61,12 +61,46 @@ export function setupRoutes(): Router {
 
   router.post('/games/:gameId/join', (req, res) => {
     const { gameId } = req.params;
-    const { playerName }: { playerName: string } = req.body;
+    const { playerName, existingPlayerId }: { playerName?: string; existingPlayerId?: string } = req.body;
 
+    // Joining as existing disconnected player
+    if (existingPlayerId) {
+      if (!existingPlayerId.trim()) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Player ID is required'
+        };
+        return res.status(400).json(response);
+      }
+
+      const result = gameStateManager.rejoinPlayer(gameId, existingPlayerId.trim());
+      
+      if (!result) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Game or player not found, or player is already connected'
+        };
+        return res.status(404).json(response);
+      }
+
+      broadcastToGame(gameId, {
+        type: 'playerJoined',
+        data: { player: result.player, game: result.game },
+        gameId
+      });
+
+      const response: ApiResponse = {
+        success: true,
+        data: { player: result.player, game: result.game }
+      };
+      return res.json(response);
+    }
+
+    // Joining as new player
     if (!playerName || playerName.trim() === '') {
       const response: ApiResponse = {
         success: false,
-        error: 'Player name is required'
+        error: 'Player name is required when joining as new player'
       };
       return res.status(400).json(response);
     }

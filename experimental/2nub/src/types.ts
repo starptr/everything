@@ -77,7 +77,8 @@ export interface CreateGameRequest {
 
 export interface JoinGameRequest {
   gameId: GameState["id"];
-  playerName: Player["name"];
+  playerName?: Player["name"];
+  existingPlayerId?: Player["id"];
 }
 
 export interface WebSocketMessage {
