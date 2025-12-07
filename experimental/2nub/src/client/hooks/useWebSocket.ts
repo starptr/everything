@@ -20,6 +20,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const socketRef = useRef<Socket | null>(null);
   const { onConnect, onDisconnect, onConnectionError } = options;
 
+  const disconnect = useCallback(() => {
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    setIsConnected(false);
+  }, []);
+
   const connect = useCallback(() => {
     if (socketRef.current?.connected) {
       return;
@@ -43,24 +49,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       console.error('Socket.io connection error:', error);
       onConnectionError?.(error);
     });
-
-    socketRef.current.on('error', (error) => {
-      console.error('Socket.io error:', error);
-      onConnectionError?.(error);
-    });
   }, [onConnect, onDisconnect, onConnectionError]);
-
-  const disconnect = useCallback(() => {
-    socketRef.current?.disconnect();
-    socketRef.current = null;
-    setIsConnected(false);
-  }, []);
 
   useEffect(() => {
     return () => {
-      disconnect();
+      socketRef.current?.disconnect();
+      socketRef.current = null;
     };
-  }, [disconnect]);
+  }, []);
 
   return {
     isConnected,
