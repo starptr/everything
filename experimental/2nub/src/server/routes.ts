@@ -80,11 +80,17 @@ export function setupRoutes(): Router {
         return res.status(404).json(response);
       }
 
-      broadcastToGame(gameId, 'playerJoined', { player: result.player, game: result.game });
+      // Set player as connected
+      gameStateManager.updatePlayerConnection(gameId, result.player.id, true);
+      
+      // Get updated game state after connection update
+      const updatedGame = gameStateManager.getGame(gameId);
+
+      broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
 
       const response: ApiResponse = {
         success: true,
-        data: { player: result.player, game: result.game }
+        data: { player: result.player, game: updatedGame }
       };
       return res.json(response);
     }
@@ -108,6 +114,9 @@ export function setupRoutes(): Router {
       return res.status(400).json(response);
     }
 
+    // Set player as connected
+    gameStateManager.updatePlayerConnection(gameId, player.id, true);
+    
     const game = gameStateManager.getGame(gameId);
     
     broadcastToGame(gameId, 'playerJoined', { player, game });
@@ -141,11 +150,17 @@ export function setupRoutes(): Router {
       return res.status(404).json(response);
     }
 
-    broadcastToGame(gameId, 'playerJoined', { player: result.player, game: result.game });
+    // Set player as connected
+    gameStateManager.updatePlayerConnection(gameId, result.player.id, true);
+    
+    // Get updated game state after connection update
+    const updatedGame = gameStateManager.getGame(gameId);
+
+    broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
 
     const response: ApiResponse = {
       success: true,
-      data: { player: result.player, game: result.game }
+      data: { player: result.player, game: updatedGame }
     };
     res.json(response);
   });

@@ -92,7 +92,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  joinGame: (data: { gameId: string; playerId: string }) => void;
+  autoJoin: (data: { gameId: string; playerId: string }) => void;
 }
 
 // Legacy WebSocket message interface (can be removed if not used elsewhere)
