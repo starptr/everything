@@ -65,7 +65,27 @@ const App: React.FC = () => {
     // Could show a toast notification or error banner here
   }, []);
 
-  const { isConnected, joinGame: socketJoinGame, connect } = useGameEvents({
+  const handleDisconnect = useCallback(() => {
+    console.log('Disconnected from Socket.io');
+    
+    // Immediately update current player's connection status in local state
+    if (currentGame && currentPlayerId) {
+      setCurrentGame(prevGame => {
+        if (!prevGame) return prevGame;
+        
+        return {
+          ...prevGame,
+          players: prevGame.players.map(player =>
+            player.id === currentPlayerId
+              ? { ...player, connected: false }
+              : player
+          )
+        };
+      });
+    }
+  }, [currentGame, currentPlayerId]);
+
+  const { isConnected, joinGame: socketJoinGame, forceDisconnectPlayer, connect } = useGameEvents({
     onGameState: handleGameState,
     onGameCreated: handleGameCreated,
     onGameDeleted: handleGameDeleted,
@@ -73,7 +93,7 @@ const App: React.FC = () => {
     onPlayerLeft: handlePlayerLeft,
     onServerError: handleServerError,
     onConnect: () => console.log('Connected to Socket.io'),
-    onDisconnect: () => console.log('Disconnected from Socket.io'),
+    onDisconnect: handleDisconnect,
     onConnectionError: (error) => console.error('Socket.io connection error:', error)
   });
 
@@ -165,6 +185,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleForceDisconnect = async (playerId: string) => {
+    if (!currentGame) return;
+    
+    try {
+      // Use socket to force disconnect
+      forceDisconnectPlayer(currentGame.id, playerId);
+    } catch (error) {
+      console.error('Failed to force disconnect player:', error);
+    }
+  };
+
   useEffect(() => {
     const initializeApp = async () => {
       connect();
@@ -227,6 +258,7 @@ const App: React.FC = () => {
           game={currentGame} 
           currentPlayerId={currentPlayerId}
           onLeave={leaveGame}
+          onForceDisconnect={handleForceDisconnect}
         />
       )}
     </div>
