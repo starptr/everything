@@ -1,112 +1,70 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { Server, Socket } from 'socket.io';
 import { gameStateManager } from './gameState';
-import { WebSocketMessage } from '../types';
+import { ClientToServerEvents, ServerToClientEvents } from '../types';
 
-interface ExtendedWebSocket extends WebSocket {
+interface ExtendedSocket extends Socket<ClientToServerEvents, ServerToClientEvents> {
   gameId?: string;
   playerId?: string;
 }
 
-const gameConnections: Map<string, Set<ExtendedWebSocket>> = new Map();
+export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEvents>) {
+  io.on('connection', (socket: ExtendedSocket) => {
+    console.log('Socket.io client connected:', socket.id);
 
-export function setupWebSocket(wss: WebSocketServer) {
-  wss.on('connection', (ws: ExtendedWebSocket) => {
-    console.log('WebSocket client connected');
-
-    ws.on('message', (message: Buffer) => {
-      try {
-        const data = JSON.parse(message.toString());
-        handleWebSocketMessage(ws, data);
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-        sendError(ws, 'Invalid message format');
-      }
-    });
-
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
-      if (ws.gameId && ws.playerId) {
-        gameStateManager.updatePlayerConnection(ws.gameId, ws.playerId, false);
-        broadcastToGame(ws.gameId, {
-          type: 'gameState',
-          data: gameStateManager.getGame(ws.gameId),
-          gameId: ws.gameId
-        });
-        removeConnectionFromGame(ws.gameId, ws);
-      }
-    });
-
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-  });
-}
-
-function handleWebSocketMessage(ws: ExtendedWebSocket, message: any) {
-  switch (message.type) {
-    case 'joinGame':
-      const { gameId, playerId } = message.data;
+    socket.on('joinGame', ({ gameId, playerId }) => {
       if (gameId && playerId) {
-        ws.gameId = gameId;
-        ws.playerId = playerId;
-        addConnectionToGame(gameId, ws);
+        socket.gameId = gameId;
+        socket.playerId = playerId;
+        
+        // Join the game room
+        socket.join(gameId);
+        
+        // Update player connection status
         gameStateManager.updatePlayerConnection(gameId, playerId, true);
         
-        broadcastToGame(gameId, {
-          type: 'gameState',
-          data: gameStateManager.getGame(gameId),
-          gameId
-        });
+        // Broadcast updated game state to all players in the room
+        const gameState = gameStateManager.getGame(gameId);
+        if (gameState) {
+          io.to(gameId).emit('gameState', gameState);
+        }
+        
+        console.log(`Player ${playerId} joined game ${gameId}`);
       }
-      break;
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Socket.io client disconnected:', socket.id);
       
-    default:
-      sendError(ws, 'Unknown message type');
-  }
-}
-
-function addConnectionToGame(gameId: string, ws: ExtendedWebSocket) {
-  if (!gameConnections.has(gameId)) {
-    gameConnections.set(gameId, new Set());
-  }
-  gameConnections.get(gameId)!.add(ws);
-}
-
-function removeConnectionFromGame(gameId: string, ws: ExtendedWebSocket) {
-  const connections = gameConnections.get(gameId);
-  if (connections) {
-    connections.delete(ws);
-    if (connections.size === 0) {
-      gameConnections.delete(gameId);
-    }
-  }
-}
-
-export function broadcastToGame(gameId: string, message: WebSocketMessage) {
-  const connections = gameConnections.get(gameId);
-  if (!connections) return;
-
-  const messageStr = JSON.stringify(message);
-  connections.forEach((ws) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(messageStr);
-    }
-  });
-}
-
-export function broadcastToAll(message: WebSocketMessage) {
-  gameConnections.forEach((connections) => {
-    connections.forEach((ws) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
+      if (socket.gameId && socket.playerId) {
+        // Update player connection status
+        gameStateManager.updatePlayerConnection(socket.gameId, socket.playerId, false);
+        
+        // Broadcast updated game state to remaining players
+        const gameState = gameStateManager.getGame(socket.gameId);
+        if (gameState) {
+          socket.to(socket.gameId).emit('gameState', gameState);
+        }
+        
+        console.log(`Player ${socket.playerId} left game ${socket.gameId}`);
       }
+    });
+
+    socket.on('error', (error) => {
+      console.error('Socket.io error:', error);
     });
   });
 }
 
-function sendError(ws: WebSocket, error: string) {
-  ws.send(JSON.stringify({
-    type: 'error',
-    data: { error }
-  }));
+export function broadcastToGame(gameId: string, event: keyof ServerToClientEvents, data: any) {
+  const io = global.io as Server<ClientToServerEvents, ServerToClientEvents>;
+  if (io) {
+    io.to(gameId).emit(event, data);
+  }
+}
+
+export function broadcastToAll(event: keyof ServerToClientEvents, data: any) {
+  const io = global.io as Server<ClientToServerEvents, ServerToClientEvents>;
+  if (io) {
+    io.emit(event, data);
+  }
 }

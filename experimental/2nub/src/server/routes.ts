@@ -47,10 +47,7 @@ export function setupRoutes(): Router {
 
     const game = gameStateManager.createGame(name.trim());
     
-    broadcastToAll({
-      type: 'gameCreated',
-      data: game
-    });
+    broadcastToAll('gameCreated', game);
 
     const response: ApiResponse = {
       success: true,
@@ -83,11 +80,7 @@ export function setupRoutes(): Router {
         return res.status(404).json(response);
       }
 
-      broadcastToGame(gameId, {
-        type: 'playerJoined',
-        data: { player: result.player, game: result.game },
-        gameId
-      });
+      broadcastToGame(gameId, 'playerJoined', { player: result.player, game: result.game });
 
       const response: ApiResponse = {
         success: true,
@@ -117,11 +110,7 @@ export function setupRoutes(): Router {
 
     const game = gameStateManager.getGame(gameId);
     
-    broadcastToGame(gameId, {
-      type: 'playerJoined',
-      data: { player, game },
-      gameId
-    });
+    broadcastToGame(gameId, 'playerJoined', { player, game });
 
     const response: ApiResponse = {
       success: true,
@@ -152,11 +141,7 @@ export function setupRoutes(): Router {
       return res.status(404).json(response);
     }
 
-    broadcastToGame(gameId, {
-      type: 'playerJoined',
-      data: { player: result.player, game: result.game },
-      gameId
-    });
+    broadcastToGame(gameId, 'playerJoined', { player: result.player, game: result.game });
 
     const response: ApiResponse = {
       success: true,
@@ -181,16 +166,9 @@ export function setupRoutes(): Router {
     const game = gameStateManager.getGame(gameId);
     
     if (game) {
-      broadcastToGame(gameId, {
-        type: 'playerLeft',
-        data: { playerId, game },
-        gameId
-      });
+      broadcastToGame(gameId, 'playerLeft', { playerId, game });
     } else {
-      broadcastToAll({
-        type: 'gameDeleted',
-        data: { gameId }
-      });
+      broadcastToAll('gameDeleted', { gameId });
     }
 
     const response: ApiResponse = {
@@ -213,10 +191,7 @@ export function setupRoutes(): Router {
       return res.status(404).json(response);
     }
 
-    broadcastToAll({
-      type: 'gameDeleted',
-      data: { gameId }
-    });
+    broadcastToAll('gameDeleted', { gameId });
 
     const response: ApiResponse = {
       success: true,
