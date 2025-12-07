@@ -21,6 +21,18 @@ interface UseGameEventsReturn {
   disconnect: () => void;
 }
 
+const createEventHandler = <T>(handler: ((data: T) => void) | undefined, eventName: string) => {
+  if (!handler) return undefined;
+  
+  return (data: T) => {
+    try {
+      handler(data);
+    } catch (error) {
+      console.error(`Error handling ${eventName} event:`, error);
+    }
+  };
+};
+
 export function useGameEvents(options: UseGameEventsOptions = {}): UseGameEventsReturn {
   const {
     onGameState,
@@ -51,76 +63,27 @@ export function useGameEvents(options: UseGameEventsOptions = {}): UseGameEvents
   useEffect(() => {
     if (!socket) return;
 
-    // Handle gameState events
-    const handleGameState = (gameState: GameState) => {
-      try {
-        onGameState?.(gameState);
-      } catch (error) {
-        console.error('Error handling gameState event:', error);
-      }
+    const eventHandlers = {
+      gameState: createEventHandler(onGameState, 'gameState'),
+      playerJoined: createEventHandler(onPlayerJoined, 'playerJoined'),
+      playerLeft: createEventHandler(onPlayerLeft, 'playerLeft'),
+      gameCreated: createEventHandler(onGameCreated, 'gameCreated'),
+      gameDeleted: createEventHandler(onGameDeleted, 'gameDeleted'),
+      error: createEventHandler(onServerError, 'error')
     };
 
-    // Handle playerJoined events  
-    const handlePlayerJoined = (data: { game: GameState; player: Player }) => {
-      try {
-        onPlayerJoined?.(data);
-      } catch (error) {
-        console.error('Error handling playerJoined event:', error);
+    Object.entries(eventHandlers).forEach(([event, handler]) => {
+      if (handler) {
+        socket.on(event, handler);
       }
-    };
+    });
 
-    // Handle playerLeft events
-    const handlePlayerLeft = (data: { game: GameState; playerId: string }) => {
-      try {
-        onPlayerLeft?.(data);
-      } catch (error) {
-        console.error('Error handling playerLeft event:', error);
-      }
-    };
-
-    // Handle gameCreated events
-    const handleGameCreated = (game: GameState) => {
-      try {
-        onGameCreated?.(game);
-      } catch (error) {
-        console.error('Error handling gameCreated event:', error);
-      }
-    };
-
-    // Handle gameDeleted events
-    const handleGameDeleted = (data: { gameId: string }) => {
-      try {
-        onGameDeleted?.(data);
-      } catch (error) {
-        console.error('Error handling gameDeleted event:', error);
-      }
-    };
-
-    // Handle server error events
-    const handleServerError = (data: { error: string }) => {
-      try {
-        onServerError?.(data);
-      } catch (error) {
-        console.error('Error handling server error event:', error);
-      }
-    };
-
-    // Register all event listeners defensively
-    socket.on('gameState', handleGameState);
-    socket.on('playerJoined', handlePlayerJoined);
-    socket.on('playerLeft', handlePlayerLeft);
-    socket.on('gameCreated', handleGameCreated);
-    socket.on('gameDeleted', handleGameDeleted);
-    socket.on('error', handleServerError);
-
-    // Cleanup function to remove all event listeners
     return () => {
-      socket.off('gameState', handleGameState);
-      socket.off('playerJoined', handlePlayerJoined);
-      socket.off('playerLeft', handlePlayerLeft);
-      socket.off('gameCreated', handleGameCreated);
-      socket.off('gameDeleted', handleGameDeleted);
-      socket.off('error', handleServerError);
+      Object.entries(eventHandlers).forEach(([event, handler]) => {
+        if (handler) {
+          socket.off(event, handler);
+        }
+      });
     };
   }, [socket, onGameState, onPlayerJoined, onPlayerLeft, onGameCreated, onGameDeleted, onServerError]);
 
