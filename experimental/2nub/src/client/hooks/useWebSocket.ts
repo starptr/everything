@@ -3,9 +3,9 @@ import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../config/api';
 
 interface UseWebSocketOptions {
-  onConnect?: () => void;
-  onDisconnect?: () => void;
-  onConnectionError?: (error: any) => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onConnectionError: (error: any) => void;
 }
 
 interface UseWebSocketReturn {
@@ -15,7 +15,7 @@ interface UseWebSocketReturn {
   disconnect: () => void;
 }
 
-export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
+export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const { onConnect, onDisconnect, onConnectionError } = options;
@@ -37,17 +37,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
     socketRef.current.on('connect', () => {
       setIsConnected(true);
-      onConnect?.();
+      onConnect();
     });
 
     socketRef.current.on('disconnect', () => {
       setIsConnected(false);
-      onDisconnect?.();
+      onDisconnect();
     });
 
     socketRef.current.on('connect_error', (error) => {
       console.error('Socket.io connection error:', error);
-      onConnectionError?.(error);
+      onConnectionError(error);
     });
   }, [onConnect, onDisconnect, onConnectionError]);
 
