@@ -1,7 +1,15 @@
 import { GameState, Player, StateLobby } from '../types';
 
+interface PlayerSocketMapping {
+  gameId: string;
+  playerId: string;
+  socketId: string;
+}
+
 class GameStateManager {
   private games: Map<string, GameState> = new Map();
+  private socketToPlayer: Map<string, PlayerSocketMapping> = new Map();
+  private playerToSocket: Map<string, string> = new Map();
 
   createGame(name: string): GameState {
     const id = this.generateGameId();
@@ -108,6 +116,58 @@ class GameStateManager {
 
   private generatePlayerId(): string {
     return Math.random().toString(36).substring(2, 15);
+  }
+
+  // Socket registry methods
+  registerPlayerSocket(gameId: string, playerId: string, socketId: string): boolean {
+    const game = this.games.get(gameId);
+    if (!game) return false;
+
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return false;
+
+    // Remove any existing socket for this player
+    const existingSocketId = this.playerToSocket.get(playerId);
+    if (existingSocketId) {
+      this.socketToPlayer.delete(existingSocketId);
+    }
+
+    // Register the new socket
+    const mapping: PlayerSocketMapping = { gameId, playerId, socketId };
+    this.socketToPlayer.set(socketId, mapping);
+    this.playerToSocket.set(playerId, socketId);
+
+    // Update player connection status
+    player.connected = true;
+    game.lastActivity = new Date();
+
+    return true;
+  }
+
+  unregisterSocket(socketId: string): PlayerSocketMapping | null {
+    const mapping = this.socketToPlayer.get(socketId);
+    if (!mapping) return null;
+
+    // Remove from both mappings
+    this.socketToPlayer.delete(socketId);
+    this.playerToSocket.delete(mapping.playerId);
+
+    // Update player connection status
+    this.updatePlayerConnection(mapping.gameId, mapping.playerId, false);
+
+    return mapping;
+  }
+
+  getSocketMapping(socketId: string): PlayerSocketMapping | null {
+    return this.socketToPlayer.get(socketId) || null;
+  }
+
+  getPlayerSocket(playerId: string): string | null {
+    return this.playerToSocket.get(playerId) || null;
+  }
+
+  isPlayerConnected(playerId: string): boolean {
+    return this.playerToSocket.has(playerId);
   }
 
 }

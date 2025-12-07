@@ -14,6 +14,8 @@ interface UseGameEventsOptions {
   onConnect: () => void;
   onDisconnect: () => void;
   onConnectionError: (error: any) => void;
+  gameId?: string;
+  playerId?: string;
 }
 
 interface UseGameEventsReturn {
@@ -21,6 +23,7 @@ interface UseGameEventsReturn {
   forceDisconnectPlayer: (gameId: string, playerId: string) => Promise<void>;
   connect: () => void;
   disconnect: () => void;
+  authenticatePlayer: (gameId: string, playerId: string) => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -43,13 +46,17 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     onServerError,
     onConnect,
     onDisconnect,
-    onConnectionError
+    onConnectionError,
+    gameId,
+    playerId
   } = options;
 
-  const { isConnected, socket, connect, disconnect } = useWebSocket({
+  const { isConnected, socket, connect, disconnect, authenticatePlayer } = useWebSocket({
     onConnect,
     onDisconnect,
-    onConnectionError
+    onConnectionError,
+    gameId,
+    playerId
   });
 
 
@@ -98,5 +105,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     forceDisconnectPlayer,
     connect,
     disconnect,
+    authenticatePlayer,
   };
 }

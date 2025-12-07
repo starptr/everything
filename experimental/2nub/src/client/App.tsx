@@ -85,7 +85,7 @@ const App: React.FC = () => {
     }
   }, [currentGame, currentPlayerId]);
 
-  const { isConnected, forceDisconnectPlayer, connect } = useGameEvents({
+  const { isConnected, forceDisconnectPlayer, connect, authenticatePlayer } = useGameEvents({
     onGameState: handleGameState,
     onGameCreated: handleGameCreated,
     onGameDeleted: handleGameDeleted,
@@ -96,7 +96,9 @@ const App: React.FC = () => {
       console.log('Connected to Socket.io');
     },
     onDisconnect: handleDisconnect,
-    onConnectionError: (error) => console.error('Socket.io connection error:', error)
+    onConnectionError: (error) => console.error('Socket.io connection error:', error),
+    gameId: currentGame?.id || undefined,
+    playerId: currentPlayerId || undefined
   });
 
   const createGame = async (name: string) => {
@@ -216,10 +218,54 @@ const App: React.FC = () => {
     initializeApp();
   }, []);
 
+  // Authentication is now handled automatically in useWebSocket hook
+
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       <header style={{ marginBottom: '30px' }}>
         <h1 style={{ color: '#333', marginBottom: '10px' }}>2nub Game Boilerplate</h1>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '15px', 
+          marginBottom: '10px' 
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            backgroundColor: isConnected ? '#d4edda' : '#f8d7da',
+            color: isConnected ? '#155724' : '#721c24',
+            border: isConnected ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
+            fontSize: '12px'
+          }}>
+            <div style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: isConnected ? '#28a745' : '#dc3545'
+            }} />
+            {isConnected ? 'Connected' : 'Disconnected'}
+          </div>
+          {!isConnected && (
+            <button
+              onClick={connect}
+              style={{
+                padding: '4px 8px',
+                fontSize: '12px',
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Reconnect
+            </button>
+          )}
+        </div>
         <div style={{ 
           display: 'flex', 
           alignItems: 'center', 
