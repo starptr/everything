@@ -129,6 +129,7 @@ export function setupRoutes(): Router {
   });
 
   router.post('/games/:gameId/rejoin', (req, res) => {
+    console.debug('Rejoin request received:', req.params, req.body);
     const { gameId } = req.params;
     const { playerId }: { playerId: string } = req.body;
 

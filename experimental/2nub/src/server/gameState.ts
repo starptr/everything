@@ -80,11 +80,18 @@ class GameStateManager {
   }
 
   rejoinPlayer(gameId: string, playerId: string): { player: Player; game: GameState } | null {
+    console.debug(`Attempting to rejoin player ${playerId} to game ${gameId}`);
     const game = this.games.get(gameId);
-    if (!game) return null;
+    if (!game) {
+      console.debug(`Rejoin failed: game ${gameId} not found`);
+      return null;
+    }
 
     const player = game.players.find(p => p.id === playerId);
-    if (!player) return null;
+    if (!player) {
+      console.debug(`Rejoin failed: player ${playerId} not found in game ${gameId}`);
+      return null;
+    }
 
     // Only allow rejoining if player is currently disconnected
     if (player.connected) return null;
