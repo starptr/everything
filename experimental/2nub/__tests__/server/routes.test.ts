@@ -90,7 +90,7 @@ describe('Game API Routes', () => {
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
       expect(response.body.data.player.name).toBe('Alice');
-      expect(response.body.data.game.id).toBe(game.id);
+      // Game state is now provided via socket.io, not HTTP response
     });
 
     it('should reject empty player name', async () => {

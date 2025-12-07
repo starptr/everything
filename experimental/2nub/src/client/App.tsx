@@ -10,6 +10,7 @@ import { sessionStorage } from './utils/sessionStorage';
 const App: React.FC = () => {
   const [games, setGames] = useState<GameState[]>([]);
   const [currentGame, setCurrentGame] = useState<GameState | null>(null);
+  const [currentGameId, setCurrentGameId] = useState<string | null>(null);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'game'>('list');
 
@@ -44,6 +45,7 @@ const App: React.FC = () => {
     // If the current game was deleted, return to list view
     if (currentGame?.id === data.gameId) {
       setCurrentGame(null);
+      setCurrentGameId(null);
       setCurrentPlayerId(null);
       setView('list');
       sessionStorage.clearPlayerSession();
@@ -97,7 +99,7 @@ const App: React.FC = () => {
     },
     onDisconnect,
     onConnectionError: (error) => console.error('Socket.io connection error:', error),
-    gameId: currentGame?.id || undefined,
+    gameId: currentGameId || undefined,
     playerId: currentPlayerId || undefined
   });
 
@@ -128,9 +130,11 @@ const App: React.FC = () => {
       const result = await response.json();
       console.debug('Response json:', result);
       if (result.success) {
-        setCurrentGame(result.data.game);
+        // Game state will be received via socket.io after authentication
+        setCurrentGameId(gameId);
         setCurrentPlayerId(result.data.player.id);
         setView('game');
+        // Authentication and game state update will happen automatically via socket.io
         
         return true;
       }
@@ -149,11 +153,13 @@ const App: React.FC = () => {
       });
       const result = await response.json();
       if (result.success) {
-        setCurrentGame(result.data.game);
+        // Game state will be received via socket.io after authentication
+        setCurrentGameId(gameId);
         setCurrentPlayerId(result.data.player.id);
         setView('game');
         
         sessionStorage.setPlayerSession(result.data.player.id, gameId);
+        // Authentication and game state update will happen automatically via socket.io
       } else {
         console.error('Failed to join game:', result.error);
       }
@@ -170,6 +176,7 @@ const App: React.FC = () => {
         method: 'DELETE'
       });
       setCurrentGame(null);
+      setCurrentGameId(null);
       setCurrentPlayerId(null);
       setView('list');
       sessionStorage.clearPlayerSession();
@@ -278,6 +285,7 @@ const App: React.FC = () => {
       ) : (
         <GameBoard 
           game={currentGame} 
+          gameId={currentGameId}
           currentPlayerId={currentPlayerId}
           onLeave={leaveGame}
           onForceDisconnect={handleForceDisconnect}

@@ -4,12 +4,13 @@ import { Onub } from './Onub';
 
 interface GameBoardProps {
   game: GameState | null;
+  gameId: string | null;
   currentPlayerId: string | null;
   onLeave: () => void;
   onForceDisconnect: (playerId: string) => void;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onLeave, onForceDisconnect }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlayerId, onLeave, onForceDisconnect }) => {
   console.debug("Rendering GameBoard with game:", game);
   const [disconnectingPlayerId, setDisconnectingPlayerId] = useState<string | null>(null);
 
@@ -23,6 +24,49 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
   };
 
   if (!game) {
+    // If we have a gameId but no game data, show loading state
+    if (gameId) {
+      return (
+        <div style={{
+          backgroundColor: 'white',
+          padding: '40px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          textAlign: 'center'
+        }}>
+          <h2>Loading game...</h2>
+          <p>Connecting to game and loading data...</p>
+          <div style={{
+            margin: '20px auto',
+            width: '40px',
+            height: '40px',
+            border: '4px solid #f3f3f3',
+            borderTop: '4px solid #007bff',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+          <button onClick={onLeave} style={{
+            padding: '10px 20px',
+            backgroundColor: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            marginTop: '20px'
+          }}>
+            Cancel
+          </button>
+        </div>
+      );
+    }
+    
+    // No gameId means the game doesn't exist
     return (
       <div style={{
         backgroundColor: 'white',

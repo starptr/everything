@@ -3,7 +3,6 @@ import { gameStateManager } from './gameState';
 import { broadcastToGame, broadcastToAll } from './websocket';
 import { CreateGameRequest, JoinGameRequest, RejoinGameRequest, ApiResponse } from '../types';
 
-// TODO: consider not returning `game` state in the HTTP response, since websockets should handle real time server-to-client data updates
 
 function respondGameNotFound(res: Response, message: string | null) {
   return respondFailure(res, 404, message ? `Game not found: ${message}` : 'Game not found');
@@ -86,7 +85,7 @@ export function setupRoutes(): Router {
 
     broadcastToGame(gameId, 'playerJoined', { player, game });
 
-    return respondSuccessWithData(res, 201, { player, game });
+    return respondSuccessWithData(res, 201, { player });
   });
 
   router.post('/games/:gameId/rejoin', (req, res) => {
@@ -116,7 +115,7 @@ export function setupRoutes(): Router {
 
     broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
 
-    return respondSuccessWithData(res, 200, { player: result.player, game: updatedGame });
+    return respondSuccessWithData(res, 200, { player: result.player });
   });
 
   router.post('/games/:gameId/players/:playerId/disconnect', (req, res) => {
