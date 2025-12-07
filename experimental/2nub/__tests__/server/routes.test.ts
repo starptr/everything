@@ -102,7 +102,7 @@ describe('Game API Routes', () => {
       
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Player name is required when joining as new player');
+      expect(response.body.error).toBe('Player name is required');
     });
 
     it('should reject joining non-existent game', async () => {
@@ -115,7 +115,10 @@ describe('Game API Routes', () => {
       expect(response.body.error).toBe('Game not found or full');
     });
 
-    it('should allow joining as disconnected player via existingPlayerId', async () => {
+  });
+
+  describe('POST /api/games/:gameId/rejoin', () => {
+    it('should allow rejoining as disconnected player', async () => {
       const game = gameStateManager.createGame('Test Game');
       const player = gameStateManager.addPlayer(game.id, 'Alice')!;
       
@@ -123,8 +126,8 @@ describe('Game API Routes', () => {
       gameStateManager.updatePlayerConnection(game.id, player.id, false);
       
       const response = await request(app)
-        .post(`/api/games/${game.id}/join`)
-        .send({ existingPlayerId: player.id });
+        .post(`/api/games/${game.id}/rejoin`)
+        .send({ playerId: player.id });
       
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -132,30 +135,52 @@ describe('Game API Routes', () => {
       expect(response.body.data.player.connected).toBe(true);
     });
 
-    it('should reject joining as already connected player', async () => {
+    it('should reject rejoining as already connected player', async () => {
       const game = gameStateManager.createGame('Test Game');
       const player = gameStateManager.addPlayer(game.id, 'Alice')!;
       
       // Player is already connected by default
       const response = await request(app)
-        .post(`/api/games/${game.id}/join`)
-        .send({ existingPlayerId: player.id });
+        .post(`/api/games/${game.id}/rejoin`)
+        .send({ playerId: player.id });
       
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Game or player not found, or player is already connected');
+      expect(response.body.error).toBe('Game or player not found');
     });
 
-    it('should reject joining with invalid existingPlayerId', async () => {
+    it('should reject rejoining with invalid playerId', async () => {
       const game = gameStateManager.createGame('Test Game');
       
       const response = await request(app)
-        .post(`/api/games/${game.id}/join`)
-        .send({ existingPlayerId: 'INVALID_ID' });
+        .post(`/api/games/${game.id}/rejoin`)
+        .send({ playerId: 'INVALID_ID' });
       
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Game or player not found, or player is already connected');
+      expect(response.body.error).toBe('Game or player not found');
+    });
+
+    it('should reject empty playerId', async () => {
+      const game = gameStateManager.createGame('Test Game');
+      
+      const response = await request(app)
+        .post(`/api/games/${game.id}/rejoin`)
+        .send({ playerId: '' });
+      
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBe('Player ID is required');
+    });
+
+    it('should reject rejoining non-existent game', async () => {
+      const response = await request(app)
+        .post('/api/games/INVALID/rejoin')
+        .send({ playerId: 'PLAYER_ID' });
+      
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBe('Game or player not found');
     });
   });
 

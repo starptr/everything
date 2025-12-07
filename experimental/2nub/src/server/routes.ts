@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { gameStateManager } from './gameState';
 import { broadcastToGame, broadcastToAll } from './websocket';
-import { CreateGameRequest, JoinGameRequest, ApiResponse } from '../types';
+import { CreateGameRequest, JoinGameRequest, RejoinGameRequest, ApiResponse } from '../types';
 
 // TODO: consider not returning `game` state in the HTTP response, since websockets should handle real time server-to-client data updates
 
@@ -61,44 +61,12 @@ export function setupRoutes(): Router {
     return respondSuccessWithData(res, 201, game);
   });
 
-  // TODO: consider removing rejoining logic from here since /rejoin exists
   router.post('/games/:gameId/join', (req, res) => {
     const { gameId } = req.params;
-    const { playerName, existingPlayerId }: { playerName?: string; existingPlayerId?: string } = req.body;
+    const { playerName }: JoinGameRequest = req.body;
 
-    // Joining as existing disconnected player
-    if (existingPlayerId) {
-      if (!existingPlayerId.trim()) {
-        return respondFailure(res, 400, 'Player ID is required');
-      }
-
-      const result = gameStateManager.rejoinPlayer(gameId, existingPlayerId.trim());
-      
-      if (!result) {
-        return respondFailure(res, 404, 'Game or player not found, or player is already connected');
-      }
-
-      // Set player as connected
-      gameStateManager.updatePlayerConnection(gameId, result.player.id, true);
-      
-      // Get updated game state after connection update
-      const updatedGame = gameStateManager.getGame(gameId);
-
-      if (!updatedGame) {
-        return respondGameNotFound(res, null);
-      }
-
-      broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
-
-      return respondSuccessWithData(res, 200, {
-        player: result.player,
-        game: updatedGame
-      });
-    }
-
-    // Joining as new player
     if (!playerName || playerName.trim() === '') {
-      return respondFailure(res, 400, 'Player name is required when joining as new player');
+      return respondFailure(res, 400, 'Player name is required');
     }
 
     const player = gameStateManager.addPlayer(gameId, playerName.trim());
@@ -124,7 +92,7 @@ export function setupRoutes(): Router {
   router.post('/games/:gameId/rejoin', (req, res) => {
     console.debug('Rejoin request received:', req.params, req.body);
     const { gameId } = req.params;
-    const { playerId }: { playerId: string } = req.body;
+    const { playerId }: RejoinGameRequest = req.body;
 
     if (!playerId || playerId.trim() === '') {
       return respondFailure(res, 400, 'Player ID is required');
