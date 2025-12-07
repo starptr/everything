@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GameBoard } from './components/GameBoard';
 import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
@@ -12,13 +12,7 @@ const App: React.FC = () => {
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'game'>('list');
 
-  const { isConnected, sendMessage, connect } = useWebSocket({
-    onMessage: handleWebSocketMessage,
-    onOpen: () => console.log('Connected to WebSocket'),
-    onClose: () => console.log('Disconnected from WebSocket'),
-  });
-
-  function handleWebSocketMessage(message: WebSocketMessage) {
+  const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
     switch (message.type) {
       case 'gameState':
         if (message.gameId === currentGame?.id) {
@@ -50,7 +44,13 @@ const App: React.FC = () => {
         console.error('WebSocket error:', message.data.error);
         break;
     }
-  }
+  }, [currentGame]);
+
+  const { isConnected, sendMessage, connect } = useWebSocket({
+    onMessage: handleWebSocketMessage,
+    onOpen: () => console.log('Connected to WebSocket'),
+    onClose: () => console.log('Disconnected from WebSocket'),
+  });
 
   const fetchGames = async () => {
     try {
@@ -124,7 +124,7 @@ const App: React.FC = () => {
   useEffect(() => {
     connect();
     fetchGames();
-  }, [connect]);
+  }, []);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
