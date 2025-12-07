@@ -3,15 +3,14 @@ import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../config/api';
 
 interface UseWebSocketOptions {
-  onGameState?: (gameState: any) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
-  onError?: (error: any) => void;
+  onConnectionError?: (error: any) => void;
 }
 
 interface UseWebSocketReturn {
   isConnected: boolean;
-  joinGame: (gameId: string, playerId: string) => void;
+  socket: Socket | null;
   connect: () => void;
   disconnect: () => void;
 }
@@ -19,7 +18,7 @@ interface UseWebSocketReturn {
 export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const { onGameState, onConnect, onDisconnect, onError } = options;
+  const { onConnect, onDisconnect, onConnectionError } = options;
 
   const connect = useCallback(() => {
     if (socketRef.current?.connected) {
@@ -35,10 +34,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       onConnect?.();
     });
 
-    socketRef.current.on('gameState', (gameState) => {
-      onGameState?.(gameState);
-    });
-
     socketRef.current.on('disconnect', () => {
       setIsConnected(false);
       onDisconnect?.();
@@ -46,27 +41,19 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
     socketRef.current.on('connect_error', (error) => {
       console.error('Socket.io connection error:', error);
-      onError?.(error);
+      onConnectionError?.(error);
     });
 
     socketRef.current.on('error', (error) => {
       console.error('Socket.io error:', error);
-      onError?.(error);
+      onConnectionError?.(error);
     });
-  }, [onGameState, onConnect, onDisconnect, onError]);
+  }, [onConnect, onDisconnect, onConnectionError]);
 
   const disconnect = useCallback(() => {
     socketRef.current?.disconnect();
     socketRef.current = null;
     setIsConnected(false);
-  }, []);
-
-  const joinGame = useCallback((gameId: string, playerId: string) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('joinGame', { gameId, playerId });
-    } else {
-      console.warn('Socket not connected. Cannot join game.');
-    }
   }, []);
 
   useEffect(() => {
@@ -77,7 +64,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
   return {
     isConnected,
-    joinGame,
+    socket: socketRef.current,
     connect,
     disconnect,
   };
