@@ -7,18 +7,17 @@ describe('GameStateManager', () => {
 
   describe('createGame', () => {
     it('should create a new game with correct properties', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       expect(game.name).toBe('Test Game');
-      expect(game.maxPlayers).toBe(4);
-      expect(game.players).toEqual({});
+      expect(game.players).toEqual([]);
       expect(game.status).toBe('waiting');
       expect(game.id).toBeDefined();
-      expect(game.id).toMatch(/^[A-Z0-9]{6}$/);
+      expect(game.id).toMatch(/^[0-9]{6}$/);
     });
 
     it('should add game to internal storage', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       const retrievedGame = gameStateManager.getGame(game.id);
       
       expect(retrievedGame).toEqual(game);
@@ -27,39 +26,32 @@ describe('GameStateManager', () => {
 
   describe('addPlayer', () => {
     it('should add a player to an existing game', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       const player = gameStateManager.addPlayer(game.id, 'Alice');
       
       expect(player).toBeDefined();
       expect(player!.name).toBe('Alice');
-      expect(player!.seat).toBe(1);
       expect(player!.connected).toBe(true);
       
       const updatedGame = gameStateManager.getGame(game.id);
-      expect(Object.keys(updatedGame!.players)).toHaveLength(1);
+      expect(updatedGame!.players).toHaveLength(1);
+      expect(updatedGame!.players[0]).toEqual(player);
     });
 
-    it('should assign sequential seat numbers', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+    it('should add players to array in sequence', () => {
+      const game = gameStateManager.createGame('Test Game');
       
       const player1 = gameStateManager.addPlayer(game.id, 'Alice');
       const player2 = gameStateManager.addPlayer(game.id, 'Bob');
       const player3 = gameStateManager.addPlayer(game.id, 'Charlie');
       
-      expect(player1!.seat).toBe(1);
-      expect(player2!.seat).toBe(2);
-      expect(player3!.seat).toBe(3);
+      const updatedGame = gameStateManager.getGame(game.id);
+      expect(updatedGame!.players).toHaveLength(3);
+      expect(updatedGame!.players[0]).toEqual(player1);
+      expect(updatedGame!.players[1]).toEqual(player2);
+      expect(updatedGame!.players[2]).toEqual(player3);
     });
 
-    it('should reject players when game is full', () => {
-      const game = gameStateManager.createGame('Test Game', 2);
-      
-      gameStateManager.addPlayer(game.id, 'Alice');
-      gameStateManager.addPlayer(game.id, 'Bob');
-      const rejectedPlayer = gameStateManager.addPlayer(game.id, 'Charlie');
-      
-      expect(rejectedPlayer).toBeNull();
-    });
 
     it('should return null for non-existent game', () => {
       const player = gameStateManager.addPlayer('INVALID', 'Alice');
@@ -69,7 +61,7 @@ describe('GameStateManager', () => {
 
   describe('removePlayer', () => {
     it('should remove a player from the game', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       const player1 = gameStateManager.addPlayer(game.id, 'Alice');
       const player2 = gameStateManager.addPlayer(game.id, 'Bob');
       
@@ -77,12 +69,12 @@ describe('GameStateManager', () => {
       expect(removed).toBe(true);
       
       const updatedGame = gameStateManager.getGame(game.id);
-      expect(Object.keys(updatedGame!.players)).toHaveLength(1);
-      expect(updatedGame!.players[player2!.id]).toBeDefined();
+      expect(updatedGame!.players).toHaveLength(1);
+      expect(updatedGame!.players[0]).toEqual(player2);
     });
 
     it('should delete game when last player leaves', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       const player = gameStateManager.addPlayer(game.id, 'Alice');
       
       gameStateManager.removePlayer(game.id, player!.id);
@@ -99,14 +91,15 @@ describe('GameStateManager', () => {
 
   describe('updatePlayerConnection', () => {
     it('should update player connection status', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       const player = gameStateManager.addPlayer(game.id, 'Alice');
       
       const updated = gameStateManager.updatePlayerConnection(game.id, player!.id, false);
       expect(updated).toBe(true);
       
       const updatedGame = gameStateManager.getGame(game.id);
-      expect(updatedGame!.players[player!.id].connected).toBe(false);
+      const updatedPlayer = updatedGame!.players.find(p => p.id === player!.id);
+      expect(updatedPlayer!.connected).toBe(false);
     });
 
     it('should return false for non-existent player or game', () => {
@@ -117,8 +110,8 @@ describe('GameStateManager', () => {
 
   describe('getAllGames', () => {
     it('should return all games', () => {
-      gameStateManager.createGame('Game 1', 4);
-      gameStateManager.createGame('Game 2', 6);
+      gameStateManager.createGame('Game 1');
+      gameStateManager.createGame('Game 2');
       
       const games = gameStateManager.getAllGames();
       expect(games).toHaveLength(2);
@@ -134,7 +127,7 @@ describe('GameStateManager', () => {
 
   describe('deleteGame', () => {
     it('should delete a game', () => {
-      const game = gameStateManager.createGame('Test Game', 4);
+      const game = gameStateManager.createGame('Test Game');
       
       const deleted = gameStateManager.deleteGame(game.id);
       expect(deleted).toBe(true);

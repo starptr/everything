@@ -33,8 +33,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
     );
   }
 
-  const currentPlayer = currentPlayerId ? game.players[currentPlayerId] : null;
-  const playerList = Object.values(game.players).sort((a, b) => a.seat - b.seat);
+  const currentPlayer = currentPlayerId ? game.players.find(p => p.id === currentPlayerId) : null;
+  const playerList = game.players;
 
   return (
     <div style={{
@@ -55,7 +55,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
           <h1 style={{ margin: '0 0 8px 0', color: '#333' }}>{game.name}</h1>
           <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#666' }}>
             <span>Game ID: <strong>{game.id}</strong></span>
-            <span>Players: <strong>{Object.keys(game.players).length}/{game.maxPlayers}</strong></span>
+            <span>Players: <strong>{game.players.length}</strong></span>
             <span style={{ 
               padding: '2px 8px', 
               borderRadius: '12px', 
@@ -79,7 +79,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
         }}>
           <h3 style={{ margin: '0 0 8px 0', color: '#007bff' }}>You are:</h3>
           <p style={{ margin: 0, fontSize: '16px' }}>
-            <strong>{currentPlayer.name}</strong> (Seat {currentPlayer.seat})
+            <strong>{currentPlayer.name}</strong> (Seat {game.players.indexOf(currentPlayer) + 1})
           </p>
         </div>
       )}
@@ -105,7 +105,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
                     {player.name} {player.id === currentPlayerId && '(You)'}
                   </div>
                   <div style={{ fontSize: '14px', color: '#666' }}>
-                    Seat {player.seat}
+                    Seat {game.players.indexOf(player) + 1}
                   </div>
                 </div>
                 <div 

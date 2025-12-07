@@ -63,12 +63,12 @@ const App: React.FC = () => {
     }
   };
 
-  const createGame = async (name: string, maxPlayers: number) => {
+  const createGame = async (name: string) => {
     try {
       const response = await fetch('/api/games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, maxPlayers })
+        body: JSON.stringify({ name })
       });
       const result = await response.json();
       if (result.success) {
