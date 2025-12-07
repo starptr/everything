@@ -54,6 +54,9 @@ const App: React.FC = () => {
   const fetchGames = async () => {
     try {
       const response = await fetch('/api/games');
+      console.debug('Fetch games status:', response.status);
+      console.debug('Fetch games text:', await response.clone().text());
+      console.debug('Fetch games response:', response);
       const result = await response.json();
       if (result.success) {
         setGames(result.data);
