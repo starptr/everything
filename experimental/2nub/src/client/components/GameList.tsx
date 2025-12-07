@@ -24,12 +24,25 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'waiting': return '#28a745';
-      case 'playing': return '#ffc107';
+  const getStatusColor = (state: string) => {
+    switch (state) {
+      case 'lobby': return '#28a745';
+      case 'night':
+      case 'day':
+      case 'voting': return '#ffc107';
       case 'finished': return '#6c757d';
       default: return '#6c757d';
+    }
+  };
+
+  const getStatusDisplayName = (state: string) => {
+    switch (state) {
+      case 'lobby': return 'Waiting';
+      case 'night': return 'Night Phase';
+      case 'day': return 'Day Phase';
+      case 'voting': return 'Voting';
+      case 'finished': return 'Finished';
+      default: return state;
     }
   };
 
@@ -89,11 +102,11 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
                       fontSize: '12px', 
                       padding: '2px 8px', 
                       borderRadius: '12px', 
-                      backgroundColor: getStatusColor(game.status),
+                      backgroundColor: getStatusColor(game.state.state),
                       color: 'white',
                       textTransform: 'capitalize'
                     }}>
-                      {game.status}
+                      {getStatusDisplayName(game.state.state)}
                     </span>
                   </div>
                   
@@ -169,18 +182,18 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRefresh
                   ) : (
                     <button
                       onClick={() => handleJoinClick(game.id)}
-                      disabled={game.status !== 'waiting'}
+                      disabled={game.state.state !== 'lobby'}
                       style={{
                         padding: '8px 16px',
-                        backgroundColor: game.status !== 'waiting' ? '#6c757d' : '#28a745',
+                        backgroundColor: game.state.state !== 'lobby' ? '#6c757d' : '#28a745',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
                         fontSize: '14px',
-                        cursor: game.status !== 'waiting' ? 'not-allowed' : 'pointer'
+                        cursor: game.state.state !== 'lobby' ? 'not-allowed' : 'pointer'
                       }}
                     >
-                      {game.status !== 'waiting' ? 'In Progress' : 'Join'}
+                      {game.state.state !== 'lobby' ? 'In Progress' : 'Join'}
                     </button>
                   )}
                 </div>

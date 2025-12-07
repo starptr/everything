@@ -11,7 +11,9 @@ describe('GameStateManager', () => {
       
       expect(game.name).toBe('Test Game');
       expect(game.players).toEqual([]);
-      expect(game.status).toBe('waiting');
+      expect(game.state.state).toBe('lobby');
+      expect(game.gameLog).toEqual([]);
+      expect(game.roleOrder).toEqual([]);
       expect(game.id).toBeDefined();
       expect(game.id).toMatch(/^[0-9]{6}$/);
     });
