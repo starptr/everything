@@ -11,23 +11,51 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
   io.on('connection', (socket: ExtendedSocket) => {
     console.log('Socket.io client connected:', socket.id);
     
-
-
+    socket.on('authenticatePlayer', (data) => {
+      const { gameId, playerId } = data;
+      console.log(`Authenticating player ${playerId} for game ${gameId} on socket ${socket.id}`);
+      
+      // Register the socket with the player
+      const registered = gameStateManager.registerPlayerSocket(gameId, playerId, socket.id);
+      
+      if (registered) {
+        // Store player info on socket for easier access
+        socket.gameId = gameId;
+        socket.playerId = playerId;
+        
+        // Join the game room
+        socket.join(gameId);
+        
+        // Broadcast updated game state to all players in the room
+        const gameState = gameStateManager.getGame(gameId);
+        if (gameState) {
+          broadcastToGame(gameId, 'gameState', gameState);
+        }
+        
+        console.log(`Player ${playerId} authenticated and joined room ${gameId}`);
+      } else {
+        console.error(`Failed to authenticate player ${playerId} for game ${gameId}`);
+        socket.emit('error', { error: 'Authentication failed' });
+      }
+    });
 
     socket.on('disconnect', () => {
       console.log('Socket.io client disconnected:', socket.id);
       
-      if (socket.gameId && socket.playerId) {
-        // Update player connection status
-        gameStateManager.updatePlayerConnection(socket.gameId, socket.playerId, false);
+      // Use the socket registry to identify the disconnecting player
+      const mapping = gameStateManager.unregisterSocket(socket.id);
+      
+      if (mapping) {
+        // Leave the game room
+        socket.leave(mapping.gameId);
         
-        // Broadcast updated game state to ALL players in the room (including the disconnecting one)
-        const gameState = gameStateManager.getGame(socket.gameId);
+        // Broadcast updated game state to remaining players in the room
+        const gameState = gameStateManager.getGame(mapping.gameId);
         if (gameState) {
-          broadcastToGame(socket.gameId, 'gameState', gameState);
+          broadcastToGame(mapping.gameId, 'gameState', gameState);
         }
         
-        console.log(`Player ${socket.playerId} left game ${socket.gameId}`);
+        console.log(`Player ${mapping.playerId} disconnected from game ${mapping.gameId}`);
       }
     });
 
