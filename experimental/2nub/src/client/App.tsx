@@ -28,17 +28,17 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleGameState = useCallback((gameState: GameState) => {
+  const onGameState = useCallback((gameState: GameState) => {
     if (gameState?.id === currentGame?.id) {
       setCurrentGame(gameState);
     }
   }, [currentGame]);
 
-  const handleGameCreated = useCallback((game: GameState) => {
+  const onGameCreated = useCallback((game: GameState) => {
     setGames(prevGames => [...prevGames, game]);
   }, []);
 
-  const handleGameDeleted = useCallback((data: { gameId: string }) => {
+  const onGameDeleted = useCallback((data: { gameId: string }) => {
     setGames(prevGames => prevGames.filter(game => game.id !== data.gameId));
     
     // If the current game was deleted, return to list view
@@ -50,22 +50,22 @@ const App: React.FC = () => {
     }
   }, [currentGame]);
 
-  const handlePlayerJoined = useCallback(() => {
+  const onPlayerJoined = useCallback(() => {
     // Refresh games list to show updated player counts
     fetchGames();
   }, [fetchGames]);
 
-  const handlePlayerLeft = useCallback(() => {
+  const onPlayerLeft = useCallback(() => {
     // Refresh games list to show updated player counts  
     fetchGames();
   }, [fetchGames]);
 
-  const handleServerError = useCallback((data: { error: string }) => {
+  const onServerError = useCallback((data: { error: string }) => {
     console.error('Server error:', data.error);
     // Could show a toast notification or error banner here
   }, []);
 
-  const handleDisconnect = useCallback(() => {
+  const onDisconnect = useCallback(() => {
     console.log('Disconnected from Socket.io');
     
     // Immediately update current player's connection status in local state
@@ -86,16 +86,16 @@ const App: React.FC = () => {
   }, [currentGame, currentPlayerId]);
 
   const { isConnected, forceDisconnectPlayer, connect, authenticatePlayer } = useGameEvents({
-    onGameState: handleGameState,
-    onGameCreated: handleGameCreated,
-    onGameDeleted: handleGameDeleted,
-    onPlayerJoined: handlePlayerJoined,
-    onPlayerLeft: handlePlayerLeft,
-    onServerError: handleServerError,
+    onGameState,
+    onGameCreated,
+    onGameDeleted,
+    onPlayerJoined,
+    onPlayerLeft,
+    onServerError,
     onConnect: () => {
       console.log('Connected to Socket.io');
     },
-    onDisconnect: handleDisconnect,
+    onDisconnect,
     onConnectionError: (error) => console.error('Socket.io connection error:', error),
     gameId: currentGame?.id || undefined,
     playerId: currentPlayerId || undefined
