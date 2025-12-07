@@ -1,15 +1,11 @@
 import request from 'supertest';
 import express from 'express';
-import { WebSocketServer } from 'ws';
 import { setupRoutes } from '../../src/server/routes';
 import { gameStateManager } from '../../src/server/gameState';
 
-// Mock WebSocket server
-const mockWss = {} as WebSocketServer;
-
 const app = express();
 app.use(express.json());
-app.use('/api', setupRoutes(mockWss));
+app.use('/api', setupRoutes());
 
 describe('Game API Routes', () => {
   beforeEach(() => {
