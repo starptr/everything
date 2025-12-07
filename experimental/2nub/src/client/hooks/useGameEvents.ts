@@ -17,6 +17,7 @@ interface UseGameEventsOptions {
 interface UseGameEventsReturn {
   isConnected: boolean;
   joinGame: (gameId: string, playerId: string) => void;
+  forceDisconnectPlayer: (gameId: string, playerId: string) => void;
   connect: () => void;
   disconnect: () => void;
 }
@@ -58,6 +59,14 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     }
   }, [socket]);
 
+  const forceDisconnectPlayer = useCallback((gameId: string, playerId: string) => {
+    if (socket?.connected) {
+      socket.emit('forceDisconnectPlayer', { gameId, playerId });
+    } else {
+      console.warn('Socket not connected. Cannot force disconnect player.');
+    }
+  }, [socket]);
+
   useEffect(() => {
     if (!socket) return;
 
@@ -85,6 +94,7 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
   return {
     isConnected,
     joinGame,
+    forceDisconnectPlayer,
     connect,
     disconnect,
   };

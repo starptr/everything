@@ -32,6 +32,21 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
+    socket.on('forceDisconnectPlayer', ({ gameId, playerId }) => {
+      if (gameId && playerId) {
+        // Update player connection status to disconnected
+        gameStateManager.updatePlayerConnection(gameId, playerId, false);
+        
+        // Broadcast updated game state to all players in the room
+        const gameState = gameStateManager.getGame(gameId);
+        if (gameState) {
+          io.to(gameId).emit('gameState', gameState);
+        }
+        
+        console.log(`Player ${playerId} was force disconnected from game ${gameId}`);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log('Socket.io client disconnected:', socket.id);
       
@@ -39,10 +54,10 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         // Update player connection status
         gameStateManager.updatePlayerConnection(socket.gameId, socket.playerId, false);
         
-        // Broadcast updated game state to remaining players
+        // Broadcast updated game state to ALL players in the room (including the disconnecting one)
         const gameState = gameStateManager.getGame(socket.gameId);
         if (gameState) {
-          socket.to(socket.gameId).emit('gameState', gameState);
+          io.to(socket.gameId).emit('gameState', gameState);
         }
         
         console.log(`Player ${socket.playerId} left game ${socket.gameId}`);

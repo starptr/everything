@@ -150,6 +150,32 @@ export function setupRoutes(): Router {
     res.json(response);
   });
 
+  router.post('/games/:gameId/players/:playerId/disconnect', (req, res) => {
+    const { gameId, playerId } = req.params;
+    
+    const updated = gameStateManager.updatePlayerConnection(gameId, playerId, false);
+    
+    if (!updated) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Player or game not found'
+      };
+      return res.status(404).json(response);
+    }
+
+    const game = gameStateManager.getGame(gameId);
+    
+    if (game) {
+      broadcastToGame(gameId, 'gameState', game);
+    }
+
+    const response: ApiResponse = {
+      success: true,
+      data: { disconnected: true }
+    };
+    res.json(response);
+  });
+
   router.delete('/games/:gameId/players/:playerId', (req, res) => {
     const { gameId, playerId } = req.params;
     

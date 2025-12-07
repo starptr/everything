@@ -1,13 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GameState } from '../../types';
 
 interface GameBoardProps {
   game: GameState | null;
   currentPlayerId: string | null;
   onLeave: () => void;
+  onForceDisconnect: (playerId: string) => void;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onLeave }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onLeave, onForceDisconnect }) => {
+  const [disconnectingPlayerId, setDisconnectingPlayerId] = useState<string | null>(null);
+
+  const handleForceDisconnect = (playerId: string, playerName: string) => {
+    const confirmed = window.confirm(`Are you sure you want to force disconnect ${playerName}? They will be able to rejoin later.`);
+    if (confirmed) {
+      setDisconnectingPlayerId(playerId);
+      onForceDisconnect(playerId);
+      setTimeout(() => setDisconnectingPlayerId(null), 1000);
+    }
+  };
+
   if (!game) {
     return (
       <div style={{
@@ -36,6 +48,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
 
   const currentPlayer = currentPlayerId ? game.players.find(p => p.id === currentPlayerId) : null;
   const playerList = game.players;
+  const isCurrentPlayerDisconnected = currentPlayer && !currentPlayer.connected;
 
   return (
     <div style={{
@@ -69,6 +82,32 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
           </div>
         </div>
       </div>
+
+      {isCurrentPlayerDisconnected && (
+        <div style={{
+          backgroundColor: '#f8d7da',
+          border: '2px solid #f5c6cb',
+          borderRadius: '6px',
+          padding: '15px',
+          marginBottom: '20px',
+          color: '#721c24'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              backgroundColor: '#dc3545'
+            }} />
+            <div>
+              <strong>You are currently disconnected</strong>
+              <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>
+                Trying to reconnect... You can refresh the page or use the rejoin feature if needed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {currentPlayer && (
         <div style={{
@@ -109,15 +148,36 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
                     Seat {game.players.indexOf(player) + 1}
                   </div>
                 </div>
-                <div 
-                  title={player.connected ? 'Connected' : 'Disconnected'}
-                  style={{
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    backgroundColor: player.connected ? '#28a745' : '#dc3545'
-                  }} 
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {player.connected && player.id !== currentPlayerId && (
+                    <button
+                      onClick={() => handleForceDisconnect(player.id, player.name)}
+                      disabled={disconnectingPlayerId === player.id}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        backgroundColor: disconnectingPlayerId === player.id ? '#6c757d' : '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: disconnectingPlayerId === player.id ? 'not-allowed' : 'pointer',
+                        opacity: disconnectingPlayerId === player.id ? 0.7 : 1
+                      }}
+                      title="Force disconnect this player"
+                    >
+                      {disconnectingPlayerId === player.id ? '...' : 'Disconnect'}
+                    </button>
+                  )}
+                  <div 
+                    title={player.connected ? 'Connected' : 'Disconnected'}
+                    style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      backgroundColor: player.connected ? '#28a745' : '#dc3545'
+                    }} 
+                  />
+                </div>
               </div>
             ))}
           </div>
