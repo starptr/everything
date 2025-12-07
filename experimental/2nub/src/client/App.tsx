@@ -122,7 +122,9 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerId })
       });
+      console.debug('HTTP rejoin response:', response.clone());
       const result = await response.json();
+      console.debug('Response json:', result);
       if (result.success) {
         setCurrentGame(result.data.game);
         setCurrentPlayerId(result.data.player.id);
@@ -201,9 +203,11 @@ const App: React.FC = () => {
       await fetchGames();
       
       const session = sessionStorage.getPlayerSession();
+      console.debug('Retrieved session from storage:', session);
       if (session.playerId && session.gameId) {
         const rejoined = await attemptRejoin(session.gameId, session.playerId);
         if (!rejoined) {
+          console.debug('Failed to rejoin session, clearing stored session');
           sessionStorage.clearPlayerSession();
         }
       }
