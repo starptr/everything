@@ -85,14 +85,17 @@ const App: React.FC = () => {
     }
   }, [currentGame, currentPlayerId]);
 
-  const { isConnected, joinGame: socketJoinGame, forceDisconnectPlayer, connect } = useGameEvents({
+  const { isConnected, forceDisconnectPlayer, connect, autoJoinFromSession } = useGameEvents({
     onGameState: handleGameState,
     onGameCreated: handleGameCreated,
     onGameDeleted: handleGameDeleted,
     onPlayerJoined: handlePlayerJoined,
     onPlayerLeft: handlePlayerLeft,
     onServerError: handleServerError,
-    onConnect: () => console.log('Connected to Socket.io'),
+    onConnect: () => {
+      console.log('Connected to Socket.io');
+      autoJoinFromSession();
+    },
     onDisconnect: handleDisconnect,
     onConnectionError: (error) => console.error('Socket.io connection error:', error)
   });
@@ -126,7 +129,6 @@ const App: React.FC = () => {
         setCurrentPlayerId(result.data.player.id);
         setView('game');
         
-        socketJoinGame(gameId, result.data.player.id);
         return true;
       }
     } catch (error) {
@@ -159,8 +161,6 @@ const App: React.FC = () => {
         setView('game');
         
         sessionStorage.setPlayerSession(result.data.player.id, gameId);
-        
-        socketJoinGame(gameId, result.data.player.id);
       } else {
         console.error('Failed to join game:', result.error);
       }

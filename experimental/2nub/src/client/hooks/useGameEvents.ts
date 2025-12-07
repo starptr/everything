@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
 import { GameState, Player, ServerToClientEvents } from '../../types';
 import { buildApiUrl } from '../config/api';
+import { sessionStorage } from '../utils/sessionStorage';
 
 interface UseGameEventsOptions {
   onGameState: (gameState: GameState) => void;
@@ -17,10 +18,10 @@ interface UseGameEventsOptions {
 
 interface UseGameEventsReturn {
   isConnected: boolean;
-  joinGame: (gameId: string, playerId: string) => void;
   forceDisconnectPlayer: (gameId: string, playerId: string) => Promise<void>;
   connect: () => void;
   disconnect: () => void;
+  autoJoinFromSession: () => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -52,13 +53,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     onConnectionError
   });
 
-  const joinGame = useCallback((gameId: string, playerId: string) => {
-    if (socket?.connected) {
-      socket.emit('joinGame', { gameId, playerId });
-    } else {
-      console.warn('Socket not connected. Cannot join game.');
-    }
-  }, [socket]);
 
   const forceDisconnectPlayer = useCallback(async (gameId: string, playerId: string) => {
     try {
@@ -74,6 +68,15 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
       console.error('Error force disconnecting player:', error);
     }
   }, []);
+
+  const autoJoinFromSession = useCallback(() => {
+    if (socket?.connected) {
+      const session = sessionStorage.getPlayerSession();
+      if (session.gameId && session.playerId) {
+        socket.emit('autoJoin', { gameId: session.gameId, playerId: session.playerId });
+      }
+    }
+  }, [socket]);
 
   useEffect(() => {
     if (!socket) return;
@@ -101,9 +104,9 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
 
   return {
     isConnected,
-    joinGame,
     forceDisconnectPlayer,
     connect,
     disconnect,
+    autoJoinFromSession,
   };
 }

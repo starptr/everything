@@ -10,27 +10,35 @@ interface ExtendedSocket extends Socket<ClientToServerEvents, ServerToClientEven
 export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEvents>) {
   io.on('connection', (socket: ExtendedSocket) => {
     console.log('Socket.io client connected:', socket.id);
-
-    socket.on('joinGame', ({ gameId, playerId }) => {
+    
+    // Handle automatic room joining based on session
+    socket.on('autoJoin', ({ gameId, playerId }) => {
       if (gameId && playerId) {
-        socket.gameId = gameId;
-        socket.playerId = playerId;
+        // Verify the player exists in the game
+        const game = gameStateManager.getGame(gameId);
+        const player = game?.players.find(p => p.id === playerId);
         
-        // Join the game room
-        socket.join(gameId);
-        
-        // Update player connection status
-        gameStateManager.updatePlayerConnection(gameId, playerId, true);
-        
-        // Broadcast updated game state to all players in the room
-        const gameState = gameStateManager.getGame(gameId);
-        if (gameState) {
-          broadcastToGame(gameId, 'gameState', gameState);
+        if (game && player) {
+          socket.gameId = gameId;
+          socket.playerId = playerId;
+          
+          // Join the game room
+          socket.join(gameId);
+          
+          // Update player connection status
+          gameStateManager.updatePlayerConnection(gameId, playerId, true);
+          
+          // Broadcast updated game state to all players in the room
+          const updatedGameState = gameStateManager.getGame(gameId);
+          if (updatedGameState) {
+            broadcastToGame(gameId, 'gameState', updatedGameState);
+          }
+          
+          console.log(`Player ${playerId} auto-joined game ${gameId}`);
         }
-        
-        console.log(`Player ${playerId} joined game ${gameId}`);
       }
     });
+
 
 
     socket.on('disconnect', () => {
