@@ -32,6 +32,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, currentPlayerId, onL
       </div>
     );
   }
+  console.debug("Game:", game);
 
   const currentPlayer = currentPlayerId ? game.players.find(p => p.id === currentPlayerId) : null;
   const playerList = game.players;
