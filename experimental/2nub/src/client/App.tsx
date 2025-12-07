@@ -189,8 +189,8 @@ const App: React.FC = () => {
     if (!currentGame) return;
     
     try {
-      // Use socket to force disconnect
-      forceDisconnectPlayer(currentGame.id, playerId);
+      // Use REST API to force disconnect
+      await forceDisconnectPlayer(currentGame.id, playerId);
     } catch (error) {
       console.error('Failed to force disconnect player:', error);
     }

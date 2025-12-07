@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
 import { GameState, Player, ServerToClientEvents } from '../../types';
+import { buildApiUrl } from '../config/api';
 
 interface UseGameEventsOptions {
   onGameState: (gameState: GameState) => void;
@@ -17,7 +18,7 @@ interface UseGameEventsOptions {
 interface UseGameEventsReturn {
   isConnected: boolean;
   joinGame: (gameId: string, playerId: string) => void;
-  forceDisconnectPlayer: (gameId: string, playerId: string) => void;
+  forceDisconnectPlayer: (gameId: string, playerId: string) => Promise<void>;
   connect: () => void;
   disconnect: () => void;
 }
@@ -59,13 +60,20 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     }
   }, [socket]);
 
-  const forceDisconnectPlayer = useCallback((gameId: string, playerId: string) => {
-    if (socket?.connected) {
-      socket.emit('forceDisconnectPlayer', { gameId, playerId });
-    } else {
-      console.warn('Socket not connected. Cannot force disconnect player.');
+  const forceDisconnectPlayer = useCallback(async (gameId: string, playerId: string) => {
+    try {
+      const response = await fetch(buildApiUrl(`api/games/${gameId}/players/${playerId}/disconnect`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+      if (!result.success) {
+        console.error('Failed to force disconnect player:', result.error);
+      }
+    } catch (error) {
+      console.error('Error force disconnecting player:', error);
     }
-  }, [socket]);
+  }, []);
 
   useEffect(() => {
     if (!socket) return;
