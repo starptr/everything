@@ -8,7 +8,8 @@
       "Bash(npm test)",
       "Bash(npm run dev:server:*)",
       "Bash(npm run dev:client:*)",
-      "Bash(timeout 10s npm run dev:server)"
+      "Bash(timeout 10s npm run dev:server)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
