@@ -4,6 +4,7 @@ import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
 import { useWebSocket } from './hooks/useWebSocket';
 import { GameState, WebSocketMessage } from '../types';
+import { buildApiUrl } from './config/api';
 
 const App: React.FC = () => {
   const [games, setGames] = useState<GameState[]>([]);
@@ -53,7 +54,7 @@ const App: React.FC = () => {
 
   const fetchGames = async () => {
     try {
-      const response = await fetch('/api/games');
+      const response = await fetch(buildApiUrl('api/games'));
       console.debug('Fetch games status:', response.status);
       console.debug('Fetch games text:', await response.clone().text());
       console.debug('Fetch games response:', response);
@@ -68,7 +69,7 @@ const App: React.FC = () => {
 
   const createGame = async (name: string) => {
     try {
-      const response = await fetch('/api/games', {
+      const response = await fetch(buildApiUrl('api/games'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
@@ -84,7 +85,7 @@ const App: React.FC = () => {
 
   const joinGame = async (gameId: string, playerName: string) => {
     try {
-      const response = await fetch(`/api/games/${gameId}/join`, {
+      const response = await fetch(buildApiUrl(`api/games/${gameId}/join`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerName })
@@ -109,7 +110,7 @@ const App: React.FC = () => {
     if (!currentGame || !currentPlayerId) return;
     
     try {
-      await fetch(`/api/games/${currentGame.id}/players/${currentPlayerId}`, {
+      await fetch(buildApiUrl(`api/games/${currentGame.id}/players/${currentPlayerId}`), {
         method: 'DELETE'
       });
       setCurrentGame(null);
