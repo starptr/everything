@@ -85,7 +85,7 @@ const App: React.FC = () => {
     }
   }, [currentGame, currentPlayerId]);
 
-  const { isConnected, forceDisconnectPlayer, connect, autoJoinFromSession } = useGameEvents({
+  const { isConnected, forceDisconnectPlayer, connect } = useGameEvents({
     onGameState: handleGameState,
     onGameCreated: handleGameCreated,
     onGameDeleted: handleGameDeleted,
@@ -94,7 +94,6 @@ const App: React.FC = () => {
     onServerError: handleServerError,
     onConnect: () => {
       console.log('Connected to Socket.io');
-      autoJoinFromSession();
     },
     onDisconnect: handleDisconnect,
     onConnectionError: (error) => console.error('Socket.io connection error:', error)
