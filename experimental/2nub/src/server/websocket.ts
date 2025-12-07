@@ -11,33 +11,6 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
   io.on('connection', (socket: ExtendedSocket) => {
     console.log('Socket.io client connected:', socket.id);
     
-    // Handle automatic room joining based on session
-    socket.on('autoJoin', ({ gameId, playerId }) => {
-      if (gameId && playerId) {
-        // Verify the player exists in the game
-        const game = gameStateManager.getGame(gameId);
-        const player = game?.players.find(p => p.id === playerId);
-        
-        if (game && player) {
-          socket.gameId = gameId;
-          socket.playerId = playerId;
-          
-          // Join the game room
-          socket.join(gameId);
-          
-          // Update player connection status
-          gameStateManager.updatePlayerConnection(gameId, playerId, true);
-          
-          // Broadcast updated game state to all players in the room
-          const updatedGameState = gameStateManager.getGame(gameId);
-          if (updatedGameState) {
-            broadcastToGame(gameId, 'gameState', updatedGameState);
-          }
-          
-          console.log(`Player ${playerId} auto-joined game ${gameId}`);
-        }
-      }
-    });
 
 
 

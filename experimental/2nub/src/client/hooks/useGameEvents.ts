@@ -21,7 +21,6 @@ interface UseGameEventsReturn {
   forceDisconnectPlayer: (gameId: string, playerId: string) => Promise<void>;
   connect: () => void;
   disconnect: () => void;
-  autoJoinFromSession: () => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -69,14 +68,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     }
   }, []);
 
-  const autoJoinFromSession = useCallback(() => {
-    if (socket?.connected) {
-      const session = sessionStorage.getPlayerSession();
-      if (session.gameId && session.playerId) {
-        socket.emit('autoJoin', { gameId: session.gameId, playerId: session.playerId });
-      }
-    }
-  }, [socket]);
 
   useEffect(() => {
     if (!socket) return;
@@ -107,6 +98,5 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     forceDisconnectPlayer,
     connect,
     disconnect,
-    autoJoinFromSession,
   };
 }
