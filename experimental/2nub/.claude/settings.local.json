@@ -9,7 +9,11 @@
       "Bash(npm run dev:server:*)",
       "Bash(npm run dev:client:*)",
       "Bash(timeout 10s npm run dev:server)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

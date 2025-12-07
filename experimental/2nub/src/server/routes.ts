@@ -96,6 +96,41 @@ export function setupRoutes(): Router {
     res.status(201).json(response);
   });
 
+  router.post('/games/:gameId/rejoin', (req, res) => {
+    const { gameId } = req.params;
+    const { playerId }: { playerId: string } = req.body;
+
+    if (!playerId || playerId.trim() === '') {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Player ID is required'
+      };
+      return res.status(400).json(response);
+    }
+
+    const result = gameStateManager.rejoinPlayer(gameId, playerId.trim());
+    
+    if (!result) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Game or player not found'
+      };
+      return res.status(404).json(response);
+    }
+
+    broadcastToGame(gameId, {
+      type: 'playerJoined',
+      data: { player: result.player, game: result.game },
+      gameId
+    });
+
+    const response: ApiResponse = {
+      success: true,
+      data: { player: result.player, game: result.game }
+    };
+    res.json(response);
+  });
+
   router.delete('/games/:gameId/players/:playerId', (req, res) => {
     const { gameId, playerId } = req.params;
     

@@ -5,6 +5,7 @@ import { GameList } from './components/GameList';
 import { useWebSocket } from './hooks/useWebSocket';
 import { GameState, WebSocketMessage } from '../types';
 import { buildApiUrl } from './config/api';
+import { sessionStorage } from './utils/sessionStorage';
 
 const App: React.FC = () => {
   const [games, setGames] = useState<GameState[]>([]);
@@ -83,6 +84,31 @@ const App: React.FC = () => {
     }
   };
 
+  const attemptRejoin = async (gameId: string, playerId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(buildApiUrl(`api/games/${gameId}/rejoin`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setCurrentGame(result.data.game);
+        setCurrentPlayerId(result.data.player.id);
+        setView('game');
+        
+        sendMessage({
+          type: 'joinGame',
+          data: { gameId, playerId: result.data.player.id }
+        });
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to rejoin game:', error);
+    }
+    return false;
+  };
+
   const joinGame = async (gameId: string, playerName: string) => {
     try {
       const response = await fetch(buildApiUrl(`api/games/${gameId}/join`), {
@@ -95,6 +121,8 @@ const App: React.FC = () => {
         setCurrentGame(result.data.game);
         setCurrentPlayerId(result.data.player.id);
         setView('game');
+        
+        sessionStorage.setPlayerSession(result.data.player.id, gameId);
         
         sendMessage({
           type: 'joinGame',
@@ -116,14 +144,27 @@ const App: React.FC = () => {
       setCurrentGame(null);
       setCurrentPlayerId(null);
       setView('list');
+      sessionStorage.clearPlayerSession();
     } catch (error) {
       console.error('Failed to leave game:', error);
     }
   };
 
   useEffect(() => {
-    connect();
-    fetchGames();
+    const initializeApp = async () => {
+      connect();
+      await fetchGames();
+      
+      const session = sessionStorage.getPlayerSession();
+      if (session.playerId && session.gameId) {
+        const rejoined = await attemptRejoin(session.gameId, session.playerId);
+        if (!rejoined) {
+          sessionStorage.clearPlayerSession();
+        }
+      }
+    };
+    
+    initializeApp();
   }, []);
 
   return (
