@@ -1,71 +1,71 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { WebSocketMessage } from '../../types';
-import { getWebSocketUrl } from '../config/api';
+import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../config/api';
 
 interface UseWebSocketOptions {
-  onMessage?: (message: WebSocketMessage) => void;
-  onOpen?: () => void;
-  onClose?: () => void;
-  onError?: (error: Event) => void;
+  onGameState?: (gameState: any) => void;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+  onError?: (error: any) => void;
 }
 
 interface UseWebSocketReturn {
   isConnected: boolean;
-  sendMessage: (message: any) => void;
+  joinGame: (gameId: string, playerId: string) => void;
   connect: () => void;
   disconnect: () => void;
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const { onMessage, onOpen, onClose, onError } = options;
+  const socketRef = useRef<Socket | null>(null);
+  const { onGameState, onConnect, onDisconnect, onError } = options;
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (socketRef.current?.connected) {
       return;
     }
 
-    const wsUrl = getWebSocketUrl();
-    
-    wsRef.current = new WebSocket(wsUrl);
+    socketRef.current = io(API_BASE_URL, {
+      transports: ['websocket', 'polling']
+    });
 
-    wsRef.current.onopen = () => {
+    socketRef.current.on('connect', () => {
       setIsConnected(true);
-      onOpen?.();
-    };
+      onConnect?.();
+    });
 
-    wsRef.current.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data);
-        onMessage?.(message);
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
+    socketRef.current.on('gameState', (gameState) => {
+      onGameState?.(gameState);
+    });
 
-    wsRef.current.onclose = () => {
+    socketRef.current.on('disconnect', () => {
       setIsConnected(false);
-      onClose?.();
-    };
+      onDisconnect?.();
+    });
 
-    wsRef.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
+    socketRef.current.on('connect_error', (error) => {
+      console.error('Socket.io connection error:', error);
       onError?.(error);
-    };
-  }, [onMessage, onOpen, onClose, onError]);
+    });
+
+    socketRef.current.on('error', (error) => {
+      console.error('Socket.io error:', error);
+      onError?.(error);
+    });
+  }, [onGameState, onConnect, onDisconnect, onError]);
 
   const disconnect = useCallback(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
+    socketRef.current?.disconnect();
+    socketRef.current = null;
     setIsConnected(false);
   }, []);
 
-  const sendMessage = useCallback((message: any) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
+  const joinGame = useCallback((gameId: string, playerId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('joinGame', { gameId, playerId });
     } else {
-      console.warn('WebSocket not connected. Cannot send message.');
+      console.warn('Socket not connected. Cannot join game.');
     }
   }, []);
 
@@ -77,7 +77,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
   return {
     isConnected,
-    sendMessage,
+    joinGame,
     connect,
     disconnect,
   };

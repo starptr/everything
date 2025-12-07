@@ -81,6 +81,21 @@ export interface JoinGameRequest {
   existingPlayerId?: Player["id"];
 }
 
+// Socket.io event interfaces
+export interface ServerToClientEvents {
+  gameState: (gameState: GameState) => void;
+  playerJoined: (data: { game: GameState; player: Player }) => void;
+  playerLeft: (data: { game: GameState; playerId: string }) => void;
+  gameCreated: (game: GameState) => void;
+  gameDeleted: (data: { gameId: string }) => void;
+  error: (data: { error: string }) => void;
+}
+
+export interface ClientToServerEvents {
+  joinGame: (data: { gameId: string; playerId: string }) => void;
+}
+
+// Legacy WebSocket message interface (can be removed if not used elsewhere)
 export interface WebSocketMessage {
   type: 'gameState' | 'playerJoined' | 'playerLeft' | 'gameCreated' | 'gameDeleted' | 'error';
   data: any;

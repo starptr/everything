@@ -22,10 +22,3 @@ export const buildApiUrl = (path: string): string => {
   return `${API_BASE_URL}/${cleanPath}`;
 };
 
-// WebSocket URL configuration
-export const getWebSocketUrl = (): string => {
-  const baseUrl = API_BASE_URL;
-  // Convert HTTP(S) to WS(S)
-  const wsUrl = baseUrl.replace(/^http/, 'ws');
-  return wsUrl;
-};

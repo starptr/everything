@@ -13,44 +13,16 @@ const App: React.FC = () => {
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'game'>('list');
 
-  const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
-    switch (message.type) {
-      case 'gameState':
-        if (message.gameId === currentGame?.id) {
-          setCurrentGame(message.data);
-        }
-        break;
-      case 'gameCreated':
-        setGames(prev => [...prev, message.data]);
-        break;
-      case 'gameDeleted':
-        setGames(prev => prev.filter(g => g.id !== message.data.gameId));
-        if (currentGame?.id === message.data.gameId) {
-          setCurrentGame(null);
-          setCurrentPlayerId(null);
-          setView('list');
-        }
-        break;
-      case 'playerJoined':
-        if (message.gameId === currentGame?.id) {
-          setCurrentGame(message.data.game);
-        }
-        break;
-      case 'playerLeft':
-        if (message.gameId === currentGame?.id) {
-          setCurrentGame(message.data.game);
-        }
-        break;
-      case 'error':
-        console.error('WebSocket error:', message.data.error);
-        break;
+  const handleGameState = useCallback((gameState: GameState) => {
+    if (gameState?.id === currentGame?.id) {
+      setCurrentGame(gameState);
     }
   }, [currentGame]);
 
-  const { isConnected, sendMessage, connect } = useWebSocket({
-    onMessage: handleWebSocketMessage,
-    onOpen: () => console.log('Connected to WebSocket'),
-    onClose: () => console.log('Disconnected from WebSocket'),
+  const { isConnected, joinGame: socketJoinGame, connect } = useWebSocket({
+    onGameState: handleGameState,
+    onConnect: () => console.log('Connected to Socket.io'),
+    onDisconnect: () => console.log('Disconnected from Socket.io'),
   });
 
   const fetchGames = async () => {
@@ -97,10 +69,7 @@ const App: React.FC = () => {
         setCurrentPlayerId(result.data.player.id);
         setView('game');
         
-        sendMessage({
-          type: 'joinGame',
-          data: { gameId, playerId: result.data.player.id }
-        });
+        socketJoinGame(gameId, result.data.player.id);
         return true;
       }
     } catch (error) {
@@ -134,10 +103,7 @@ const App: React.FC = () => {
         
         sessionStorage.setPlayerSession(result.data.player.id, gameId);
         
-        sendMessage({
-          type: 'joinGame',
-          data: { gameId, playerId: result.data.player.id }
-        });
+        socketJoinGame(gameId, result.data.player.id);
       } else {
         console.error('Failed to join game:', result.error);
       }

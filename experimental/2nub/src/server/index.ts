@@ -1,13 +1,20 @@
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
-import { setupWebSocket } from './websocket';
+import { Server } from 'socket.io';
+import { setupSocketIO } from './websocket';
 import { setupRoutes } from './routes';
+import { ClientToServerEvents, ServerToClientEvents } from '../types';
 
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
+  cors: {
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
 
 // Configure CORS to allow requests from frontend
 app.use(cors({
@@ -19,7 +26,13 @@ app.use(express.json());
 
 app.use('/api', setupRoutes());
 
-setupWebSocket(wss);
+// Make io instance available globally for broadcast functions
+declare global {
+  var io: Server<ClientToServerEvents, ServerToClientEvents>;
+}
+global.io = io;
+
+setupSocketIO(io);
 
 app.use(express.static('dist/client'));
 
