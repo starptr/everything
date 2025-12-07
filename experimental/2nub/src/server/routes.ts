@@ -84,6 +84,10 @@ export function setupRoutes(): Router {
       // Get updated game state after connection update
       const updatedGame = gameStateManager.getGame(gameId);
 
+      if (!updatedGame) {
+        return respondGameNotFound(res, null);
+      }
+
       broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
 
       return respondSuccessWithData(res, 200, {
@@ -108,6 +112,10 @@ export function setupRoutes(): Router {
     
     const game = gameStateManager.getGame(gameId);
     
+    if (!game) {
+      return respondGameNotFound(res, null);
+    }
+
     broadcastToGame(gameId, 'playerJoined', { player, game });
 
     return respondSuccessWithData(res, 201, { player, game });
@@ -133,6 +141,10 @@ export function setupRoutes(): Router {
     
     // Get updated game state after connection update
     const updatedGame = gameStateManager.getGame(gameId);
+
+    if (!updatedGame) {
+      return respondGameNotFound(res, null);
+    }
 
     broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
 
