@@ -75,9 +75,9 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
             <h1>Lobby</h1>
             <p>Waiting for players to join...</p>
             <form onSubmit={handleSubmit} className="form">
-                <div className="roles-section">
+                <div>
                     <h2>Roles Available to be Added</h2>
-                    <ul className="roles-list">
+                    <ul>
                         {ROLES.map(roleId => (
                             <li key={roleId}>
                                 {roleId}{" "}
@@ -87,11 +87,11 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
                     </ul>
                 </div>
                 
-                <div className="role-order">
+                <div>
                     <h2>Order of Roles</h2>
-                    <ol className="role-list">
+                    <ol>
                         {stateLobby.ruleset.roleOrder.map((roleId, index) => (
-                            <li key={index} className="role-item">
+                            <li key={index}>
                                 <button onClick={makeRoleMoveUpHandler(index)}>⬆️</button>
                                 <button onClick={makeRoleMoveDownHandler(index)}>⬇️</button>
                                 <button onClick={makeRoleDeleteHandler(index)}>❌</button>
