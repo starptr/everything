@@ -6,6 +6,14 @@ interface PlayerSocketMapping {
   socketId: string;
 }
 
+/**
+ * Randomly returns true with probability p.
+ * @param p Probability of true
+ */
+function flip(p: number): boolean {
+  return Math.random() < p;
+}
+
 function shuffle<T>(array: T[]): T[] {
   const a = [...array]; // Copy to avoid mutating
   for (let i = a.length - 1; i > 0; i--) {
@@ -234,6 +242,25 @@ class GameStateManager {
     else if (game.players.length + 3 !== game.state.ruleset.roleOrder.length) return null;
 
     // Transition to in-game state
+
+    if (game.state.ruleset.special.maybeAllTanners.enabled) {
+      if (flip(game.state.ruleset.special.maybeAllTanners.probability)) {
+        // Set all players to Tanner
+        game.state = {
+          state: 'night',
+          playerData: Object.fromEntries(
+            game.players.map(player => [player.id, {
+              originalRoleId: 'tanner',
+              currentRoleId: 'tanner',
+              playerLog: [],
+            }])
+          ),
+          centerCards: ['tanner', 'tanner', 'tanner'],
+          ruleset: { ...game.state.ruleset },
+        }
+        return game;
+      }
+    }
 
     const [unshuffledCenterCards, remainingRoles] = chooseN(game.state.ruleset.roleOrder, 3);
     const centerCards = shuffle(unshuffledCenterCards);
