@@ -69,6 +69,31 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
+    socket.on('startGame', (data) => {
+      const { gameId } = data;
+
+      // Verify the socket is authenticated for this game
+      if (socket.gameId !== gameId) {
+        console.error(`Socket ${socket.id} not authenticated for game ${gameId}`);
+        socket.emit('error', { error: 'Not authenticated for this game' });
+        return;
+      }
+
+      console.log(`Starting game ${gameId} from socket ${socket.id}`);
+
+      // Start the game via game state manager
+      const startedGameState = gameStateManager.maybeStartGame(gameId);
+      
+      if (startedGameState) {
+        // Broadcast updated game state to all players in the room
+        broadcastToGame(gameId, 'gameState', toGameStateClient(startedGameState));
+        console.log(`Game ${gameId} started and broadcasted`);
+      } else {
+        console.error(`Failed to start game ${gameId}`);
+        socket.emit('error', { error: 'Failed to start game' });
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log('Socket.io client disconnected:', socket.id);
       

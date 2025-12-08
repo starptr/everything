@@ -10,7 +10,7 @@ interface OnubLobbyProps {
 }
 
 export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, currentPlayerId }) => {
-    const { updateRuleset } = useSocketEvents();
+    const { updateRuleset, startGame } = useSocketEvents();
     console.debug("Player count: ", playerCount);
 
     function makeRoleAddHandler(roleId: RoleId): React.MouseEventHandler<HTMLButtonElement> {
@@ -67,7 +67,7 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        throw new Error('Not implemented: handleSubmit in OnubLobby');
+        startGame();
     }
 
     return (

@@ -1,9 +1,47 @@
-import { GameState, Player, StateLobby } from '../types';
+import { GameState, Player, StateLobby, StateNight } from '../types';
 
 interface PlayerSocketMapping {
   gameId: string;
   playerId: string;
   socketId: string;
+}
+
+function shuffle<T>(array: T[]): T[] {
+  const a = [...array]; // Copy to avoid mutating
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/*
+ * Selects n random elements from the array, and returns a tuple of
+ * [selectedElements, remainingElements].
+ * Preserves the original order of elements.
+ */
+function chooseN<T>(array: T[], n: number): [T[], T[]] {
+  array = [...array]; // Copy to avoid mutating
+  if (n < 0 || n > array.length) {
+    throw new Error("n must be between 0 and array length");
+  }
+  // Generate a list of all indices
+  const indices = array.map((_, i) => i);
+  // Shuffle the indices
+  const shuffledIndices = shuffle(indices);
+  // Select the first n indices
+  const selectedIndices = new Set(shuffledIndices.slice(0, n));
+  // Partition the array based on selected indices
+  const selected: T[] = [];
+  const remaining: T[] = [];
+  array.forEach((item, index) => {
+    if (selectedIndices.has(index)) {
+      selected.push(item);
+    } else {
+      remaining.push(item);
+    }
+  });
+  return [selected, remaining];
 }
 
 class GameStateManager {
@@ -31,7 +69,6 @@ class GameStateManager {
         },
       },
       createdAt: new Date(),
-      lastActivity: new Date()
     };
     
     this.games.set(id, game);
@@ -63,7 +100,6 @@ class GameStateManager {
     };
 
     game.players.push(player);
-    game.lastActivity = new Date();
 
     return player;
   }
@@ -76,7 +112,6 @@ class GameStateManager {
     if (playerIndex === -1) return false;
 
     game.players.splice(playerIndex, 1);
-    game.lastActivity = new Date();
 
     if (game.players.length === 0) {
       this.games.delete(gameId);
@@ -93,7 +128,6 @@ class GameStateManager {
     if (!player) return false;
 
     player.connected = connected;
-    game.lastActivity = new Date();
     return true;
   }
 
@@ -115,7 +149,6 @@ class GameStateManager {
     if (player.connected) return null;
 
     player.connected = true;
-    game.lastActivity = new Date();
 
     return { player, game };
   }
@@ -149,7 +182,6 @@ class GameStateManager {
 
     // Update player connection status
     player.connected = true;
-    game.lastActivity = new Date();
 
     return true;
   }
@@ -189,11 +221,41 @@ class GameStateManager {
 
     // Update the ruleset
     game.state.ruleset = newRuleset;
-    game.lastActivity = new Date();
 
     return game;
   }
 
+  maybeStartGame(gameId: string): GameState | null {
+    const game = this.games.get(gameId);
+    if (!game) return null;
+
+    // Only allow starting the game if invariants hold
+    if (game.state.state !== 'lobby') return null;
+    else if (game.players.length + 3 !== game.state.ruleset.roleOrder.length) return null;
+
+    // Transition to in-game state
+
+    const [unshuffledCenterCards, remainingRoles] = chooseN(game.state.ruleset.roleOrder, 3);
+    const centerCards = shuffle(unshuffledCenterCards);
+
+    const playerIds = shuffle(game.players.map(p => p.id));
+    const playerData: StateNight["playerData"] = Object.fromEntries(
+      playerIds.map((id, index) => [id, {
+        originalRoleId: remainingRoles[index],
+        currentRoleId: remainingRoles[index],
+        playerLog: [],
+      }])
+    );
+
+    game.state = {
+      state: 'night',
+      playerData,
+      centerCards,
+      ruleset: { ...game.state.ruleset },
+    }
+
+    return game;
+  }
 }
 
 export const gameStateManager = new GameStateManager();

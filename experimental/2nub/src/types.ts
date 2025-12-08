@@ -79,7 +79,6 @@ export type GameStateClient = {
   readonly createdAt: Date;
 
   name: string;
-  lastActivity: Date;
   gameLog: string[];
 
   players: Player[];
@@ -122,6 +121,7 @@ export type ServerToClientEvents = {
 export interface ClientToServerEvents {
   authenticatePlayer: (data: { gameId: string; playerId: string }) => void;
   updateRuleset: (data: { gameId: string; ruleset: StateLobby["ruleset"] }) => void;
+  startGame: (data: { gameId: string }) => void;
 }
 
 export interface ApiResponse<T = any> {
