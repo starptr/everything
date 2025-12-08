@@ -1,0 +1,1083 @@
+// ===== VARIABLES =====
+
+// Colors
+$color-primary: #007bff;
+$color-success: #28a745;
+$color-warning: #ffc107;
+$color-danger: #dc3545;
+$color-secondary: #6c757d;
+$color-light: #f8f9fa;
+$color-dark: #333;
+$color-white: #fff;
+
+// Status colors
+$color-connected: #28a745;
+$color-disconnected: #dc3545;
+
+// Background colors
+$bg-connected: #d4edda;
+$bg-disconnected: #f8d7da;
+$bg-info: #d1ecf1;
+$bg-warning: #fff3cd;
+
+// Border colors
+$border-light: #ddd;
+$border-connected: #c3e6cb;
+$border-disconnected: #f5c6cb;
+$border-info: #bee5eb;
+
+// Text colors
+$text-dark: #333;
+$text-muted: #666;
+$text-connected: #155724;
+$text-disconnected: #721c24;
+$text-info: #0c5460;
+
+// Spacing
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 15px;
+$spacing-xl: 20px;
+$spacing-2xl: 30px;
+$spacing-3xl: 40px;
+
+// Border radius
+$border-radius-sm: 4px;
+$border-radius-md: 6px;
+$border-radius-lg: 8px;
+$border-radius-xl: 12px;
+$border-radius-circle: 50%;
+
+// Shadows
+$shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+$shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+// Typography
+$font-size-xs: 12px;
+$font-size-sm: 14px;
+$font-size-md: 16px;
+$font-size-lg: 18px;
+
+// Breakpoints
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 992px;
+$breakpoint-xl: 1200px;
+
+// CSS Custom Properties for theming
+:root {
+  --color-primary: #{$color-primary};
+  --color-success: #{$color-success};
+  --color-danger: #{$color-danger};
+  --color-warning: #{$color-warning};
+  --color-secondary: #{$color-secondary};
+  --color-dark: #{$color-dark};
+  --color-white: #{$color-white};
+  
+  --spacing-sm: #{$spacing-sm};
+  --spacing-md: #{$spacing-md};
+  --spacing-lg: #{$spacing-lg};
+  --spacing-xl: #{$spacing-xl};
+  
+  --border-radius-sm: #{$border-radius-sm};
+  --border-radius-md: #{$border-radius-md};
+  --border-radius-lg: #{$border-radius-lg};
+  
+  --shadow-sm: #{$shadow-sm};
+}
+
+
+// ===== MIXINS =====
+
+// Button mixins
+@mixin button-base {
+  padding: $spacing-sm $spacing-md;
+  border: none;
+  border-radius: $border-radius-sm;
+  cursor: pointer;
+  font-size: $font-size-sm;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  display: inline-block;
+  
+  &:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+    transform: none !important;
+  }
+  
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+@mixin button-primary {
+  @include button-base;
+  background-color: $color-primary;
+  color: $color-white;
+  
+  &:hover:not(:disabled) {
+    background-color: darken($color-primary, 10%);
+  }
+}
+
+@mixin button-success {
+  @include button-base;
+  background-color: $color-success;
+  color: $color-white;
+  
+  &:hover:not(:disabled) {
+    background-color: darken($color-success, 10%);
+  }
+}
+
+@mixin button-danger {
+  @include button-base;
+  background-color: $color-danger;
+  color: $color-white;
+  
+  &:hover:not(:disabled) {
+    background-color: darken($color-danger, 10%);
+  }
+}
+
+@mixin button-secondary {
+  @include button-base;
+  background-color: $color-secondary;
+  color: $color-white;
+  
+  &:hover:not(:disabled) {
+    background-color: darken($color-secondary, 10%);
+  }
+}
+
+// Card/Panel mixins
+@mixin card {
+  background-color: $color-white;
+  padding: $spacing-xl;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-sm;
+}
+
+@mixin card-compact {
+  background-color: $color-white;
+  padding: $spacing-lg;
+  border-radius: $border-radius-md;
+  box-shadow: $shadow-sm;
+}
+
+// Status indicator mixins
+@mixin status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: $border-radius-circle;
+}
+
+@mixin status-badge {
+  padding: 2px $spacing-sm;
+  border-radius: $border-radius-xl;
+  font-size: $font-size-xs;
+  text-transform: capitalize;
+  color: $color-white;
+}
+
+// Form element mixins
+@mixin input-base {
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid $border-light;
+  border-radius: $border-radius-sm;
+  font-size: $font-size-md;
+  
+  &:focus {
+    outline: none;
+    border-color: $color-primary;
+  }
+}
+
+// Layout mixins
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+// Loading animation
+@mixin loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid $color-primary;
+  border-radius: $border-radius-circle;
+  animation: spin 1s linear infinite;
+  margin: $spacing-xl auto;
+}
+
+
+// ===== BASE STYLES =====
+
+// Reset and base styles
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background-color: #f5f5f5;
+  color: $text-dark;
+}
+
+// Common utility classes
+.button {
+  &--primary {
+    @include button-primary;
+  }
+  
+  &--success {
+    @include button-success;
+  }
+  
+  &--danger {
+    @include button-danger;
+  }
+  
+  &--secondary {
+    @include button-secondary;
+  }
+  
+  &--large {
+    padding: $spacing-md $spacing-xl;
+    font-size: $font-size-md;
+    font-weight: bold;
+  }
+  
+  &--small {
+    padding: $spacing-xs $spacing-sm;
+    font-size: $font-size-xs;
+  }
+}
+
+.card {
+  @include card;
+  
+  &--compact {
+    @include card-compact;
+  }
+  
+  &--light {
+    background-color: $color-light;
+    padding: $spacing-lg;
+    border-radius: $border-radius-md;
+  }
+  
+  &--bordered {
+    border: 2px solid $border-light;
+    
+    &.current-player {
+      border-color: $color-primary;
+    }
+  }
+}
+
+.status {
+  &--connected {
+    @include status-badge;
+    background-color: $color-connected;
+  }
+  
+  &--disconnected {
+    @include status-badge;
+    background-color: $color-danger;
+  }
+  
+  &--waiting {
+    @include status-badge;
+    background-color: $color-success;
+  }
+  
+  &--in-progress {
+    @include status-badge;
+    background-color: $color-warning;
+    color: $text-dark;
+  }
+  
+  &--finished {
+    @include status-badge;
+    background-color: $color-secondary;
+  }
+}
+
+.indicator {
+  &--connected {
+    @include status-indicator;
+    background-color: $color-connected;
+  }
+  
+  &--disconnected {
+    @include status-indicator;
+    background-color: $color-danger;
+  }
+}
+
+.alert {
+  padding: $spacing-lg;
+  border-radius: $border-radius-md;
+  margin-bottom: $spacing-xl;
+  
+  &--info {
+    background-color: $bg-info;
+    color: $text-info;
+    border: 1px solid $border-info;
+  }
+  
+  &--warning {
+    background-color: $bg-warning;
+    color: $color-dark;
+    border: 1px solid #ffeaa7;
+  }
+  
+  &--danger {
+    background-color: $bg-disconnected;
+    color: $text-disconnected;
+    border: 2px solid $border-disconnected;
+  }
+}
+
+.loading-spinner {
+  @include loading-spinner;
+}
+
+// Layout utilities
+.flex {
+  display: flex;
+  
+  &--center {
+    @include flex-center;
+  }
+  
+  &--between {
+    @include flex-between;
+  }
+  
+  &--column {
+    @include flex-column;
+  }
+  
+  &--wrap {
+    flex-wrap: wrap;
+  }
+}
+
+.grid {
+  display: grid;
+  
+  &--gap-sm {
+    gap: $spacing-sm;
+  }
+  
+  &--gap-md {
+    gap: $spacing-md;
+  }
+  
+  &--gap-lg {
+    gap: $spacing-lg;
+  }
+  
+  &--auto-fit {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+  
+  &--auto-fill {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  
+  &--two-columns {
+    grid-template-columns: 1fr 2fr;
+    
+    @media (max-width: $breakpoint-md) {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+.text {
+  &--center {
+    text-align: center;
+  }
+  
+  &--muted {
+    color: $text-muted;
+    font-style: italic;
+  }
+  
+  &--small {
+    font-size: $font-size-sm;
+  }
+  
+  &--bold {
+    font-weight: bold;
+  }
+}
+
+.input {
+  @include input-base;
+  
+  &:disabled {
+    background-color: #f5f5f5;
+  }
+}
+
+// Utility classes for common patterns
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sr-only {
+  @extend .visually-hidden;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.empty-state {
+  text-align: center;
+  color: $text-muted;
+  font-style: italic;
+}
+
+
+// ===== APP COMPONENT =====
+
+.app {
+  padding: $spacing-xl;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: $spacing-2xl;
+  
+  h1 {
+    color: $text-dark;
+    margin-bottom: $spacing-sm;
+  }
+}
+
+.connection-bar {
+  @include flex-between;
+  margin-bottom: $spacing-sm;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $border-radius-sm;
+  font-size: $font-size-xs;
+  
+  &.connected {
+    background-color: $bg-connected;
+    color: $text-connected;
+    border: 1px solid $border-connected;
+  }
+  
+  &.disconnected {
+    background-color: $bg-disconnected;
+    color: $text-disconnected;
+    border: 1px solid $border-disconnected;
+  }
+}
+
+.status-dot {
+  @include status-indicator;
+  width: 8px;
+  height: 8px;
+  
+  &.connected {
+    background-color: $color-connected;
+  }
+  
+  &.disconnected {
+    background-color: $color-danger;
+  }
+}
+
+.main-grid {
+  display: grid;
+  gap: $spacing-2xl;
+  grid-template-columns: 1fr 2fr;
+  
+  @media (max-width: $breakpoint-md) {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+// ===== CREATE GAME COMPONENT =====
+
+.create-game {
+  @include card;
+  
+  h2 {
+    margin-top: 0;
+    color: $text-dark;
+  }
+}
+
+.form {
+  @include flex-column;
+  gap: $spacing-lg;
+}
+
+.label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+
+// ===== GAME LIST COMPONENT =====
+
+.game-list {
+  @include card;
+}
+
+.games-container {
+  @include flex-column;
+  gap: $spacing-lg;
+}
+
+.game-card {
+  border: 1px solid $border-light;
+  border-radius: $border-radius-sm;
+  padding: $spacing-lg;
+  background-color: $color-light;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    border-color: $color-primary;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.game-content {
+  @include flex-between;
+  align-items: flex-start;
+}
+
+.game-info {
+  flex: 1;
+  
+  h3 {
+    margin: 0 0 $spacing-sm 0;
+    color: $text-dark;
+  }
+}
+
+.game-meta {
+  display: flex;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-sm;
+  font-size: $font-size-sm;
+  color: $text-muted;
+  
+  strong {
+    color: $text-dark;
+  }
+}
+
+.status-badge {
+  font-size: $font-size-xs;
+  padding: 2px $spacing-sm;
+  border-radius: $border-radius-xl;
+  text-transform: capitalize;
+  color: $color-white;
+  
+  &.waiting {
+    background-color: $color-success;
+  }
+  
+  &.night, &.day, &.voting {
+    background-color: $color-warning;
+    color: $text-dark;
+  }
+  
+  &.finished {
+    background-color: $color-secondary;
+  }
+  
+  &.in-progress {
+    background-color: $color-warning;
+    color: $text-dark;
+  }
+}
+
+.players-section {
+  margin-bottom: $spacing-sm;
+  
+  strong {
+    font-size: $font-size-sm;
+  }
+}
+
+.player-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.player-badge {
+  font-size: $font-size-xs;
+  padding: 2px 6px;
+  border-radius: $border-radius-sm;
+  
+  &.connected {
+    background-color: $bg-connected;
+    color: $text-connected;
+    border: 1px solid $border-connected;
+  }
+  
+  &.disconnected {
+    background-color: $bg-disconnected;
+    color: $text-disconnected;
+    border: 1px solid $border-disconnected;
+  }
+}
+
+.game-actions {
+  margin-left: $spacing-xl;
+}
+
+.join-form {
+  min-width: 300px;
+  
+  .form {
+    @include flex-column;
+    gap: $spacing-sm;
+    
+    @media (max-width: $breakpoint-sm) {
+      min-width: auto;
+      width: 100%;
+    }
+  }
+}
+
+.existing-players {
+  margin-bottom: $spacing-sm;
+}
+
+.section-title {
+  font-size: $font-size-sm;
+  font-weight: bold;
+  margin-bottom: $spacing-xs;
+}
+
+.radio-group {
+  @include flex-column;
+  gap: $spacing-xs;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  
+  span {
+    font-size: $font-size-sm;
+  }
+}
+
+.new-player-section {
+  &.divider {
+    border-top: 1px solid $border-light;
+    padding-top: $spacing-sm;
+  }
+  
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: $spacing-sm;
+    cursor: pointer;
+    
+    span {
+      font-size: $font-size-sm;
+      font-weight: bold;
+    }
+  }
+  
+  input[type="text"] {
+    @include input-base;
+    width: 200px;
+    
+    &:disabled {
+      background-color: #f5f5f5;
+    }
+  }
+}
+
+.form-buttons {
+  display: flex;
+  gap: $spacing-sm;
+  margin-top: $spacing-sm;
+}
+
+
+// ===== GAME BOARD COMPONENT =====
+
+.game-board {
+  @include card;
+  padding: $spacing-2xl;
+  
+  .header {
+    @include flex-between;
+    margin-bottom: $spacing-2xl;
+    padding-bottom: $spacing-xl;
+    border-bottom: 2px solid #eee;
+    
+    h1 {
+      margin: 0 0 $spacing-sm 0;
+      color: $text-dark;
+    }
+  }
+}
+
+.loading-state {
+  @include card;
+  text-align: center;
+  
+  h2 {
+    margin-bottom: $spacing-sm;
+  }
+  
+  p {
+    margin-bottom: $spacing-xl;
+  }
+}
+
+.not-found {
+  @include card;
+  text-align: center;
+  
+  h2 {
+    margin-bottom: $spacing-sm;
+  }
+  
+  p {
+    margin-bottom: $spacing-xl;
+  }
+}
+
+.alert-content {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.status-indicator {
+  @include status-indicator;
+  
+  &.connected {
+    background-color: $color-connected;
+  }
+  
+  &.disconnected {
+    background-color: $color-danger;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.alert-text {
+  strong {
+    display: block;
+  }
+  
+  p {
+    margin: 5px 0 0 0;
+    font-size: $font-size-sm;
+  }
+}
+
+.current-player {
+  @include card-compact;
+  background-color: $color-light;
+  border: 2px solid $color-primary;
+  margin-bottom: $spacing-xl * 1.25;
+  
+  h3 {
+    margin: 0 0 $spacing-sm 0;
+    color: $color-primary;
+  }
+  
+  p {
+    margin: 0;
+    font-size: $font-size-md;
+    
+    strong {
+      color: $text-dark;
+    }
+  }
+}
+
+.players-grid {
+  display: grid;
+  gap: $spacing-sm;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  
+  @media (max-width: $breakpoint-sm) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.player-card {
+  padding: $spacing-md;
+  border-radius: $border-radius-md;
+  border: 2px solid $border-light;
+  background-color: $color-white;
+  @include flex-between;
+  
+  &.current {
+    border-color: $color-primary;
+    background-color: #f0f8ff;
+  }
+}
+
+.player-info {
+  .player-name {
+    font-weight: bold;
+    margin-bottom: $spacing-xs;
+  }
+  
+  .player-seat {
+    font-size: $font-size-sm;
+    color: $text-muted;
+  }
+}
+
+.player-actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.disconnect-btn {
+  @include button-base;
+  padding: $spacing-xs $spacing-sm;
+  font-size: $font-size-xs;
+  background-color: $color-danger;
+  color: $color-white;
+  
+  &:hover:not(:disabled) {
+    background-color: darken($color-danger, 10%);
+  }
+  
+  &:disabled {
+    background-color: $color-secondary;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}
+
+
+// ===== ONUB LOBBY COMPONENT =====
+
+.lobby {
+  @include card-compact;
+  background-color: $color-light;
+  
+  h1 {
+    margin: 0 0 $spacing-sm 0;
+    color: $text-dark;
+  }
+  
+  p {
+    margin: 0 0 $spacing-lg 0;
+    color: $text-muted;
+  }
+  
+  .form {
+    h2 {
+      color: $text-dark;
+      margin-bottom: $spacing-md;
+    }
+  }
+}
+
+.roles-section {
+  margin-bottom: $spacing-xl;
+}
+
+.roles-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  
+  li {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    margin-bottom: $spacing-sm;
+    
+    button {
+      @include button-success;
+      @include button-base;
+      padding: $spacing-xs $spacing-sm;
+      font-size: $font-size-xs;
+    }
+  }
+}
+
+.role-order {
+  margin-bottom: $spacing-xl;
+}
+
+.role-list {
+  list-style: decimal;
+  padding-left: $spacing-xl;
+  margin: 0;
+}
+
+.role-item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-xs;
+  
+  button {
+    @include button-base;
+    padding: 2px 6px;
+    font-size: $font-size-xs;
+    background-color: $color-light;
+    color: $text-dark;
+    border: 1px solid $border-light;
+    
+    &:hover:not(:disabled) {
+      background-color: darken($color-light, 10%);
+    }
+  }
+}
+
+.special-rules {
+  margin-bottom: $spacing-xl;
+}
+
+.rule-option {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: $font-size-sm;
+  
+  input[type="checkbox"] {
+    margin-right: $spacing-xs;
+  }
+  
+  input[type="number"] {
+    @include input-base;
+    width: 80px;
+    margin: 0 $spacing-xs;
+  }
+}
+
+.start-section {
+  button {
+    @include button-primary;
+    @include button-base;
+    padding: $spacing-md $spacing-xl;
+    font-size: $font-size-md;
+    font-weight: bold;
+    
+    &:disabled {
+      background-color: $color-secondary;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.game-area {
+  @include card-compact;
+  background-color: $color-light;
+  
+  h3 {
+    margin: 0 0 $spacing-sm 0;
+    color: $text-dark;
+  }
+}
+
+.game-area__placeholder {
+  p {
+    margin: 0 0 $spacing-lg 0;
+    color: $text-muted;
+  }
+  
+  ul {
+    text-align: left;
+    color: $text-muted;
+    margin: 0 0 $spacing-xl 0;
+    padding-left: $spacing-xl;
+  }
+  
+  .alert--info {
+    padding: $spacing-lg;
+    background-color: $bg-info;
+    border-radius: $border-radius-sm;
+    color: $text-info;
+    border: 1px solid $border-info;
+    
+    strong {
+      display: block;
+      margin-bottom: $spacing-xs;
+    }
+  }
+}
+
+
+// ===== ANIMATIONS =====
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

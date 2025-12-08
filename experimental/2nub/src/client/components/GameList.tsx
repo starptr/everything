@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GameState } from '../../types';
+import '../styles/main.scss';
 
 interface GameListProps {
   games: GameState[];
@@ -67,83 +68,55 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
     }
   };
 
+  const getStatusClass = (state: string) => {
+    switch (state) {
+      case 'lobby': return 'waiting';
+      case 'night':
+      case 'day':
+      case 'voting': return 'night';
+      case 'finished': return 'finished';
+      default: return 'finished';
+    }
+  };
+
   return (
-    <div style={{
-      backgroundColor: 'white',
-      padding: '20px',
-      borderRadius: '8px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '20px' 
-      }}>
-        <h2 style={{ margin: 0, color: '#333' }}>Available Games</h2>
-        <button
-          onClick={onRefresh}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
+    <div className="game-list">
+      <div className="header">
+        <h2>Available Games</h2>
+        <button onClick={onRefresh} className="button--secondary">
           Refresh
         </button>
       </div>
 
       {games.length === 0 ? (
-        <p style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
+        <p className="empty-state">
           No games available. Create one to get started!
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <div className="games-container">
           {games.map((game) => (
-            <div key={game.id} style={{
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              padding: '15px',
-              backgroundColor: '#f8f9fa'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ margin: '0 0 8px 0', color: '#333' }}>{game.name}</h3>
-                  <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '14px', color: '#666' }}>
+            <div key={game.id} className="game-card">
+              <div className="game-content">
+                <div className="game-info">
+                  <h3>{game.name}</h3>
+                  <div className="game-meta">
+                    <span>
                       ID: <strong>{game.id}</strong>
                     </span>
-                    <span style={{ fontSize: '14px', color: '#666' }}>
+                    <span>
                       Players: <strong>{game.players.length}</strong>
                     </span>
-                    <span style={{ 
-                      fontSize: '12px', 
-                      padding: '2px 8px', 
-                      borderRadius: '12px', 
-                      backgroundColor: getStatusColor(game.state.state),
-                      color: 'white',
-                      textTransform: 'capitalize'
-                    }}>
+                    <span className={`status-badge ${getStatusClass(game.state.state)}`}>
                       {getStatusDisplayName(game.state.state)}
                     </span>
                   </div>
                   
                   {game.players.length > 0 && (
-                    <div style={{ marginBottom: '10px' }}>
-                      <strong style={{ fontSize: '14px' }}>Players:</strong>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' }}>
+                    <div className="players-section">
+                      <strong>Players:</strong>
+                      <div className="player-badges">
                         {game.players.map((player) => (
-                          <span key={player.id} style={{
-                            fontSize: '12px',
-                            padding: '2px 6px',
-                            backgroundColor: player.connected ? '#d4edda' : '#f8d7da',
-                            color: player.connected ? '#155724' : '#721c24',
-                            borderRadius: '4px',
-                            border: `1px solid ${player.connected ? '#c3e6cb' : '#f5c6cb'}`
-                          }}>
+                          <span key={player.id} className={`player-badge ${player.connected ? 'connected' : 'disconnected'}`}>
                             {player.name} (Seat {game.players.indexOf(player) + 1})
                           </span>
                         ))}
@@ -152,21 +125,21 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                   )}
                 </div>
 
-                <div style={{ marginLeft: '20px' }}>
+                <div className="game-actions">
                   {joiningGameId === game.id ? (
-                    <div style={{ minWidth: '300px' }}>
+                    <div className="join-form">
                       {(() => {
                         const disconnectedPlayers = game.players.filter(p => !p.connected);
                         return (
-                          <form onSubmit={(e) => handleJoinSubmit(e, game.id)} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <form onSubmit={(e) => handleJoinSubmit(e, game.id)} className="form">
                             {disconnectedPlayers.length > 0 && (
-                              <div style={{ marginBottom: '8px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>
+                              <div className="existing-players">
+                                <div className="section-title">
                                   Join as disconnected player:
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div className="radio-group">
                                   {disconnectedPlayers.map((player) => (
-                                    <label key={player.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                    <label key={player.id} className="radio-option">
                                       <input
                                         type="radio"
                                         name="joinOption"
@@ -174,7 +147,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                                         checked={selectedExistingPlayer === player.id}
                                         onChange={() => handleExistingPlayerSelect(player.id)}
                                       />
-                                      <span style={{ fontSize: '14px' }}>
+                                      <span>
                                         {player.name} (Seat {game.players.indexOf(player) + 1})
                                       </span>
                                     </label>
@@ -183,8 +156,8 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                               </div>
                             )}
                             
-                            <div style={{ borderTop: disconnectedPlayers.length > 0 ? '1px solid #ddd' : 'none', paddingTop: disconnectedPlayers.length > 0 ? '8px' : '0' }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', cursor: 'pointer' }}>
+                            <div className={disconnectedPlayers.length > 0 ? 'new-player-section divider' : 'new-player-section'}>
+                              <label className="radio-option">
                                 <input
                                   type="radio"
                                   name="joinOption"
@@ -192,7 +165,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                                   checked={selectedExistingPlayer === null}
                                   onChange={handleNewPlayerSelect}
                                 />
-                                <span style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                                <span>
                                   Join as new player:
                                 </span>
                               </label>
@@ -202,31 +175,16 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                                 onChange={(e) => setPlayerName(e.target.value)}
                                 placeholder="Your name"
                                 disabled={selectedExistingPlayer !== null}
-                                style={{
-                                  padding: '6px 10px',
-                                  border: '1px solid #ddd',
-                                  borderRadius: '4px',
-                                  fontSize: '14px',
-                                  width: '200px',
-                                  backgroundColor: selectedExistingPlayer !== null ? '#f5f5f5' : 'white'
-                                }}
+                                className="input"
                                 required={selectedExistingPlayer === null}
                               />
                             </div>
                             
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <div className="form-buttons">
                               <button
                                 type="submit"
                                 disabled={!selectedExistingPlayer && !playerName.trim()}
-                                style={{
-                                  padding: '6px 12px',
-                                  backgroundColor: (!selectedExistingPlayer && !playerName.trim()) ? '#6c757d' : '#28a745',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  fontSize: '14px',
-                                  cursor: (!selectedExistingPlayer && !playerName.trim()) ? 'not-allowed' : 'pointer'
-                                }}
+                                className={(!selectedExistingPlayer && !playerName.trim()) ? 'button--secondary button--small' : 'button--success button--small'}
                               >
                                 Join
                               </button>
@@ -237,15 +195,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                                   setSelectedExistingPlayer(null);
                                   setPlayerName('');
                                 }}
-                                style={{
-                                  padding: '6px 12px',
-                                  backgroundColor: '#6c757d',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  fontSize: '14px',
-                                  cursor: 'pointer'
-                                }}
+                                className="button--secondary button--small"
                               >
                                 Cancel
                               </button>
@@ -258,15 +208,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                     <button
                       onClick={() => handleJoinClick(game.id)}
                       disabled={game.state.state !== 'lobby'}
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: game.state.state !== 'lobby' ? '#6c757d' : '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontSize: '14px',
-                        cursor: game.state.state !== 'lobby' ? 'not-allowed' : 'pointer'
-                      }}
+                      className={game.state.state !== 'lobby' ? 'button--secondary' : 'button--success'}
                     >
                       {game.state.state !== 'lobby' ? 'In Progress' : 'Join'}
                     </button>

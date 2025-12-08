@@ -7,6 +7,7 @@ import { SocketEventProvider } from './contexts/SocketEventContext';
 import { GameState, GameStateClient } from '../types';
 import { buildApiUrl } from './config/api';
 import { sessionStorage } from './utils/sessionStorage';
+import './styles/main.scss';
 
 const App: React.FC = () => {
   const [games, setGames] = useState<GameState[]>([]);
@@ -224,59 +225,21 @@ const App: React.FC = () => {
 
   return (
     <SocketEventProvider eventHandlers={socketEventHandlers}>
-      <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-        <header style={{ marginBottom: '30px' }}>
-          <h1 style={{ color: '#333', marginBottom: '10px' }}>2nub Game Boilerplate</h1>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '15px', 
-            marginBottom: '10px' 
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              backgroundColor: isConnected ? '#d4edda' : '#f8d7da',
-              color: isConnected ? '#155724' : '#721c24',
-              border: isConnected ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
-              fontSize: '12px'
-            }}>
-              <div style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: isConnected ? '#28a745' : '#dc3545'
-              }} />
+      <div className="app">
+        <header className="header">
+          <h1>2nub Game Boilerplate</h1>
+          <div className="connection-bar">
+            <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+              <div className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
               {isConnected ? 'Connected' : 'Disconnected'}
             </div>
             {!isConnected && (
-              <button
-                onClick={connect}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '12px',
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
+              <button onClick={connect} className="button--primary button--small">
                 Reconnect
               </button>
             )}
             {view === 'game' && (
-              <button onClick={leaveGame} style={{
-                padding: '5px 15px',
-                backgroundColor: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}>
+              <button onClick={leaveGame} className="button--danger">
                 Leave Game
               </button>
             )}
@@ -284,7 +247,7 @@ const App: React.FC = () => {
         </header>
 
         {view === 'list' ? (
-          <div style={{ display: 'grid', gap: '30px', gridTemplateColumns: '1fr 2fr' }}>
+          <div className="main-grid">
             <CreateGame onCreateGame={createGame} />
             <GameList games={games} onJoinGame={joinGame} onRejoinGame={attemptRejoin} onRefresh={fetchGames} />
           </div>
