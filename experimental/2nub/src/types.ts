@@ -12,8 +12,8 @@ export const ROLES = [
   "mason",
   "insomniac",
   "50/50 duo cop",
-  "cop(sane)",
-  "cop(insane)",
+  "50/50 duo cop(sane)",
+  "50/50 duo cop(insane)",
 ] as const;
 export type RoleId = typeof ROLES[number];
 

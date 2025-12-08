@@ -263,6 +263,17 @@ class GameStateManager {
     const count5050DuoCop = game.state.ruleset.roleOrder.filter(roleId => roleId === '50/50 duo cop').length;
     if (count5050DuoCop !== 0 && count5050DuoCop !== 2) return null;
 
+    // Transform cops into sane/insane variants if present
+    if (count5050DuoCop === 2) {
+      const firstIsSane = flip(0.5);
+      game.state.ruleset.roleOrder = game.state.ruleset.roleOrder.map(roleId => {
+        if (roleId === '50/50 duo cop') {
+          return firstIsSane ? '50/50 duo cop(sane)' : '50/50 duo cop(insane)';
+        }
+        return roleId;
+      });
+    }
+
     await standardDelay();
 
     // Transition to in-game state
