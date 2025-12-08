@@ -259,6 +259,10 @@ class GameStateManager {
     if (game.state.state !== 'lobby') return null;
     else if (game.players.length + 3 !== game.state.ruleset.roleOrder.length) return null;
 
+    // There must be either 0 or 2 "50/50 duo cop" roles
+    const count5050DuoCop = game.state.ruleset.roleOrder.filter(roleId => roleId === '50/50 duo cop').length;
+    if (count5050DuoCop !== 0 && count5050DuoCop !== 2) return null;
+
     await standardDelay();
 
     // Transition to in-game state
@@ -266,8 +270,10 @@ class GameStateManager {
     if (game.state.ruleset.special.maybeAllTanners.enabled) {
       if (flip(game.state.ruleset.special.maybeAllTanners.probability)) {
         // Set all players to Tanner
+        const playerIdsByWakeupOrder = shuffle(game.players.map(p => [p.id]));
         game.state = {
           state: 'night',
+          playerIdsByWakeupOrder,
           playerData: Object.fromEntries(
             game.players.map(player => [player.id, {
               originalRoleId: 'tanner',
@@ -277,6 +283,7 @@ class GameStateManager {
           ),
           centerCards: ['tanner', 'tanner', 'tanner'],
           ruleset: { ...game.state.ruleset },
+          turn: 0,
         }
         return game;
       }
@@ -285,20 +292,34 @@ class GameStateManager {
     const [unshuffledCenterCards, remainingRoles] = chooseN(game.state.ruleset.roleOrder, 3);
     const centerCards = shuffle(unshuffledCenterCards);
 
+    const playerIdsByWakeupOrder: Player["id"][][] = [];
     const playerIds = shuffle(game.players.map(p => p.id));
     const playerData: StateNight["playerData"] = Object.fromEntries(
-      playerIds.map((id, index) => [id, {
-        originalRoleId: remainingRoles[index],
-        currentRoleId: remainingRoles[index],
-        playerLog: [],
-      }])
+      playerIds.map((id, index) => {
+        if (index > 0
+            && remainingRoles[index - 1] === 'werewolf'
+            && remainingRoles[index] === 'werewolf') {
+          // Group werewolves for simultaneous wake-up
+          playerIdsByWakeupOrder[playerIdsByWakeupOrder.length - 1].push(id);
+        } else {
+          playerIdsByWakeupOrder.push([id]);
+        }
+
+        return [id, {
+          originalRoleId: remainingRoles[index],
+          currentRoleId: remainingRoles[index],
+          playerLog: [],
+        }];
+      })
     );
 
     game.state = {
       state: 'night',
+      playerIdsByWakeupOrder,
       playerData,
       centerCards,
       ruleset: { ...game.state.ruleset },
+      turn: 0,
     }
 
     return game;

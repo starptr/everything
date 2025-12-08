@@ -11,7 +11,9 @@ export const ROLES = [
   "hunter",
   "mason",
   "insomniac",
-  "50/50 duo cop"
+  "50/50 duo cop",
+  "cop(sane)",
+  "cop(insane)",
 ] as const;
 export type RoleId = typeof ROLES[number];
 
@@ -44,9 +46,12 @@ export interface StateLobby {
 
 export interface StateNight {
   state: 'night';
+  // Array of player IDs in order of wake-up, grouped by simultaneous wake-ups
+  playerIdsByWakeupOrder: Player["id"][][];
   playerData: Record<Player["id"], PlayerState>;
   centerCards: RoleId[];
   ruleset: StateLobby["ruleset"];
+  turn: number;
 }
 
 export interface StateDay {
