@@ -10,10 +10,6 @@ $color-light: #f8f9fa;
 $color-dark: #333;
 $color-white: #fff;
 
-// Status colors
-$color-connected: #28a745;
-$color-disconnected: #dc3545;
-
 // Background colors
 $bg-connected: #d4edda;
 $bg-disconnected: #f8d7da;
@@ -247,34 +243,7 @@ body {
 }
 
 // Common utility classes
-/* .button {
-  &--primary {
-    @include button-primary;
-  }
-  
-  &--success {
-    @include button-success;
-  }
-  
-  &--danger {
-    @include button-danger;
-  }
-  
-  &--secondary {
-    @include button-secondary;
-  }
-  
-  &--large {
-    padding: $spacing-md $spacing-xl;
-    font-size: $font-size-md;
-    font-weight: bold;
-  }
-  
-  &--small {
-    padding: $spacing-xs $spacing-sm;
-    font-size: $font-size-xs;
-  }
-} */
+// Button classes removed - use mixins directly in component styles
 
 .card {
   @include card;
@@ -289,6 +258,11 @@ body {
     border-radius: $border-radius-md;
   }
   
+  &--compact-light {
+    @include card-compact;
+    background-color: $color-light;
+  }
+  
   &--bordered {
     border: 2px solid $border-light;
     
@@ -298,45 +272,9 @@ body {
   }
 }
 
-.status {
-  &--connected {
-    @include status-badge;
-    background-color: $color-connected;
-  }
-  
-  &--disconnected {
-    @include status-badge;
-    background-color: $color-danger;
-  }
-  
-  &--waiting {
-    @include status-badge;
-    background-color: $color-success;
-  }
-  
-  &--in-progress {
-    @include status-badge;
-    background-color: $color-warning;
-    color: $text-dark;
-  }
-  
-  &--finished {
-    @include status-badge;
-    background-color: $color-secondary;
-  }
-}
+// Removed .status--* classes - use .status-badge with modifiers instead
 
-.indicator {
-  &--connected {
-    @include status-indicator;
-    background-color: $color-connected;
-  }
-  
-  &--disconnected {
-    @include status-indicator;
-    background-color: $color-danger;
-  }
-}
+// Removed .indicator--* classes - use .status-dot with modifiers instead
 
 .alert {
   padding: $spacing-lg;
@@ -438,13 +376,7 @@ body {
   }
 }
 
-/* .input {
-  @include input-base;
-  
-  &:disabled {
-    background-color: #f5f5f5;
-  }
-} */
+// Input styling removed - use @include input-base directly where needed
 
 // Utility classes for common patterns
 .visually-hidden {
@@ -497,8 +429,7 @@ body {
 }
 
 .connection-status {
-  display: flex;
-  align-items: center;
+  @include flex-center;
   gap: $spacing-sm;
   padding: $spacing-xs $spacing-sm;
   border-radius: $border-radius-sm;
@@ -523,7 +454,7 @@ body {
   height: 8px;
   
   &.connected {
-    background-color: $color-connected;
+    background-color: $color-success;
   }
   
   &.disconnected {
@@ -553,9 +484,7 @@ body {
   }
 }
 
-/* .form {
-  @include flex-column;
-} */
+// Form styling removed - use mixins directly where needed
 
 .label {
   display: block;
@@ -604,7 +533,7 @@ body {
 }
 
 .game-meta {
-  display: flex;
+  @include flex-center;
   gap: $spacing-lg;
   margin-bottom: $spacing-sm;
   font-size: $font-size-sm;
@@ -650,7 +579,7 @@ body {
 }
 
 .player-badges {
-  display: flex;
+  @include flex-center;
   flex-wrap: wrap;
   gap: 5px;
   margin-top: 5px;
@@ -708,8 +637,7 @@ body {
 }
 
 .radio-option {
-  display: flex;
-  align-items: center;
+  @include flex-center;
   gap: 6px;
   cursor: pointer;
   
@@ -725,8 +653,7 @@ body {
   }
   
   label {
-    display: flex;
-    align-items: center;
+    @include flex-center;
     gap: 6px;
     margin-bottom: $spacing-sm;
     cursor: pointer;
@@ -748,7 +675,7 @@ body {
 }
 
 .form-buttons {
-  display: flex;
+  @include flex-center;
   gap: $spacing-sm;
   margin-top: $spacing-sm;
 }
@@ -800,8 +727,7 @@ body {
 }
 
 .alert-content {
-  display: flex;
-  align-items: center;
+  @include flex-center;
   gap: $spacing-sm;
 }
 
@@ -809,7 +735,7 @@ body {
   @include status-indicator;
   
   &.connected {
-    background-color: $color-connected;
+    background-color: $color-success;
   }
   
   &.disconnected {
@@ -829,8 +755,7 @@ body {
 }
 
 .current-player {
-  @include card-compact;
-  background-color: $color-light;
+  @extend .card--compact-light;
   border: 2px solid $color-primary;
   margin-bottom: $spacing-xl * 1.25;
   
@@ -885,21 +810,14 @@ body {
 }
 
 .player-actions {
-  display: flex;
-  align-items: center;
+  @include flex-center;
   gap: $spacing-sm;
 }
 
 .disconnect-btn {
-  @include button-base;
+  @include button-danger;
   padding: $spacing-xs $spacing-sm;
   font-size: $font-size-xs;
-  background-color: $color-danger;
-  color: $color-white;
-  
-  &:hover:not(:disabled) {
-    background-color: darken($color-danger, 10%);
-  }
   
   &:disabled {
     background-color: $color-secondary;
@@ -909,8 +827,7 @@ body {
 }
 
 .game-area {
-  @include card-compact;
-  background-color: $color-light;
+  @extend .card--compact-light;
   
   h3 {
     margin: 0 0 $spacing-sm 0;
