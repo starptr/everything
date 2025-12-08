@@ -124,13 +124,6 @@ export interface ClientToServerEvents {
   updateRuleset: (data: { gameId: string; ruleset: StateLobby["ruleset"] }) => void;
 }
 
-// Legacy WebSocket message interface (can be removed if not used elsewhere)
-export interface WebSocketMessage {
-  type: 'gameState' | 'playerJoined' | 'playerLeft' | 'gameCreated' | 'gameDeleted' | 'error';
-  data: any;
-  gameId?: GameState["id"];
-}
-
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;

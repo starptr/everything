@@ -4,7 +4,7 @@ import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
 import { useGameEvents } from './hooks/useGameEvents';
 import { SocketEventProvider } from './contexts/SocketEventContext';
-import { GameState, GameStateClient, WebSocketMessage, StateLobby } from '../types';
+import { GameState, GameStateClient } from '../types';
 import { buildApiUrl } from './config/api';
 import { sessionStorage } from './utils/sessionStorage';
 
