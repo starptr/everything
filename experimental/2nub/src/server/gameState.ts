@@ -1,4 +1,4 @@
-import { GameState, Player, StateLobby, StateNight } from '../types';
+import { GameState, Player, RoleId, StateLobby, StateNight } from '../types';
 
 interface PlayerSocketMapping {
   gameId: string;
@@ -300,7 +300,23 @@ class GameStateManager {
       }
     }
 
-    const [unshuffledCenterCards, remainingRoles] = chooseN(game.state.ruleset.roleOrder, 3);
+    /**
+     * Selects 3 center cards such that the role distribution is "happy".
+     * A "happy" role distribution is one where:
+     * - There are either 0 or 2 "50/50 duo cop" roles among players
+     */
+    const divideRolesHappily = (roleOrder: RoleId[]) => {
+      while (true) {
+        const [unshuffledCenterCards, remainingRoles] = chooseN(game.state.ruleset.roleOrder, 3);
+
+        const count5050DuoCopInPlayers = remainingRoles.filter(roleId => roleId === '50/50 duo cop(sane)' || roleId === '50/50 duo cop(insane)').length;
+        if (count5050DuoCopInPlayers === 0 || count5050DuoCopInPlayers === 2) {
+          return [unshuffledCenterCards, remainingRoles];
+        }
+      }
+    }
+
+    const [unshuffledCenterCards, remainingRoles] = divideRolesHappily(game.state.ruleset.roleOrder);
     const centerCards = shuffle(unshuffledCenterCards);
 
     const playerIdsByWakeupOrder: Player["id"][][] = [];
