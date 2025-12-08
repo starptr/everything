@@ -1,14 +1,15 @@
 import React from 'react';
 import { GameStateClient, RoleId, ROLES, StateLobby } from '../../types';
+import { useSocketEvents } from '../hooks/useSocketEvents';
 
 interface OnubLobbyProps {
     stateLobby: StateLobby;
     playerCount: number;
     currentPlayerId: string;
-    updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
 }
 
-export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, currentPlayerId, updateRuleset }) => {
+export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, currentPlayerId }) => {
+    const { updateRuleset } = useSocketEvents();
     console.debug("Player count: ", playerCount);
 
     function makeRoleAddHandler(roleId: RoleId): React.MouseEventHandler<HTMLButtonElement> {
