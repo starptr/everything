@@ -71,10 +71,10 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
     }
 
     return (
-        <div className="lobby">
+        <div>
             <h1>Lobby</h1>
             <p>Waiting for players to join...</p>
-            <form onSubmit={handleSubmit} className="form">
+            <form onSubmit={handleSubmit}>
                 <div>
                     <h2>Roles Available to be Added</h2>
                     <ul>
@@ -101,9 +101,9 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
                     </ol>
                 </div>
                 
-                <div className="special-rules">
+                <div>
                     <h2>Special Rules</h2>
-                    <label className="rule-option">
+                    <label>
                         <input
                             type="checkbox"
                             checked={stateLobby.ruleset.special.maybeAllTanners.enabled}
@@ -143,17 +143,15 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
                                 };
                                 updateRuleset(newRuleset);
                             }}
-                            className="input"
                         />)
                     </label>
                 </div>
                 
-                <div className="start-section">
+                <div>
                     <h2>Start Game</h2>
                     <button 
                         type="submit" 
                         disabled={stateLobby.ruleset.roleOrder.length !== playerCount}
-                        className="button--primary button--large"
                     >
                         {stateLobby.ruleset.roleOrder.length === playerCount ? 'Start Game' : 'Role count and player count must match'}
                     </button>
