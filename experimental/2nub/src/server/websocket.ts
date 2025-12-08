@@ -22,7 +22,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       console.log(`Authenticating player ${playerId} for game ${gameId} on socket ${socket.id}`);
       
       // Register the socket with the player
-      const registered = gameStateManager.registerPlayerSocket(gameId, playerId, socket.id);
+      const registered = gameStateManager.maybeRegisterPlayerSocket(gameId, playerId, socket.id);
       
       if (registered) {
         // Store player info on socket for easier access
@@ -33,7 +33,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         socket.join(gameId);
         
         // Broadcast updated game state to all players in the room
-        const gameState = gameStateManager.getGame(gameId);
+        const gameState = gameStateManager.maybeGetGame(gameId);
         if (gameState) {
           broadcastToGame(gameId, 'gameState', toGameStateClient(gameState));
         }
@@ -57,7 +57,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
       
       // Update the ruleset via game state manager
-      const updatedGameState = gameStateManager.updateRuleset(gameId, ruleset);
+      const updatedGameState = gameStateManager.maybeUpdateRuleset(gameId, ruleset);
       
       if (updatedGameState) {
         // Broadcast updated game state to all players in the room
@@ -73,14 +73,14 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       console.log('Socket.io client disconnected:', socket.id);
       
       // Use the socket registry to identify the disconnecting player
-      const mapping = gameStateManager.unregisterSocket(socket.id);
+      const mapping = gameStateManager.maybeUnregisterSocket(socket.id);
       
       if (mapping) {
         // Leave the game room
         socket.leave(mapping.gameId);
         
         // Broadcast updated game state to remaining players in the room
-        const gameState = gameStateManager.getGame(mapping.gameId);
+        const gameState = gameStateManager.maybeGetGame(mapping.gameId);
         if (gameState) {
           broadcastToGame(mapping.gameId, 'gameState', toGameStateClient(gameState));
         }

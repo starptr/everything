@@ -38,7 +38,7 @@ class GameStateManager {
     return game;
   }
 
-  getGame(id: string): GameState | undefined {
+  maybeGetGame(id: string): GameState | undefined {
     return this.games.get(id);
   }
 
@@ -46,11 +46,11 @@ class GameStateManager {
     return Array.from(this.games.values());
   }
 
-  deleteGame(id: string): boolean {
+  maybeDeleteGame(id: string): boolean {
     return this.games.delete(id);
   }
 
-  addPlayer(gameId: string, playerName: string): Player | null {
+  maybeAddPlayer(gameId: string, playerName: string): Player | null {
     const game = this.games.get(gameId);
     if (!game) return null;
 
@@ -68,7 +68,7 @@ class GameStateManager {
     return player;
   }
 
-  removePlayer(gameId: string, playerId: string): boolean {
+  maybeRemovePlayer(gameId: string, playerId: string): boolean {
     const game = this.games.get(gameId);
     if (!game) return false;
 
@@ -85,7 +85,7 @@ class GameStateManager {
     return true;
   }
 
-  updatePlayerConnection(gameId: string, playerId: string, connected: boolean): boolean {
+  maybeUpdatePlayerConnection(gameId: string, playerId: string, connected: boolean): boolean {
     const game = this.games.get(gameId);
     if (!game) return false;
 
@@ -97,7 +97,7 @@ class GameStateManager {
     return true;
   }
 
-  rejoinPlayer(gameId: string, playerId: string): { player: Player; game: GameState } | null {
+  maybeRejoinPlayer(gameId: string, playerId: string): { player: Player; game: GameState } | null {
     console.debug(`Attempting to rejoin player ${playerId} to game ${gameId}`);
     const game = this.games.get(gameId);
     if (!game) {
@@ -129,7 +129,7 @@ class GameStateManager {
   }
 
   // Socket registry methods
-  registerPlayerSocket(gameId: string, playerId: string, socketId: string): boolean {
+  maybeRegisterPlayerSocket(gameId: string, playerId: string, socketId: string): boolean {
     const game = this.games.get(gameId);
     if (!game) return false;
 
@@ -154,7 +154,7 @@ class GameStateManager {
     return true;
   }
 
-  unregisterSocket(socketId: string): PlayerSocketMapping | null {
+  maybeUnregisterSocket(socketId: string): PlayerSocketMapping | null {
     const mapping = this.socketToPlayer.get(socketId);
     if (!mapping) return null;
 
@@ -163,16 +163,16 @@ class GameStateManager {
     this.playerToSocket.delete(mapping.playerId);
 
     // Update player connection status
-    this.updatePlayerConnection(mapping.gameId, mapping.playerId, false);
+    this.maybeUpdatePlayerConnection(mapping.gameId, mapping.playerId, false);
 
     return mapping;
   }
 
-  getSocketMapping(socketId: string): PlayerSocketMapping | null {
+  maybeGetSocketMapping(socketId: string): PlayerSocketMapping | null {
     return this.socketToPlayer.get(socketId) || null;
   }
 
-  getPlayerSocket(playerId: string): string | null {
+  maybeGetPlayerSocket(playerId: string): string | null {
     return this.playerToSocket.get(playerId) || null;
   }
 
@@ -180,7 +180,7 @@ class GameStateManager {
     return this.playerToSocket.has(playerId);
   }
 
-  updateRuleset(gameId: string, newRuleset: StateLobby["ruleset"]): GameState | null {
+  maybeUpdateRuleset(gameId: string, newRuleset: StateLobby["ruleset"]): GameState | null {
     const game = this.games.get(gameId);
     if (!game) return null;
 

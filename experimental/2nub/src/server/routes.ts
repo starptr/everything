@@ -44,7 +44,7 @@ export function setupRoutes(): Router {
 
   router.get('/games/:gameId', (req, res) => {
     const { gameId } = req.params;
-    const game = gameStateManager.getGame(gameId);
+    const game = gameStateManager.maybeGetGame(gameId);
     
     if (!game) {
       return respondGameNotFound(res, null);
@@ -74,16 +74,16 @@ export function setupRoutes(): Router {
       return respondFailure(res, 400, 'Player name is required');
     }
 
-    const player = gameStateManager.addPlayer(gameId, playerName.trim());
+    const player = gameStateManager.maybeAddPlayer(gameId, playerName.trim());
     
     if (!player) {
       return respondFailure(res, 400, 'Game not found or full');
     }
 
     // Set player as connected
-    gameStateManager.updatePlayerConnection(gameId, player.id, true);
+    gameStateManager.maybeUpdatePlayerConnection(gameId, player.id, true);
     
-    const game = gameStateManager.getGame(gameId);
+    const game = gameStateManager.maybeGetGame(gameId);
     
     if (!game) {
       return respondGameNotFound(res, null);
@@ -103,17 +103,17 @@ export function setupRoutes(): Router {
       return respondFailure(res, 400, 'Player ID is required');
     }
 
-    const result = gameStateManager.rejoinPlayer(gameId, playerId.trim());
+    const result = gameStateManager.maybeRejoinPlayer(gameId, playerId.trim());
     
     if (!result) {
       return respondFailure(res, 404, 'Game or player not found');
     }
 
     // Set player as connected
-    gameStateManager.updatePlayerConnection(gameId, result.player.id, true);
+    gameStateManager.maybeUpdatePlayerConnection(gameId, result.player.id, true);
     
     // Get updated game state after connection update
-    const updatedGame = gameStateManager.getGame(gameId);
+    const updatedGame = gameStateManager.maybeGetGame(gameId);
 
     if (!updatedGame) {
       return respondGameNotFound(res, null);
@@ -127,13 +127,13 @@ export function setupRoutes(): Router {
   router.post('/games/:gameId/players/:playerId/disconnect', (req, res) => {
     const { gameId, playerId } = req.params;
     
-    const updated = gameStateManager.updatePlayerConnection(gameId, playerId, false);
+    const updated = gameStateManager.maybeUpdatePlayerConnection(gameId, playerId, false);
     
     if (!updated) {
       return respondFailure(res, 404, 'Player or game not found');
     }
 
-    const game = gameStateManager.getGame(gameId);
+    const game = gameStateManager.maybeGetGame(gameId);
     
     if (game) {
       broadcastToGame(gameId, 'gameState', toGameStateClient(game));
@@ -145,13 +145,13 @@ export function setupRoutes(): Router {
   router.delete('/games/:gameId/players/:playerId', (req, res) => {
     const { gameId, playerId } = req.params;
     
-    const removed = gameStateManager.removePlayer(gameId, playerId);
+    const removed = gameStateManager.maybeRemovePlayer(gameId, playerId);
     
     if (!removed) {
       return respondFailure(res, 404, 'Player or game not found');
     }
 
-    const game = gameStateManager.getGame(gameId);
+    const game = gameStateManager.maybeGetGame(gameId);
     
     if (game) {
       broadcastToGame(gameId, 'playerLeft', { playerId, game: toGameStateClient(game) });
@@ -165,7 +165,7 @@ export function setupRoutes(): Router {
   router.delete('/games/:gameId', (req, res) => {
     const { gameId } = req.params;
     
-    const deleted = gameStateManager.deleteGame(gameId);
+    const deleted = gameStateManager.maybeDeleteGame(gameId);
     
     if (!deleted) {
       return respondGameNotFound(res, null);
