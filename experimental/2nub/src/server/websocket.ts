@@ -69,7 +69,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
-    socket.on('startGame', (data) => {
+    socket.on('startGame', async (data) => {
       const { gameId } = data;
 
       // Verify the socket is authenticated for this game
@@ -82,7 +82,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       console.log(`Starting game ${gameId} from socket ${socket.id}`);
 
       // Start the game via game state manager
-      const startedGameState = gameStateManager.maybeStartGame(gameId);
+      const startedGameState = await gameStateManager.maybeStartGame(gameId);
       
       if (startedGameState) {
         // Broadcast updated game state to all players in the room
