@@ -17,9 +17,19 @@ class GameStateManager {
       id,
       name,
       players: [],
-      roleOrder: [],
       gameLog: [],
-      state: { state: 'lobby' } as StateLobby,
+      state: {
+        state: 'lobby',
+        ruleset: {
+          roleOrder: [],
+          special: {
+            maybeAllTanners: {
+              enabled: false,
+              probability: 0.05
+            },
+          },
+        },
+      },
       createdAt: new Date(),
       lastActivity: new Date()
     };
