@@ -188,7 +188,7 @@ class GameStateManager {
     if (game.state.state !== 'lobby') return null;
 
     // Update the ruleset
-    (game.state as StateLobby).ruleset = newRuleset;
+    game.state.ruleset = newRuleset;
     game.lastActivity = new Date();
 
     return game;
