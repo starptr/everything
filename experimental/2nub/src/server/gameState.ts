@@ -7,6 +7,24 @@ interface PlayerSocketMapping {
 }
 
 /**
+ * Returns a promise which acts as a delay for the specified milliseconds.
+ * @param ms Milliseconds to delay
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * @returns Promise that resolves after a standard delay (3-5 seconds)
+ */
+function standardDelay(): Promise<void> {
+  const STANDARD_DELAY_MIN = 3000;
+  const STANDARD_DELAY_MAX = 5000;
+  const delayMs = Math.floor(Math.random() * (STANDARD_DELAY_MAX - STANDARD_DELAY_MIN + 1)) + STANDARD_DELAY_MIN;
+  return delay(delayMs);
+}
+
+/**
  * Randomly returns true with probability p.
  * @param p Probability of true
  */
@@ -233,13 +251,15 @@ class GameStateManager {
     return game;
   }
 
-  maybeStartGame(gameId: string): GameState | null {
+  async maybeStartGame(gameId: string): Promise<GameState | null> {
     const game = this.games.get(gameId);
     if (!game) return null;
 
     // Only allow starting the game if invariants hold
     if (game.state.state !== 'lobby') return null;
     else if (game.players.length + 3 !== game.state.ruleset.roleOrder.length) return null;
+
+    await standardDelay();
 
     // Transition to in-game state
 
