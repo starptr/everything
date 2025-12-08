@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../config/api';
+import { StateLobby } from '../../types';
 
 interface UseWebSocketOptions {
   onConnect: () => void;
@@ -16,6 +17,7 @@ interface UseWebSocketReturn {
   connect: () => void;
   disconnect: () => void;
   authenticatePlayer: (gameId: string, playerId: string) => void;
+  updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
 }
 
 export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {

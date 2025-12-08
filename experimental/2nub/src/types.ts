@@ -1,4 +1,4 @@
-const ROLES = [
+export const ROLES = [
   //"copycat",
   //"doppelganger",
   "werewolf",
@@ -11,8 +11,16 @@ const ROLES = [
   "hunter",
   "mason",
   "insomniac",
+  "50/50 duo cop"
 ] as const;
 export type RoleId = typeof ROLES[number];
+
+export type SpecialRules = {
+  maybeAllTanners: {
+    enabled: boolean;
+    probability: number;
+  };
+};
 
 export interface Player {
   id: string;
@@ -28,18 +36,24 @@ export interface PlayerState {
 
 export interface StateLobby {
   state: 'lobby';
+  ruleset: {
+    roleOrder: RoleId[];
+    special: SpecialRules;
+  }
 };
 
 export interface StateNight {
   state: 'night';
   playerData: Record<Player["id"], PlayerState>;
   centerCards: RoleId[];
+  ruleset: StateLobby["ruleset"];
 }
 
 export interface StateDay {
   state: 'day';
   playerData: StateNight["playerData"];
   centerCards: StateNight["centerCards"];
+  ruleset: StateNight["ruleset"];
 }
 
 export interface StateVoting {
@@ -47,6 +61,7 @@ export interface StateVoting {
   votes: Record<Player["id"], Player["id"]>;
   playerData: StateDay["playerData"];
   centerCards: StateDay["centerCards"];
+  ruleset: StateDay["ruleset"];
 }
 
 export interface StateFinished {
@@ -55,6 +70,7 @@ export interface StateFinished {
   votes: StateVoting["votes"];
   playerData: StateVoting["playerData"];
   centerCards: StateVoting["centerCards"];
+  ruleset: StateVoting["ruleset"];
 }
 
 // Client-side game state without ID (pure game data)
@@ -67,7 +83,6 @@ export type GameStateClient = {
   gameLog: string[];
 
   players: Player[];
-  roleOrder: RoleId[];
   state: StateLobby | StateNight | StateDay | StateVoting | StateFinished;
 }
 
