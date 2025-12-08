@@ -26,6 +26,8 @@ export const Onub: React.FC<OnubProps> = ({ game, currentPlayerId }) => {
 	switch (game.state.state) {
 		case 'lobby':
 			content = <OnubLobby stateLobby={game.state} playerCount={game.players.length} currentPlayerId={currentPlayerId} />;
+		case 'night':
+			content = <OnubNight stateNight={game.state} currentPlayerId={currentPlayerId} />;
 		default:
 		//throw new Error(`Onub component: Unsupported game state "${game.state.state}"`);
 	}
