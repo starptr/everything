@@ -87,7 +87,7 @@ const App: React.FC = () => {
     }
   }, [currentGame, currentPlayerId]);
 
-  const { isConnected, forceDisconnectPlayer, connect, disconnect, authenticatePlayer, updateRuleset } = useGameEvents({
+  const socketEventHandlers = useGameEvents({
     onGameState,
     onGameCreated,
     onGameDeleted,
@@ -102,6 +102,12 @@ const App: React.FC = () => {
     gameId: currentGameId || undefined,
     playerId: currentPlayerId || undefined
   });
+
+  const {
+    isConnected,
+    forceDisconnectPlayer,
+    connect,
+  } = socketEventHandlers;
 
   const createGame = async (name: string) => {
     try {
@@ -215,17 +221,6 @@ const App: React.FC = () => {
     
     initializeApp();
   }, []);
-
-  // Authentication is now handled automatically in useWebSocket hook
-
-  const socketEventHandlers = {
-    isConnected,
-    forceDisconnectPlayer,
-    connect,
-    disconnect,
-    authenticatePlayer,
-    updateRuleset,
-  };
 
   return (
     <SocketEventProvider eventHandlers={socketEventHandlers}>
