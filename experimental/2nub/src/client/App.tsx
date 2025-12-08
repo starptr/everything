@@ -169,10 +169,11 @@ const App: React.FC = () => {
   };
 
   const leaveGame = async () => {
-    if (!currentGame || !currentPlayerId) return;
+    console.debug('Leaving game:', currentGameId, currentPlayerId);
+    if (!currentGameId || !currentPlayerId) return;
     
     try {
-      await fetch(buildApiUrl(`api/games/${currentGame.id}/players/${currentPlayerId}`), {
+      await fetch(buildApiUrl(`api/games/${currentGameId}/players/${currentPlayerId}`), {
         method: 'DELETE'
       });
       setCurrentGame(null);
