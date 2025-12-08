@@ -339,6 +339,33 @@ class GameStateManager {
 
     return game;
   }
+
+  maybeConfirmPlayerRoleAssignment(gameId: string, playerId: string): GameState | null {
+    const game = this.games.get(gameId);
+    if (!game) return null;
+
+    // Only allow confirming role assignment if game is in roleAssignment state
+    if (game.state.state !== 'roleAssignment') return null;
+
+    // Update the player's confirmation status
+    game.state.playerConfirmations[playerId] = true;
+
+    // Check if all players have confirmed
+    const allConfirmed = Object.values(game.state.playerConfirmations).every(confirmed => confirmed);
+    if (allConfirmed) {
+      // Transition to night state
+      game.state = {
+        state: 'night',
+        playerIdsByWakeupOrder: game.state.playerIdsByWakeupOrder,
+        playerData: game.state.playerData,
+        centerCards: game.state.centerCards,
+        ruleset: game.state.ruleset,
+        turn: 0,
+      };
+    }
+
+    return game;
+  }
 }
 
 export const gameStateManager = new GameStateManager();

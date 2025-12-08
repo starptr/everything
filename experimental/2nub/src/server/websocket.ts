@@ -94,6 +94,30 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
+    socket.on('confirmRoleAssignment', (data) => {
+      const { gameId, playerId } = data;
+      console.log(`Player ${playerId} confirming role assignment for game ${gameId} on socket ${socket.id}`);
+
+      // Verify the socket is authenticated for this game and player
+      if (socket.gameId !== gameId || socket.playerId !== playerId) {
+        console.error(`Socket ${socket.id} not authenticated for game ${gameId} and player ${playerId}`);
+        socket.emit('error', { error: 'Not authenticated for this game/player' });
+        return;
+      }
+
+      // Update the player's confirmation status via game state manager
+      const updatedGameState = gameStateManager.maybeConfirmPlayerRoleAssignment(gameId, playerId);
+      
+      if (updatedGameState) {
+        // Broadcast updated game state to all players in the room
+        broadcastToGame(gameId, 'gameState', toGameStateClient(updatedGameState));
+        console.log(`Player ${playerId} confirmed role assignment for game ${gameId}`);
+      } else {
+        console.error(`Failed to confirm role assignment for player ${playerId} in game ${gameId}`);
+        socket.emit('error', { error: 'Failed to confirm role assignment' });
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log('Socket.io client disconnected:', socket.id);
       
