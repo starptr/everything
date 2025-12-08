@@ -57,9 +57,9 @@ export interface StateFinished {
   centerCards: StateVoting["centerCards"];
 }
 
-export type GameState = {
+// Client-side game state without ID (pure game data)
+export type GameStateClient = {
   // Set on construction only
-  readonly id: string;
   readonly createdAt: Date;
 
   name: string;
@@ -69,6 +69,11 @@ export type GameState = {
   players: Player[];
   roleOrder: RoleId[];
   state: StateLobby | StateNight | StateDay | StateVoting | StateFinished;
+}
+
+// Server-side game state with ID for storage/routing
+export type GameState = GameStateClient & {
+  readonly id: string;
 }
 
 export interface CreateGameRequest {
@@ -86,10 +91,10 @@ export interface RejoinGameRequest {
 }
 
 export interface ServerToClientEventShapes {
-  gameState: GameState;
-  playerJoined: { game: GameState; player: Player };
-  playerLeft: { game: GameState; playerId: string };
-  gameCreated: GameState;
+  gameState: GameStateClient;
+  playerJoined: { game: GameStateClient; player: Player };
+  playerLeft: { game: GameStateClient; playerId: string };
+  gameCreated: GameState; // Keep full GameState for game list updates
   gameDeleted: { gameId: string };
   error: { error: string };
 }

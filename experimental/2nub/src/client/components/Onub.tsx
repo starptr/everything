@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { GameState } from '../../types';
+import { GameStateClient } from '../../types';
 
 interface OnubProps {
-    game: GameState;
+    game: GameStateClient;
     currentPlayerId: string;
 }
 

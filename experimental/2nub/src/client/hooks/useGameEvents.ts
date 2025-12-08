@@ -1,13 +1,13 @@
 import { useEffect, useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
-import { GameState, Player, ServerToClientEvents } from '../../types';
+import { GameState, GameStateClient, Player, ServerToClientEvents } from '../../types';
 import { buildApiUrl } from '../config/api';
 import { sessionStorage } from '../utils/sessionStorage';
 
 interface UseGameEventsOptions {
-  onGameState: (gameState: GameState) => void;
-  onPlayerJoined: (data: { game: GameState; player: Player }) => void;
-  onPlayerLeft: (data: { game: GameState; playerId: string }) => void;
+  onGameState: (gameState: GameStateClient) => void;
+  onPlayerJoined: (data: { game: GameStateClient; player: Player }) => void;
+  onPlayerLeft: (data: { game: GameStateClient; playerId: string }) => void;
   onGameCreated: (game: GameState) => void;
   onGameDeleted: (data: { gameId: string }) => void;
   onServerError: (data: { error: string }) => void;
