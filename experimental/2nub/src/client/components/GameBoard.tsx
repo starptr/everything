@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameStateClient, StateLobby } from '../../types';
+import { GameStateClient } from '../../types';
 import { Onub } from './Onub';
 
 interface GameBoardProps {
@@ -8,10 +8,9 @@ interface GameBoardProps {
   currentPlayerId: string | null;
   onLeave: () => void;
   onForceDisconnect: (playerId: string) => void;
-  updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlayerId, onLeave, onForceDisconnect, updateRuleset }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlayerId, onLeave, onForceDisconnect }) => {
   console.debug("Rendering GameBoard with game:", game);
   const [disconnectingPlayerId, setDisconnectingPlayerId] = useState<string | null>(null);
 
@@ -231,7 +230,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlaye
         )}
       </div>
 
-      {currentPlayerId && <Onub game={game} currentPlayerId={currentPlayerId} updateRuleset={updateRuleset} />}
+      {currentPlayerId && <Onub game={game} currentPlayerId={currentPlayerId} />}
     </div>
   );
 };

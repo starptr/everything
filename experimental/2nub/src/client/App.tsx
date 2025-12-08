@@ -3,6 +3,7 @@ import { GameBoard } from './components/GameBoard';
 import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
 import { useGameEvents } from './hooks/useGameEvents';
+import { SocketEventProvider } from './contexts/SocketEventContext';
 import { GameState, GameStateClient, WebSocketMessage, StateLobby } from '../types';
 import { buildApiUrl } from './config/api';
 import { sessionStorage } from './utils/sessionStorage';
@@ -86,7 +87,7 @@ const App: React.FC = () => {
     }
   }, [currentGame, currentPlayerId]);
 
-  const { isConnected, forceDisconnectPlayer, connect, authenticatePlayer, updateRuleset } = useGameEvents({
+  const { isConnected, forceDisconnectPlayer, connect, disconnect, authenticatePlayer, updateRuleset } = useGameEvents({
     onGameState,
     onGameCreated,
     onGameDeleted,
@@ -217,82 +218,92 @@ const App: React.FC = () => {
 
   // Authentication is now handled automatically in useWebSocket hook
 
+  const socketEventHandlers = {
+    isConnected,
+    forceDisconnectPlayer,
+    connect,
+    disconnect,
+    authenticatePlayer,
+    updateRuleset,
+  };
+
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <header style={{ marginBottom: '30px' }}>
-        <h1 style={{ color: '#333', marginBottom: '10px' }}>2nub Game Boilerplate</h1>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '15px', 
-          marginBottom: '10px' 
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            backgroundColor: isConnected ? '#d4edda' : '#f8d7da',
-            color: isConnected ? '#155724' : '#721c24',
-            border: isConnected ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
-            fontSize: '12px'
+    <SocketEventProvider eventHandlers={socketEventHandlers}>
+      <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+        <header style={{ marginBottom: '30px' }}>
+          <h1 style={{ color: '#333', marginBottom: '10px' }}>2nub Game Boilerplate</h1>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '15px', 
+            marginBottom: '10px' 
           }}>
             <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: isConnected ? '#28a745' : '#dc3545'
-            }} />
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </div>
-          {!isConnected && (
-            <button
-              onClick={connect}
-              style={{
-                padding: '4px 8px',
-                fontSize: '12px',
-                backgroundColor: '#007bff',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              backgroundColor: isConnected ? '#d4edda' : '#f8d7da',
+              color: isConnected ? '#155724' : '#721c24',
+              border: isConnected ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
+              fontSize: '12px'
+            }}>
+              <div style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: isConnected ? '#28a745' : '#dc3545'
+              }} />
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </div>
+            {!isConnected && (
+              <button
+                onClick={connect}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Reconnect
+              </button>
+            )}
+            {view === 'game' && (
+              <button onClick={leaveGame} style={{
+                padding: '5px 15px',
+                backgroundColor: '#dc3545',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer'
-              }}
-            >
-              Reconnect
-            </button>
-          )}
-          {view === 'game' && (
-            <button onClick={leaveGame} style={{
-              padding: '5px 15px',
-              backgroundColor: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}>
-              Leave Game
-            </button>
-          )}
-        </div>
-      </header>
+              }}>
+                Leave Game
+              </button>
+            )}
+          </div>
+        </header>
 
-      {view === 'list' ? (
-        <div style={{ display: 'grid', gap: '30px', gridTemplateColumns: '1fr 2fr' }}>
-          <CreateGame onCreateGame={createGame} />
-          <GameList games={games} onJoinGame={joinGame} onRejoinGame={attemptRejoin} onRefresh={fetchGames} />
-        </div>
-      ) : (
-        <GameBoard 
-          game={currentGame} 
-          gameId={currentGameId}
-          currentPlayerId={currentPlayerId}
-          onLeave={leaveGame}
-          onForceDisconnect={handleForceDisconnect}
-          updateRuleset={updateRuleset}
-        />
-      )}
-    </div>
+        {view === 'list' ? (
+          <div style={{ display: 'grid', gap: '30px', gridTemplateColumns: '1fr 2fr' }}>
+            <CreateGame onCreateGame={createGame} />
+            <GameList games={games} onJoinGame={joinGame} onRejoinGame={attemptRejoin} onRefresh={fetchGames} />
+          </div>
+        ) : (
+          <GameBoard 
+            game={currentGame} 
+            gameId={currentGameId}
+            currentPlayerId={currentPlayerId}
+            onLeave={leaveGame}
+            onForceDisconnect={handleForceDisconnect}
+          />
+        )}
+      </div>
+    </SocketEventProvider>
   );
 };
 
