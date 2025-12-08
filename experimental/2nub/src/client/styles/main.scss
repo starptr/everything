@@ -555,7 +555,6 @@ body {
 
 .form {
   @include flex-column;
-  gap: $spacing-lg;
 }
 
 .label {
@@ -932,60 +931,6 @@ body {
     h2 {
       color: $text-dark;
       margin-bottom: $spacing-md;
-    }
-  }
-}
-
-.roles-section {
-  margin-bottom: $spacing-xl;
-}
-
-.roles-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  
-  li {
-    display: flex;
-    align-items: center;
-    gap: $spacing-sm;
-    margin-bottom: $spacing-sm;
-    
-    button {
-      @include button-success;
-      @include button-base;
-      padding: $spacing-xs $spacing-sm;
-      font-size: $font-size-xs;
-    }
-  }
-}
-
-.role-order {
-  margin-bottom: $spacing-xl;
-}
-
-.role-list {
-  list-style: decimal;
-  padding-left: $spacing-xl;
-  margin: 0;
-}
-
-.role-item {
-  display: flex;
-  align-items: center;
-  gap: $spacing-xs;
-  margin-bottom: $spacing-xs;
-  
-  button {
-    @include button-base;
-    padding: 2px 6px;
-    font-size: $font-size-xs;
-    background-color: $color-light;
-    color: $text-dark;
-    border: 1px solid $border-light;
-    
-    &:hover:not(:disabled) {
-      background-color: darken($color-light, 10%);
     }
   }
 }
