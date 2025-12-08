@@ -151,9 +151,9 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
                     <h2>Start Game</h2>
                     <button 
                         type="submit" 
-                        disabled={stateLobby.ruleset.roleOrder.length !== playerCount}
+                        disabled={stateLobby.ruleset.roleOrder.length !== playerCount + 3}
                     >
-                        {stateLobby.ruleset.roleOrder.length === playerCount ? 'Start Game' : 'Role count and player count must match'}
+                        {stateLobby.ruleset.roleOrder.length === playerCount + 3 ? 'Start Game' : 'Role count and player count must match'}
                     </button>
                 </div>
             </form>
