@@ -45,6 +45,30 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
+    socket.on('updateRuleset', (data) => {
+      const { gameId, ruleset } = data;
+      console.log(`Updating ruleset for game ${gameId} from socket ${socket.id}`);
+      
+      // Verify the socket is authenticated for this game
+      if (socket.gameId !== gameId) {
+        console.error(`Socket ${socket.id} not authenticated for game ${gameId}`);
+        socket.emit('error', { error: 'Not authenticated for this game' });
+        return;
+      }
+      
+      // Update the ruleset via game state manager
+      const updatedGameState = gameStateManager.updateRuleset(gameId, ruleset);
+      
+      if (updatedGameState) {
+        // Broadcast updated game state to all players in the room
+        broadcastToGame(gameId, 'gameState', toGameStateClient(updatedGameState));
+        console.log(`Ruleset updated and broadcasted for game ${gameId}`);
+      } else {
+        console.error(`Failed to update ruleset for game ${gameId}`);
+        socket.emit('error', { error: 'Failed to update ruleset' });
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log('Socket.io client disconnected:', socket.id);
       

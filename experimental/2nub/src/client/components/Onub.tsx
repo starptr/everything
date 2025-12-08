@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { GameStateClient } from '../../types';
+import { GameStateClient, StateLobby } from '../../types';
 import { OnubLobby } from './OnubLobby';
 
 interface OnubProps {
 	game: GameStateClient;
 	currentPlayerId: string;
+	updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
 }
 
-export const Onub: React.FC<OnubProps> = ({ game, currentPlayerId }) => {
+export const Onub: React.FC<OnubProps> = ({ game, currentPlayerId, updateRuleset }) => {
 	let content = <div>
 		<p style={{ margin: '0 0 15px 0', color: '#666' }}>
 			This is where the actual game would be implemented. The boilerplate provides:
@@ -31,7 +32,7 @@ export const Onub: React.FC<OnubProps> = ({ game, currentPlayerId }) => {
 
 	switch (game.state.state) {
 		case 'lobby':
-			content = <OnubLobby stateLobby={game.state} playerCount={game.players.length} currentPlayerId={currentPlayerId} />;
+			content = <OnubLobby stateLobby={game.state} playerCount={game.players.length} currentPlayerId={currentPlayerId} updateRuleset={updateRuleset} />;
 		default:
 		//throw new Error(`Onub component: Unsupported game state "${game.state.state}"`);
 	}

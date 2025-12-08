@@ -109,6 +109,15 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     }
   }, [isConnected]);
 
+  const updateRuleset = useCallback((ruleset: StateLobby["ruleset"]) => {
+    if (socketRef.current && isConnected && gameIdRef.current) {
+      console.log(`Updating ruleset for game ${gameIdRef.current}`, ruleset);
+      socketRef.current.emit('updateRuleset', { gameId: gameIdRef.current, ruleset });
+    } else {
+      console.error('Cannot update ruleset: socket not connected or no game ID');
+    }
+  }, [isConnected]);
+
   // Handle authentication when gameId/playerId change while connected
   useEffect(() => {
     if (isConnected && gameId && playerId) {
@@ -129,5 +138,6 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     connect,
     disconnect,
     authenticatePlayer,
+    updateRuleset,
   };
 }

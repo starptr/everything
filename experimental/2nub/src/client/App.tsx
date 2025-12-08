@@ -3,7 +3,7 @@ import { GameBoard } from './components/GameBoard';
 import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
 import { useGameEvents } from './hooks/useGameEvents';
-import { GameState, GameStateClient, WebSocketMessage } from '../types';
+import { GameState, GameStateClient, WebSocketMessage, StateLobby } from '../types';
 import { buildApiUrl } from './config/api';
 import { sessionStorage } from './utils/sessionStorage';
 
@@ -86,7 +86,7 @@ const App: React.FC = () => {
     }
   }, [currentGame, currentPlayerId]);
 
-  const { isConnected, forceDisconnectPlayer, connect, authenticatePlayer } = useGameEvents({
+  const { isConnected, forceDisconnectPlayer, connect, authenticatePlayer, updateRuleset } = useGameEvents({
     onGameState,
     onGameCreated,
     onGameDeleted,
@@ -289,6 +289,7 @@ const App: React.FC = () => {
           currentPlayerId={currentPlayerId}
           onLeave={leaveGame}
           onForceDisconnect={handleForceDisconnect}
+          updateRuleset={updateRuleset}
         />
       )}
     </div>
