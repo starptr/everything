@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
-import { GameState, GameStateClient, Player, ServerToClientEvents } from '../../types';
+import { GameState, GameStateClient, Player, ServerToClientEvents, StateLobby } from '../../types';
 import { buildApiUrl } from '../config/api';
 import { sessionStorage } from '../utils/sessionStorage';
 
@@ -24,6 +24,7 @@ interface UseGameEventsReturn {
   connect: () => void;
   disconnect: () => void;
   authenticatePlayer: (gameId: string, playerId: string) => void;
+  updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -51,7 +52,7 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     playerId
   } = options;
 
-  const { isConnected, socket, connect, disconnect, authenticatePlayer } = useWebSocket({
+  const { isConnected, socket, connect, disconnect, authenticatePlayer, updateRuleset } = useWebSocket({
     onConnect,
     onDisconnect,
     onConnectionError,
@@ -106,5 +107,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     connect,
     disconnect,
     authenticatePlayer,
+    updateRuleset,
   };
 }

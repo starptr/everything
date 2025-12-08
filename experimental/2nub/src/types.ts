@@ -121,6 +121,7 @@ export type ServerToClientEvents = {
 
 export interface ClientToServerEvents {
   authenticatePlayer: (data: { gameId: string; playerId: string }) => void;
+  updateRuleset: (data: { gameId: string; ruleset: StateLobby["ruleset"] }) => void;
 }
 
 // Legacy WebSocket message interface (can be removed if not used elsewhere)

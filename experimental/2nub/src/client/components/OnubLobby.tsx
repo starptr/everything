@@ -1,19 +1,24 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { GameStateClient, RoleId, ROLES, StateLobby } from '../../types';
 
 interface OnubLobbyProps {
     stateLobby: StateLobby;
     playerCount: number;
     currentPlayerId: string;
+    updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
 }
 
-export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, currentPlayerId }) => {
+export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, currentPlayerId, updateRuleset }) => {
     console.debug("Player count: ", playerCount);
 
     function makeRoleAddHandler(roleId: RoleId): React.MouseEventHandler<HTMLButtonElement> {
         return (e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
-            //setRoles(roles => [...roles, roleId]);
+            const newRuleset = {
+                ...stateLobby.ruleset,
+                roleOrder: [...stateLobby.ruleset.roleOrder, roleId]
+            };
+            updateRuleset(newRuleset);
         }
     }
 
@@ -21,34 +26,40 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
         return (e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             if (index <= 0) return;
-            //setRoles(roles => {
-            //    const newRoles = [...roles];
-            //    [newRoles[index - 1], newRoles[index]] = [newRoles[index], newRoles[index - 1]];
-            //    return newRoles;
-            //});
+            const newRoleOrder = [...stateLobby.ruleset.roleOrder];
+            [newRoleOrder[index - 1], newRoleOrder[index]] = [newRoleOrder[index], newRoleOrder[index - 1]];
+            const newRuleset = {
+                ...stateLobby.ruleset,
+                roleOrder: newRoleOrder
+            };
+            updateRuleset(newRuleset);
         }
     }
 
     function makeRoleMoveDownHandler(index: number): React.MouseEventHandler<HTMLButtonElement> {
         return (e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
-            //setRoles(roles => {
-            //    if (index >= roles.length - 1) return roles;
-            //    const newRoles = [...roles];
-            //    [newRoles[index + 1], newRoles[index]] = [newRoles[index], newRoles[index + 1]];
-            //    return newRoles;
-            //});
+            if (index >= stateLobby.ruleset.roleOrder.length - 1) return;
+            const newRoleOrder = [...stateLobby.ruleset.roleOrder];
+            [newRoleOrder[index + 1], newRoleOrder[index]] = [newRoleOrder[index], newRoleOrder[index + 1]];
+            const newRuleset = {
+                ...stateLobby.ruleset,
+                roleOrder: newRoleOrder
+            };
+            updateRuleset(newRuleset);
         }
     }
 
     function makeRoleDeleteHandler(index: number): React.MouseEventHandler<HTMLButtonElement> {
         return (e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
-            //setRoles(roles => {
-            //    const newRoles = [...roles];
-            //    newRoles.splice(index, 1);
-            //    return newRoles;
-            //});
+            const newRoleOrder = [...stateLobby.ruleset.roleOrder];
+            newRoleOrder.splice(index, 1);
+            const newRuleset = {
+                ...stateLobby.ruleset,
+                roleOrder: newRoleOrder
+            };
+            updateRuleset(newRuleset);
         }
     }
 
@@ -89,13 +100,17 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
                     type="checkbox"
                     checked={stateLobby.ruleset.special.maybeAllTanners.enabled}
                     onChange={e => {
-                        //setSpecialRuleset(ruleset => ({
-                        //    ...ruleset,
-                        //    maybeAllTanners: {
-                        //        ...ruleset.maybeAllTanners,
-                        //        enabled: e.target.checked,
-                        //    },
-                        //}))
+                        const newRuleset = {
+                            ...stateLobby.ruleset,
+                            special: {
+                                ...stateLobby.ruleset.special,
+                                maybeAllTanners: {
+                                    ...stateLobby.ruleset.special.maybeAllTanners,
+                                    enabled: e.target.checked,
+                                },
+                            }
+                        };
+                        updateRuleset(newRuleset);
                     }}
                 />
                 Everyone is Tanner (with probability <input
@@ -103,16 +118,21 @@ export const OnubLobby: React.FC<OnubLobbyProps> = ({ stateLobby, playerCount, c
                     value={stateLobby.ruleset.special.maybeAllTanners.probability}
                     min={0}
                     max={1}
+                    step={0.01}
                     onChange={e => {
                         const value = parseFloat(e.target.value);
                         if (isNaN(value) || !isFinite(value)) return;
-                        //setSpecialRuleset(ruleset => ({
-                        //    ...ruleset,
-                        //    maybeAllTanners: {
-                        //        ...ruleset.maybeAllTanners,
-                        //        probability: parseFloat(e.target.value) || 0,
-                        //    },
-                        //}));
+                        const newRuleset = {
+                            ...stateLobby.ruleset,
+                            special: {
+                                ...stateLobby.ruleset.special,
+                                maybeAllTanners: {
+                                    ...stateLobby.ruleset.special.maybeAllTanners,
+                                    probability: value,
+                                },
+                            }
+                        };
+                        updateRuleset(newRuleset);
                     }}
                 />)
             </label>

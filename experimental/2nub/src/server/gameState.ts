@@ -180,6 +180,20 @@ class GameStateManager {
     return this.playerToSocket.has(playerId);
   }
 
+  updateRuleset(gameId: string, newRuleset: StateLobby["ruleset"]): GameState | null {
+    const game = this.games.get(gameId);
+    if (!game) return null;
+
+    // Only allow updating ruleset if game is in lobby state
+    if (game.state.state !== 'lobby') return null;
+
+    // Update the ruleset
+    (game.state as StateLobby).ruleset = newRuleset;
+    game.lastActivity = new Date();
+
+    return game;
+  }
+
 }
 
 export const gameStateManager = new GameStateManager();
