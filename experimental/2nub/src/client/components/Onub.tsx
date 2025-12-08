@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { GameStateClient } from '../../types';
 import { OnubLobby } from './OnubLobby';
+import { OnubRoleAssignment } from './OnubRoleAssignment';
+import { OnubNight } from './OnubNight';
+import '../styles/main.scss';
 
 interface OnubProps {
 	game: GameStateClient;
@@ -26,8 +29,13 @@ export const Onub: React.FC<OnubProps> = ({ game, currentPlayerId }) => {
 	switch (game.state.state) {
 		case 'lobby':
 			content = <OnubLobby stateLobby={game.state} playerCount={game.players.length} currentPlayerId={currentPlayerId} />;
+			break;
+		case 'roleAssignment':
+			content = <OnubRoleAssignment stateRoleAssignment={game.state} currentPlayerId={currentPlayerId} />;
+			break;
 		case 'night':
 			content = <OnubNight stateNight={game.state} currentPlayerId={currentPlayerId} />;
+			break;
 		default:
 		//throw new Error(`Onub component: Unsupported game state "${game.state.state}"`);
 	}
