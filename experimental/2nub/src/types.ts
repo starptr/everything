@@ -44,13 +44,22 @@ export interface StateLobby {
   }
 };
 
-export interface StateNight {
-  state: 'night';
+export interface StateRoleAssignment {
+  state: 'roleAssignment';
   // Array of player IDs in order of wake-up, grouped by simultaneous wake-ups
   playerIdsByWakeupOrder: Player["id"][][];
   playerData: Record<Player["id"], PlayerState>;
   centerCards: RoleId[];
   ruleset: StateLobby["ruleset"];
+  playerConfirmations: Record<Player["id"], boolean>;
+}
+
+export interface StateNight {
+  state: 'night';
+  playerIdsByWakeupOrder: StateRoleAssignment["playerIdsByWakeupOrder"];
+  playerData: StateRoleAssignment["playerData"];
+  centerCards: StateRoleAssignment["centerCards"];
+  ruleset: StateRoleAssignment["ruleset"];
   turn: number;
 }
 
@@ -87,7 +96,7 @@ export type GameStateClient = {
   gameLog: string[];
 
   players: Player[];
-  state: StateLobby | StateNight | StateDay | StateVoting | StateFinished;
+  state: StateLobby | StateRoleAssignment | StateNight | StateDay | StateVoting | StateFinished;
 }
 
 // Server-side game state with ID for storage/routing
