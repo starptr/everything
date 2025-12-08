@@ -272,7 +272,7 @@ class GameStateManager {
         // Set all players to Tanner
         const playerIdsByWakeupOrder = shuffle(game.players.map(p => [p.id]));
         game.state = {
-          state: 'night',
+          state: 'roleAssignment',
           playerIdsByWakeupOrder,
           playerData: Object.fromEntries(
             game.players.map(player => [player.id, {
@@ -283,8 +283,10 @@ class GameStateManager {
           ),
           centerCards: ['tanner', 'tanner', 'tanner'],
           ruleset: { ...game.state.ruleset },
-          turn: 0,
-        }
+          playerConfirmations: Object.fromEntries(
+            game.players.map(player => [player.id, false])
+          ),
+        };
         return game;
       }
     }
@@ -314,12 +316,14 @@ class GameStateManager {
     );
 
     game.state = {
-      state: 'night',
+      state: 'roleAssignment',
       playerIdsByWakeupOrder,
       playerData,
       centerCards,
       ruleset: { ...game.state.ruleset },
-      turn: 0,
+      playerConfirmations: Object.fromEntries(
+        game.players.map(player => [player.id, false])
+      ),
     }
 
     return game;
