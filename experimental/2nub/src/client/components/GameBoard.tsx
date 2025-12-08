@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { GameState } from '../../types';
+import { GameStateClient } from '../../types';
 import { Onub } from './Onub';
 
 interface GameBoardProps {
-  game: GameState | null;
+  game: GameStateClient | null;
   gameId: string | null;
   currentPlayerId: string | null;
   onLeave: () => void;
@@ -114,7 +114,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlaye
         <div>
           <h1 style={{ margin: '0 0 8px 0', color: '#333' }}>{game.name}</h1>
           <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#666' }}>
-            <span>Game ID: <strong>{game.id}</strong></span>
+            <span>Game ID: <strong>{gameId}</strong></span>
             <span>Players: <strong>{game.players.length}</strong></span>
             <span style={{ 
               padding: '2px 8px', 

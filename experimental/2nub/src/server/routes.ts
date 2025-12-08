@@ -1,7 +1,13 @@
 import { Router, Response } from 'express';
 import { gameStateManager } from './gameState';
 import { broadcastToGame, broadcastToAll } from './websocket';
-import { CreateGameRequest, JoinGameRequest, RejoinGameRequest, ApiResponse } from '../types';
+import { CreateGameRequest, JoinGameRequest, RejoinGameRequest, ApiResponse, GameState, GameStateClient } from '../types';
+
+// Helper function to convert GameState to GameStateClient (remove ID)
+function toGameStateClient(gameState: GameState): GameStateClient {
+  const { id, ...gameStateClient } = gameState;
+  return gameStateClient;
+}
 
 
 function respondGameNotFound(res: Response, message: string | null) {
@@ -83,7 +89,7 @@ export function setupRoutes(): Router {
       return respondGameNotFound(res, null);
     }
 
-    broadcastToGame(gameId, 'playerJoined', { player, game });
+    broadcastToGame(gameId, 'playerJoined', { player, game: toGameStateClient(game) });
 
     return respondSuccessWithData(res, 201, { player });
   });
@@ -113,7 +119,7 @@ export function setupRoutes(): Router {
       return respondGameNotFound(res, null);
     }
 
-    broadcastToGame(gameId, 'playerJoined', { player: result.player, game: updatedGame });
+    broadcastToGame(gameId, 'playerJoined', { player: result.player, game: toGameStateClient(updatedGame) });
 
     return respondSuccessWithData(res, 200, { player: result.player });
   });
@@ -130,7 +136,7 @@ export function setupRoutes(): Router {
     const game = gameStateManager.getGame(gameId);
     
     if (game) {
-      broadcastToGame(gameId, 'gameState', game);
+      broadcastToGame(gameId, 'gameState', toGameStateClient(game));
     }
 
     return respondSuccessWithData(res, 200, { disconnected: true });
@@ -148,7 +154,7 @@ export function setupRoutes(): Router {
     const game = gameStateManager.getGame(gameId);
     
     if (game) {
-      broadcastToGame(gameId, 'playerLeft', { playerId, game });
+      broadcastToGame(gameId, 'playerLeft', { playerId, game: toGameStateClient(game) });
     } else {
       broadcastToAll('gameDeleted', { gameId });
     }

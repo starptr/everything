@@ -3,13 +3,13 @@ import { GameBoard } from './components/GameBoard';
 import { CreateGame } from './components/CreateGame';
 import { GameList } from './components/GameList';
 import { useGameEvents } from './hooks/useGameEvents';
-import { GameState, WebSocketMessage } from '../types';
+import { GameState, GameStateClient, WebSocketMessage } from '../types';
 import { buildApiUrl } from './config/api';
 import { sessionStorage } from './utils/sessionStorage';
 
 const App: React.FC = () => {
   const [games, setGames] = useState<GameState[]>([]);
-  const [currentGame, setCurrentGame] = useState<GameState | null>(null);
+  const [currentGame, setCurrentGame] = useState<GameStateClient | null>(null);
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'game'>('list');
@@ -29,11 +29,10 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const onGameState = useCallback((gameState: GameState) => {
-    if (gameState?.id === currentGame?.id) {
-      setCurrentGame(gameState);
-    }
-  }, [currentGame]);
+  const onGameState = useCallback((gameState: GameStateClient) => {
+    // Always update game state when received - ID matching is handled by socket.io room membership
+    setCurrentGame(gameState);
+  }, []);
 
   const onGameCreated = useCallback((game: GameState) => {
     setGames(prevGames => [game, ...prevGames]);
@@ -43,14 +42,14 @@ const App: React.FC = () => {
     setGames(prevGames => prevGames.filter(game => game.id !== data.gameId));
     
     // If the current game was deleted, return to list view
-    if (currentGame?.id === data.gameId) {
+    if (currentGameId === data.gameId) {
       setCurrentGame(null);
       setCurrentGameId(null);
       setCurrentPlayerId(null);
       setView('list');
       sessionStorage.clearPlayerSession();
     }
-  }, [currentGame]);
+  }, [currentGameId]);
 
   const onPlayerJoined = useCallback(() => {
     // Refresh games list to show updated player counts
@@ -191,7 +190,7 @@ const App: React.FC = () => {
     
     try {
       // Use REST API to force disconnect
-      await forceDisconnectPlayer(currentGame.id, playerId);
+      await forceDisconnectPlayer(currentGameId!, playerId);
     } catch (error) {
       console.error('Failed to force disconnect player:', error);
     }

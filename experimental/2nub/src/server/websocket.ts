@@ -1,6 +1,12 @@
 import { Server, Socket } from 'socket.io';
 import { gameStateManager } from './gameState';
-import { ClientToServerEvents, ServerToClientEvents, ServerToClientEventShapes } from '../types';
+import { ClientToServerEvents, ServerToClientEvents, ServerToClientEventShapes, GameState, GameStateClient } from '../types';
+
+// Helper function to convert GameState to GameStateClient (remove ID)
+function toGameStateClient(gameState: GameState): GameStateClient {
+  const { id, ...gameStateClient } = gameState;
+  return gameStateClient;
+}
 
 interface ExtendedSocket extends Socket<ClientToServerEvents, ServerToClientEvents> {
   gameId?: string;
@@ -29,7 +35,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         // Broadcast updated game state to all players in the room
         const gameState = gameStateManager.getGame(gameId);
         if (gameState) {
-          broadcastToGame(gameId, 'gameState', gameState);
+          broadcastToGame(gameId, 'gameState', toGameStateClient(gameState));
         }
         
         console.log(`Player ${playerId} authenticated and joined room ${gameId}`);
@@ -52,7 +58,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         // Broadcast updated game state to remaining players in the room
         const gameState = gameStateManager.getGame(mapping.gameId);
         if (gameState) {
-          broadcastToGame(mapping.gameId, 'gameState', gameState);
+          broadcastToGame(mapping.gameId, 'gameState', toGameStateClient(gameState));
         }
         
         console.log(`Player ${mapping.playerId} disconnected from game ${mapping.gameId}`);
