@@ -26,6 +26,7 @@ export interface UseGameEventsReturn {
   authenticatePlayer: (gameId: string, playerId: string) => void;
   updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
   startGame: () => void;
+  confirmRoleAssignment: () => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -77,6 +78,13 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     }
   }, [isConnected, socket, gameId]);
 
+  const confirmRoleAssignment = useCallback(() => {
+    if (socket && isConnected && gameId && playerId) {
+      console.log(`Confirming role assignment for player ${playerId} in game ${gameId}`);
+      socket.emit('confirmRoleAssignment', { gameId, playerId });
+    }
+  }, [isConnected, socket, gameId, playerId]);
+
   const forceDisconnectPlayer = useCallback(async (gameId: string, playerId: string) => {
     try {
       const response = await fetch(buildApiUrl(`api/games/${gameId}/players/${playerId}/disconnect`), {
@@ -125,5 +133,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     authenticatePlayer,
     updateRuleset,
     startGame,
+    confirmRoleAssignment,
   };
 }

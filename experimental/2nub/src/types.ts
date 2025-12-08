@@ -136,6 +136,7 @@ export interface ClientToServerEvents {
   authenticatePlayer: (data: { gameId: string; playerId: string }) => void;
   updateRuleset: (data: { gameId: string; ruleset: StateLobby["ruleset"] }) => void;
   startGame: (data: { gameId: string }) => void;
+  confirmRoleAssignment: (data: { gameId: string; playerId: string }) => void;
 }
 
 export interface ApiResponse<T = any> {
