@@ -274,8 +274,6 @@ class GameStateManager {
       });
     }
 
-    await standardDelay();
-
     // Transition to in-game state
 
     if (game.state.ruleset.special.maybeAllTanners.enabled) {
@@ -340,7 +338,9 @@ class GameStateManager {
     return game;
   }
 
-  maybeConfirmPlayerRoleAssignment(gameId: string, playerId: string): GameState | null {
+  async maybeConfirmPlayerRoleAssignment(gameId: string, playerId: string): Promise<GameState | null> {
+    await standardDelay();
+
     const game = this.games.get(gameId);
     if (!game) return null;
 

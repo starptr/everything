@@ -94,7 +94,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
-    socket.on('confirmRoleAssignment', (data) => {
+    socket.on('confirmRoleAssignment', async (data) => {
       const { gameId, playerId } = data;
       console.log(`Player ${playerId} confirming role assignment for game ${gameId} on socket ${socket.id}`);
 
@@ -106,7 +106,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
 
       // Update the player's confirmation status via game state manager
-      const updatedGameState = gameStateManager.maybeConfirmPlayerRoleAssignment(gameId, playerId);
+      const updatedGameState = await gameStateManager.maybeConfirmPlayerRoleAssignment(gameId, playerId);
       
       if (updatedGameState) {
         // Broadcast updated game state to all players in the room
@@ -114,7 +114,7 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
         console.log(`Player ${playerId} confirmed role assignment for game ${gameId}`);
       } else {
         console.error(`Failed to confirm role assignment for player ${playerId} in game ${gameId}`);
-        socket.emit('error', { error: 'Failed to confirm role assignment' });
+        //socket.emit('error', { error: 'Failed to confirm role assignment' });
       }
     });
 
