@@ -247,7 +247,7 @@ body {
 }
 
 // Common utility classes
-.button {
+/* .button {
   &--primary {
     @include button-primary;
   }
@@ -274,7 +274,7 @@ body {
     padding: $spacing-xs $spacing-sm;
     font-size: $font-size-xs;
   }
-}
+} */
 
 .card {
   @include card;
@@ -438,13 +438,13 @@ body {
   }
 }
 
-.input {
+/* .input {
   @include input-base;
   
   &:disabled {
     background-color: #f5f5f5;
   }
-}
+} */
 
 // Utility classes for common patterns
 .visually-hidden {
@@ -553,9 +553,9 @@ body {
   }
 }
 
-.form {
+/* .form {
   @include flex-column;
-}
+} */
 
 .label {
   display: block;
@@ -814,8 +814,6 @@ body {
   
   &.disconnected {
     background-color: $color-danger;
-    width: 20px;
-    height: 20px;
   }
 }
 
@@ -907,67 +905,6 @@ body {
     background-color: $color-secondary;
     cursor: not-allowed;
     opacity: 0.7;
-  }
-}
-
-
-// ===== ONUB LOBBY COMPONENT =====
-
-.lobby {
-  @include card-compact;
-  background-color: $color-light;
-  
-  h1 {
-    margin: 0 0 $spacing-sm 0;
-    color: $text-dark;
-  }
-  
-  p {
-    margin: 0 0 $spacing-lg 0;
-    color: $text-muted;
-  }
-  
-  .form {
-    h2 {
-      color: $text-dark;
-      margin-bottom: $spacing-md;
-    }
-  }
-}
-
-.special-rules {
-  margin-bottom: $spacing-xl;
-}
-
-.rule-option {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  font-size: $font-size-sm;
-  
-  input[type="checkbox"] {
-    margin-right: $spacing-xs;
-  }
-  
-  input[type="number"] {
-    @include input-base;
-    width: 80px;
-    margin: 0 $spacing-xs;
-  }
-}
-
-.start-section {
-  button {
-    @include button-primary;
-    @include button-base;
-    padding: $spacing-md $spacing-xl;
-    font-size: $font-size-md;
-    font-weight: bold;
-    
-    &:disabled {
-      background-color: $color-secondary;
-      cursor: not-allowed;
-    }
   }
 }
 
