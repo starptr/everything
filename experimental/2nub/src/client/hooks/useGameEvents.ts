@@ -18,13 +18,14 @@ interface UseGameEventsOptions {
   playerId?: string;
 }
 
-interface UseGameEventsReturn {
+export interface UseGameEventsReturn {
   isConnected: boolean;
   forceDisconnectPlayer: (gameId: string, playerId: string) => Promise<void>;
   connect: () => void;
   disconnect: () => void;
   authenticatePlayer: (gameId: string, playerId: string) => void;
   updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
+  startGame: () => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -52,7 +53,7 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     playerId
   } = options;
 
-  const { isConnected, socket, connect, disconnect, authenticatePlayer, updateRuleset } = useWebSocket({
+  const { isConnected, socket, connect, disconnect, authenticatePlayer } = useWebSocket({
     onConnect,
     onDisconnect,
     onConnectionError,
@@ -60,6 +61,21 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     playerId
   });
 
+  const updateRuleset = useCallback((ruleset: StateLobby["ruleset"]) => {
+    if (socket && isConnected && gameId) {
+      console.log(`Updating ruleset for game ${gameId}`, ruleset);
+      socket.emit('updateRuleset', { gameId, ruleset });
+    } else {
+      console.error('Cannot update ruleset: socket not connected or no game ID');
+    }
+  }, [isConnected, socket, gameId]);
+
+  const startGame = useCallback(() => {
+    if (socket && isConnected && gameId) {
+      console.log(`Starting game ${gameId}`);
+      socket.emit('startGame', { gameId });
+    }
+  }, [isConnected, socket, gameId]);
 
   const forceDisconnectPlayer = useCallback(async (gameId: string, playerId: string) => {
     try {
@@ -108,5 +124,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     disconnect,
     authenticatePlayer,
     updateRuleset,
+    startGame,
   };
 }

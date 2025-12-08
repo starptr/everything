@@ -1,14 +1,8 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { StateLobby } from '../../types';
+import { UseGameEventsReturn } from '../hooks/useGameEvents';
 
-export interface SocketEventContextType {
-  isConnected: boolean;
-  forceDisconnectPlayer: (gameId: string, playerId: string) => Promise<void>;
-  connect: () => void;
-  disconnect: () => void;
-  authenticatePlayer: (gameId: string, playerId: string) => void;
-  updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
-}
+export type SocketEventContextType = UseGameEventsReturn;
 
 const SocketEventContext = createContext<SocketEventContextType | null>(null);
 
