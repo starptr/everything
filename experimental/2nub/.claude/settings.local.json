@@ -15,7 +15,10 @@
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "Bash(npm install)",
-      "WebFetch(domain:socket.io)"
+      "WebFetch(domain:socket.io)",
+      "Bash(timeout 10s npm run dev:client)",
+      "Bash(rm:*)",
+      "Bash(timeout 8s npm run dev:client)"
     ],
     "deny": [],
     "ask": []
