@@ -52,8 +52,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlaye
   }
   console.debug("Game:", game);
 
-  const currentPlayer = currentPlayerId ? game.players.find(p => p.id === currentPlayerId) : null;
-  const playerList = game.players;
+  const currentPlayer = currentPlayerId ? game.state.players.find(p => p.id === currentPlayerId) : null;
+  const playerList = game.state.players;
   const isCurrentPlayerDisconnected = currentPlayer && !currentPlayer.connected;
 
   return (
@@ -63,7 +63,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlaye
           <h1>{game.name}</h1>
           <div className="game-meta">
             <span>Game ID: <strong>{gameId}</strong></span>
-            <span>Players: <strong>{game.players.length}</strong></span>
+            <span>Players: <strong>{game.state.players.length}</strong></span>
             <span className={`status-badge ${game.state.state === 'lobby' ? 'waiting' : 'in-progress'}`}>
               {game.state.state === 'lobby' ? 'Waiting' : game.state.state}
             </span>
@@ -89,7 +89,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlaye
         <div className="current-player">
           <h3>You are:</h3>
           <p>
-            <strong>{currentPlayer.name}</strong> (Seat {game.players.indexOf(currentPlayer) + 1})
+            <strong>{currentPlayer.name}</strong> (Seat {game.state.players.indexOf(currentPlayer) + 1})
           </p>
         </div>
       )}
@@ -107,7 +107,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, gameId, currentPlaye
                     {player.name} {player.id === currentPlayerId && '(You)'}
                   </div>
                   <div className="player-seat">
-                    Seat {game.players.indexOf(player) + 1}
+                    Seat {game.state.players.indexOf(player) + 1}
                   </div>
                 </div>
                 <div className="player-actions">
