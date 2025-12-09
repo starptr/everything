@@ -28,7 +28,7 @@ export const Onub: React.FC<OnubProps> = ({ game, currentPlayerId }) => {
 
 	switch (game.state.state) {
 		case 'lobby':
-			content = <OnubLobby stateLobby={game.state} playerCount={game.players.length} currentPlayerId={currentPlayerId} />;
+			content = <OnubLobby stateLobby={game.state} playerCount={game.state.players.length} currentPlayerId={currentPlayerId} />;
 			break;
 		case 'roleAssignment':
 			content = <OnubRoleAssignment stateRoleAssignment={game.state} currentPlayerId={currentPlayerId} />;

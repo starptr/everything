@@ -80,7 +80,6 @@ class GameStateManager {
     const game: GameState = {
       id,
       name,
-      players: [],
       gameLog: [],
       state: {
         state: 'lobby',
@@ -93,6 +92,7 @@ class GameStateManager {
             },
           },
         },
+        players: [],
       },
       createdAt: new Date(),
     };
@@ -125,7 +125,7 @@ class GameStateManager {
       connected: true
     };
 
-    game.players.push(player);
+    game.state.players.push(player);
 
     return player;
   }
@@ -134,12 +134,12 @@ class GameStateManager {
     const game = this.games.get(gameId);
     if (!game) return false;
 
-    const playerIndex = game.players.findIndex(p => p.id === playerId);
+    const playerIndex = game.state.players.findIndex(p => p.id === playerId);
     if (playerIndex === -1) return false;
 
-    game.players.splice(playerIndex, 1);
+    game.state.players.splice(playerIndex, 1);
 
-    if (game.players.length === 0) {
+    if (game.state.players.length === 0) {
       this.games.delete(gameId);
     }
 
@@ -150,7 +150,7 @@ class GameStateManager {
     const game = this.games.get(gameId);
     if (!game) return false;
 
-    const player = game.players.find(p => p.id === playerId);
+    const player = game.state.players.find(p => p.id === playerId);
     if (!player) return false;
 
     player.connected = connected;
@@ -165,7 +165,7 @@ class GameStateManager {
       return null;
     }
 
-    const player = game.players.find(p => p.id === playerId);
+    const player = game.state.players.find(p => p.id === playerId);
     if (!player) {
       console.debug(`Rejoin failed: player ${playerId} not found in game ${gameId}`);
       return null;
@@ -192,7 +192,7 @@ class GameStateManager {
     const game = this.games.get(gameId);
     if (!game) return false;
 
-    const player = game.players.find(p => p.id === playerId);
+    const player = game.state.players.find(p => p.id === playerId);
     if (!player) return false;
 
     // Remove any existing socket for this player
@@ -257,7 +257,7 @@ class GameStateManager {
 
     // Only allow starting the game if invariants hold
     if (game.state.state !== 'lobby') return null;
-    else if (game.players.length + 3 !== game.state.ruleset.roleOrder.length) return null;
+    else if (game.state.players.length + 3 !== game.state.ruleset.roleOrder.length) return null;
 
     // There must be either 0 or 2 "50/50 duo cop" roles
     const count5050DuoCop = game.state.ruleset.roleOrder.filter(roleId => roleId === '50/50 duo cop').length;
@@ -279,12 +279,12 @@ class GameStateManager {
     if (game.state.ruleset.special.maybeAllTanners.enabled) {
       if (flip(game.state.ruleset.special.maybeAllTanners.probability)) {
         // Set all players to Tanner
-        const playerIdsByWakeupOrder = shuffle(game.players.map(p => [p.id]));
+        const playerIdsByWakeupOrder = shuffle(game.state.players.map(p => [p.id]));
         game.state = {
           state: 'roleAssignment',
           playerIdsByWakeupOrder,
           playerData: Object.fromEntries(
-            game.players.map(player => [player.id, {
+            game.state.players.map(player => [player.id, {
               originalRoleId: 'tanner',
               currentRoleId: 'tanner',
               playerLog: [],
@@ -293,8 +293,9 @@ class GameStateManager {
           centerCards: ['tanner', 'tanner', 'tanner'],
           ruleset: { ...game.state.ruleset },
           playerConfirmations: Object.fromEntries(
-            game.players.map(player => [player.id, false])
+            game.state.players.map(player => [player.id, false])
           ),
+          players: [...game.state.players],
         };
         return game;
       }
@@ -320,7 +321,7 @@ class GameStateManager {
     const centerCards = shuffle(unshuffledCenterCards);
 
     const playerIdsByWakeupOrder: Player["id"][][] = [];
-    const playerIds = shuffle(game.players.map(p => p.id));
+    const playerIds = shuffle(game.state.players.map(p => p.id));
     const playerData: StateNight["playerData"] = Object.fromEntries(
       playerIds.map((id, index) => {
         if (index > 0
@@ -347,8 +348,9 @@ class GameStateManager {
       centerCards,
       ruleset: { ...game.state.ruleset },
       playerConfirmations: Object.fromEntries(
-        game.players.map(player => [player.id, false])
+        game.state.players.map(player => [player.id, false])
       ),
+      players: [...game.state.players],
     }
 
     return game;
@@ -377,6 +379,7 @@ class GameStateManager {
         centerCards: game.state.centerCards,
         ruleset: game.state.ruleset,
         turn: 0,
+        players: [...game.state.players],
       };
     }
 

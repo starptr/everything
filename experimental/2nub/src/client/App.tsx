@@ -78,11 +78,14 @@ const App: React.FC = () => {
         
         return {
           ...prevGame,
-          players: prevGame.players.map(player =>
-            player.id === currentPlayerId
-              ? { ...player, connected: false }
-              : player
-          )
+          state: {
+            ...prevGame.state,
+            players: prevGame.state.players.map(player =>
+              player.id === currentPlayerId
+                ? { ...player, connected: false }
+                : player
+            )
+          }
         };
       });
     }

@@ -104,20 +104,20 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                       ID: <strong>{game.id}</strong>
                     </span>
                     <span>
-                      Players: <strong>{game.players.length}</strong>
+                      Players: <strong>{game.state.players.length}</strong>
                     </span>
                     <span className={`status-badge ${getStatusClass(game.state.state)}`}>
                       {getStatusDisplayName(game.state.state)}
                     </span>
                   </div>
                   
-                  {game.players.length > 0 && (
+                  {game.state.players.length > 0 && (
                     <div className="players-section">
                       <strong>Players:</strong>
                       <div className="player-badges">
-                        {game.players.map((player) => (
+                        {game.state.players.map((player) => (
                           <span key={player.id} className={`player-badge ${player.connected ? 'connected' : 'disconnected'}`}>
-                            {player.name} (Seat {game.players.indexOf(player) + 1})
+                            {player.name} (Seat {game.state.players.indexOf(player) + 1})
                           </span>
                         ))}
                       </div>
@@ -129,7 +129,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                   {joiningGameId === game.id ? (
                     <div className="join-form">
                       {(() => {
-                        const disconnectedPlayers = game.players.filter(p => !p.connected);
+                        const disconnectedPlayers = game.state.players.filter(p => !p.connected);
                         return (
                           <form onSubmit={(e) => handleJoinSubmit(e, game.id)} className="form">
                             {disconnectedPlayers.length > 0 && (
@@ -148,7 +148,7 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                                         onChange={() => handleExistingPlayerSelect(player.id)}
                                       />
                                       <span>
-                                        {player.name} (Seat {game.players.indexOf(player) + 1})
+                                        {player.name} (Seat {game.state.players.indexOf(player) + 1})
                                       </span>
                                     </label>
                                   ))}

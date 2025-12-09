@@ -42,6 +42,7 @@ export interface StateLobby {
     roleOrder: RoleId[];
     special: SpecialRules;
   }
+  players: Player[];
 };
 
 export interface StateRoleAssignment {
@@ -52,6 +53,7 @@ export interface StateRoleAssignment {
   centerCards: RoleId[];
   ruleset: StateLobby["ruleset"];
   playerConfirmations: Record<Player["id"], boolean>;
+  players: StateLobby["players"];
 }
 
 export interface StateNight {
@@ -61,6 +63,7 @@ export interface StateNight {
   centerCards: StateRoleAssignment["centerCards"];
   ruleset: StateRoleAssignment["ruleset"];
   turn: number;
+  players: StateRoleAssignment["players"];
 }
 
 export interface StateDay {
@@ -68,6 +71,7 @@ export interface StateDay {
   playerData: StateNight["playerData"];
   centerCards: StateNight["centerCards"];
   ruleset: StateNight["ruleset"];
+  players: StateNight["players"];
 }
 
 export interface StateVoting {
@@ -76,6 +80,7 @@ export interface StateVoting {
   playerData: StateDay["playerData"];
   centerCards: StateDay["centerCards"];
   ruleset: StateDay["ruleset"];
+  players: StateDay["players"];
 }
 
 export interface StateFinished {
@@ -85,6 +90,7 @@ export interface StateFinished {
   playerData: StateVoting["playerData"];
   centerCards: StateVoting["centerCards"];
   ruleset: StateVoting["ruleset"];
+  players: StateVoting["players"];
 }
 
 // Client-side game state without ID (pure game data)
@@ -95,7 +101,6 @@ export type GameStateClient = {
   name: string;
   gameLog: string[];
 
-  players: Player[];
   state: StateLobby | StateRoleAssignment | StateNight | StateDay | StateVoting | StateFinished;
 }
 
