@@ -379,8 +379,45 @@ class GameStateManager {
         centerCards: game.state.centerCards,
         ruleset: game.state.ruleset,
         turn: 0,
+        endedTurn: game.state.playerIdsByWakeupOrder.map(playerIds => {
+          return Object.fromEntries(
+            playerIds.map(id => [id, false])
+          );
+        }),
         players: [...game.state.players],
       };
+    }
+
+    return game;
+  }
+
+  async maybeEndPlayerTurn(gameId: string, playerId: string): Promise<GameState | null> {
+    const game = this.games.get(gameId);
+    if (!game) return null;
+
+    // Only allow ending turn if game is in night state
+    if (game.state.state !== 'night') return null;
+
+    if (playerId in game.state.endedTurn[game.state.turn]) {
+      game.state.endedTurn[game.state.turn][playerId] = true;
+    }
+
+    // Check if all players for the current turn have ended their turn
+    const allEnded = Object.values(game.state.endedTurn[game.state.turn]).every(ended => ended);
+    if (allEnded) {
+      // Move to next turn
+      game.state.turn += 1;
+      
+      // If all turns are completed, transition to day state
+      if (game.state.turn >= game.state.playerIdsByWakeupOrder.length) {
+        game.state = {
+          state: 'day',
+          playerData: game.state.playerData,
+          centerCards: game.state.centerCards,
+          ruleset: game.state.ruleset,
+          players: [...game.state.players],
+        };
+      }
     }
 
     return game;

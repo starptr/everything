@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GameStateClient, Player, StateNight } from '../../types';
 import '../styles/main.scss';
+import { useSocketEvents } from '../hooks/useSocketEvents';
 
 interface OnubNightProps {
     stateNight: StateNight;
@@ -9,11 +10,12 @@ interface OnubNightProps {
 
 export const OnubNight: React.FC<OnubNightProps> = ({ stateNight, currentPlayerId }) => {
     const { turn } = stateNight;
+    const { endTurn } = useSocketEvents();
 
     const { originalRoleId } = stateNight.playerData[currentPlayerId];
 
     const handleEndTurn = () => {
-        throw new Error('Not implemented yet');
+        endTurn();
     };
 
     let content = <div>Unknown state</div>;

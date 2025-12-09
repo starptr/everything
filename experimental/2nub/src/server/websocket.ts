@@ -118,6 +118,29 @@ export function setupSocketIO(io: Server<ClientToServerEvents, ServerToClientEve
       }
     });
 
+    socket.on('endTurn', async (data) => {
+      const { gameId, playerId } = socket;
+      console.log(`Player ${playerId} ending turn for game ${gameId} on socket ${socket.id}`);
+
+      // Verify the socket is authenticated for this game and player
+      if (!gameId || !playerId) {
+        console.error(`Socket ${socket.id} not authenticated for any game/player`);
+        socket.emit('error', { error: 'Not authenticated for any game/player' });
+        return;
+      }
+
+      // Update the player's turn status via game state manager
+      const updatedGameState = await gameStateManager.maybeEndPlayerTurn(gameId, playerId);
+
+      if (updatedGameState) {
+        // Broadcast updated game state to all players in the room
+        broadcastToGame(gameId, 'gameState', toGameStateClient(updatedGameState));
+        console.log(`Player ${playerId} ended turn for game ${gameId}`);
+      } else {
+        console.error(`Failed to end turn for player ${playerId} in game ${gameId}`);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log('Socket.io client disconnected:', socket.id);
       

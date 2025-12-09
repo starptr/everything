@@ -27,6 +27,7 @@ export interface UseGameEventsReturn {
   updateRuleset: (ruleset: StateLobby["ruleset"]) => void;
   startGame: () => void;
   confirmRoleAssignment: () => void;
+  endTurn: () => void;
 }
 
 const createEventHandler = <T>(eventName: string, handler: (data: T) => void) => {
@@ -85,6 +86,13 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     }
   }, [isConnected, socket, gameId, playerId]);
 
+  const endTurn = useCallback(() => {
+    if (socket && isConnected && gameId && playerId) {
+      console.log(`Ending turn for player ${playerId} in game ${gameId}`);
+      socket.emit('endTurn', { gameId, playerId });
+    }
+  }, [isConnected, socket, gameId, playerId]);
+
   const forceDisconnectPlayer = useCallback(async (gameId: string, playerId: string) => {
     try {
       const response = await fetch(buildApiUrl(`api/games/${gameId}/players/${playerId}/disconnect`), {
@@ -134,5 +142,6 @@ export function useGameEvents(options: UseGameEventsOptions): UseGameEventsRetur
     updateRuleset,
     startGame,
     confirmRoleAssignment,
+    endTurn,
   };
 }

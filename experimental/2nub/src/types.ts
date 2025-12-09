@@ -63,6 +63,9 @@ export interface StateNight {
   centerCards: StateRoleAssignment["centerCards"];
   ruleset: StateRoleAssignment["ruleset"];
   turn: number;
+  endedTurn: {
+    [playerId: Player["id"]]: boolean;
+  }[];
   players: StateRoleAssignment["players"];
 }
 
@@ -142,6 +145,7 @@ export interface ClientToServerEvents {
   updateRuleset: (data: { gameId: string; ruleset: StateLobby["ruleset"] }) => void;
   startGame: (data: { gameId: string }) => void;
   confirmRoleAssignment: (data: { gameId: string; playerId: string }) => void;
+  endTurn: (data: { gameId: string; playerId: string}) => void;
 }
 
 export interface ApiResponse<T = any> {
