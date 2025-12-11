@@ -398,9 +398,11 @@ class GameStateManager {
     // Only allow ending turn if game is in night state
     if (game.state.state !== 'night') return null;
 
-    if (playerId in game.state.endedTurn[game.state.turn]) {
-      game.state.endedTurn[game.state.turn][playerId] = true;
+    if (!(playerId in game.state.endedTurn[game.state.turn])) {
+      return null;
     }
+
+    game.state.endedTurn[game.state.turn][playerId] = true;
 
     // Check if all players for the current turn have ended their turn
     const allEnded = Object.values(game.state.endedTurn[game.state.turn]).every(ended => ended);
