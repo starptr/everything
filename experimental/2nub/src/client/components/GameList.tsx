@@ -207,10 +207,8 @@ export const GameList: React.FC<GameListProps> = ({ games, onJoinGame, onRejoinG
                   ) : (
                     <button
                       onClick={() => handleJoinClick(game.id)}
-                      disabled={game.state.state !== 'lobby'}
-                      className={game.state.state !== 'lobby' ? 'button--secondary' : 'button--success'}
                     >
-                      {game.state.state !== 'lobby' ? 'In Progress' : 'Join'}
+                      Join
                     </button>
                   )}
                 </div>

@@ -148,7 +148,7 @@ export function setupRoutes(): Router {
     const removed = gameStateManager.maybeRemovePlayer(gameId, playerId);
     
     if (!removed) {
-      return respondFailure(res, 404, 'Player or game not found');
+      return respondFailure(res, 404, 'Failed to remove player');
     }
 
     const game = gameStateManager.maybeGetGame(gameId);
