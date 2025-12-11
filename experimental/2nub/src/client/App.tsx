@@ -183,16 +183,19 @@ const App: React.FC = () => {
     if (!currentGameId || !currentPlayerId) return;
     
     try {
-      await fetch(buildApiUrl(`api/games/${currentGameId}/players/${currentPlayerId}`), {
+      const response = await fetch(buildApiUrl(`api/games/${currentGameId}/players/${currentPlayerId}`), {
         method: 'DELETE'
       });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${response}`);
+      }
       setCurrentGame(null);
       setCurrentGameId(null);
       setCurrentPlayerId(null);
       setView('list');
       sessionStorage.clearPlayerSession();
     } catch (error) {
-      console.error('Failed to leave game:', error);
+      console.log('Failed to leave game:', error);
     }
   };
 

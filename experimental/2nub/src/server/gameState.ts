@@ -134,6 +134,8 @@ class GameStateManager {
     const game = this.games.get(gameId);
     if (!game) return false;
 
+    if (game.state.state !== 'lobby') return false;
+
     const playerIndex = game.state.players.findIndex(p => p.id === playerId);
     if (playerIndex === -1) return false;
 
