@@ -106,7 +106,7 @@ recursiveUpdateAll [
               enterShell = ''
                 hello
                 echo "Reminder: Do not use git in this repo. Use jujutsu instead."
-                echo "Don't forget to run `jj new` before making a new change."
+                echo "Don't forget to run 'jj new' before making a new change."
               '';
   
               processes.hello.exec = "hello";
