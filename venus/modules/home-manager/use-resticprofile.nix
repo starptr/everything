@@ -46,6 +46,19 @@
       };
       config = {
         version = "1";
+        downloads-sodium = lib.recursiveUpdate self.config-partials.base {
+          password-file = "machine_backups_pw.txt";
+          exclude = self.config.full-machine-sodium.exclude;
+          # Custom command
+          backup = {
+            verbose = true;
+            tag = [ "sodium" "yuto" "downloads" ];
+            source = [
+              self.sources.downloads
+            ];
+          };
+          repository = self.repositories.machine-backups;
+        };
         users-sodium = {
           password-file = "machine_backups_pw.txt";
           exclude = self.config.full-machine-sodium.exclude;
