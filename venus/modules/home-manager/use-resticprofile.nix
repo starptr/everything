@@ -46,7 +46,19 @@
       };
       config = {
         version = "1";
-        # Usage: resticprofile --name full-machine-sodium backup
+        users-sodium = {
+          password-file = "machine_backups_pw.txt";
+          exclude = self.config.full-machine-sodium.exclude;
+          # Custom command
+          backup = {
+            verbose = true;
+            tag = [ "sodium" "yuto" ];
+            source = [
+              "/Users/yuto"
+            ];
+          };
+          repository = self.repositories.machine-backups;
+        };
         full-machine-sodium = {
           password-file = "machine_backups_pw.txt";
           exclude = [
