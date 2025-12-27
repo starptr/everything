@@ -59,6 +59,9 @@ importers:
       '@atproto/xrpc':
         specifier: ^0.6.9
         version: 0.6.12
+      '@pretendonetwork/mii-js':
+        specifier: ^1.0.10
+        version: 1.0.10
       '@tailwindcss/vite':
         specifier: ^4.0.9
         version: 4.1.18(vite@6.4.1(@types/node@22.19.3)(jiti@2.6.1)(lightningcss@1.30.2))
@@ -1223,6 +1226,9 @@ packages:
     peerDependencies:
       '@parcel/core': ^2.16.3
 
+  '@pretendonetwork/mii-js@1.0.10':
+    resolution: {integrity: sha512-HNpZV4cnipwt9FsV7H3sLfxN9ob38AYE3g9s3X1zajAeKOkB6tnveSjAmDKnUgQAvqJUdIwowzJmQ0u6bcEVMA==}
+
   '@rolldown/pluginutils@1.0.0-beta.27':
     resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
 
@@ -1662,6 +1668,9 @@ packages:
     resolution: {integrity: sha512-Sg0xJUNDU1sJNGdfGWhVHX0kkZ+HWcvmVymJbj6NSgZZmW/8S9Y2HQ5euytnIgakgxN6papOAWiwDo1ctFDcoQ==}
     hasBin: true
 
+  bit-buffer@0.2.5:
+    resolution: {integrity: sha512-x1yGnmXvFg6e3DiyRztElbcn1bsCTFSoM/ncAzY62uE0JdTl5xlKJd0ooqLYoPbhdsnpehSIQrdIvclcZJYwiA==}
+
   brace-expansion@1.1.12:
     resolution: {integrity: sha512-9T9UjW3r0UW5c1Q7GTwllptXwhvYmEzFhzMfZ9H7FQWt+uZePjZPjBP/W1ZEyZ1twGWom5/56TF4lPcqjnDHcg==}
 
@@ -1765,6 +1774,9 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  crypto-js@4.2.0:
+    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
@@ -4019,6 +4031,11 @@ snapshots:
     transitivePeerDependencies:
       - napi-wasm
 
+  '@pretendonetwork/mii-js@1.0.10':
+    dependencies:
+      bit-buffer: 0.2.5
+      crypto-js: 4.2.0
+
   '@rolldown/pluginutils@1.0.0-beta.27': {}
 
   '@rollup/rollup-android-arm-eabi@4.54.0':
@@ -4414,6 +4431,8 @@ snapshots:
 
   baseline-browser-mapping@2.9.11: {}
 
+  bit-buffer@0.2.5: {}
+
   brace-expansion@1.1.12:
     dependencies:
       balanced-match: 1.0.2
@@ -4505,6 +4524,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  crypto-js@4.2.0: {}
 
   csstype@3.2.3: {}
 
