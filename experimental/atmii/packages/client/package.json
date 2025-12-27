@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@parcel/transformer-typescript-types": "^2.12.0",
+    "@types/node": "^22.13.8",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@typescript-eslint/eslint-plugin": "^8.25.0",
