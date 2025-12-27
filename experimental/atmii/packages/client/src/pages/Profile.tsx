@@ -137,7 +137,7 @@ const Profile = () => {
 		const renderMii = async () => {
 			if (!mii) return;
 			console.log('mii: ', mii);
-			const miiData = new Mii(mii.buffer.slice(mii.byteOffset, mii.byteLength) as unknown as Buffer);
+			const miiData = new Mii(mii.buffer.slice(mii.byteOffset, mii.byteOffset + mii.byteLength) as unknown as Buffer);
 
 			//const miiData = new Mii(mii.buffer);
 
