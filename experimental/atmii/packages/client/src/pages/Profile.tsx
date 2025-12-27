@@ -11,6 +11,7 @@ import {
 	PlcDidDocumentResolver,
 	WebDidDocumentResolver,
 	LocalActorResolver,
+	ResolvedActor,
 } from '@atcute/identity-resolver'
 import {
 	getPdsEndpoint
@@ -39,9 +40,10 @@ const actorResolver = new LocalActorResolver({
 
 const Profile = () => {
 	const { handle } = useParams()
-	const [pds, setPds] = useState<string | null>(null);
+	const [resolvedActor, setResolvedActor] = useState<ResolvedActor | null>(null);
 	const [rpc, setRpc] = useState<Client>();
-	const [mii, setMii] = useState(new ArrayBuffer())
+	const [miiCid, setMiiCid] = useState<string | null>(null);
+	const [mii, setMii] = useState(new Uint8Array())
 
 	useEffect(() => {
 		if (!handle || !isActorIdentifier(handle)) return;
@@ -51,10 +53,10 @@ const Profile = () => {
 
 		const fetchMii = async () => {
 			// Fetch pds endpoint
-			const { pds } = await actorResolver.resolve(handle);
-			setPds(pds);
+			const resolvedActor = await actorResolver.resolve(handle);
+			setResolvedActor(resolvedActor)
 
-			const rpc = new Client({ handler: simpleFetchHandler({ service: pds }), });
+			const rpc = new Client({ handler: simpleFetchHandler({ service: resolvedActor.pds }), });
 			setRpc(rpc)
 
 			const result = await rpc.get('com.atproto.repo.getRecord', {
@@ -65,6 +67,31 @@ const Profile = () => {
 				},
 			});
 			console.debug('Fetched Mii record:', result);
+
+			if (!('value' in result.data)) {
+				console.log('result.data.value does not exist');
+				return;
+			}
+
+			// TODO: add type safety
+			const cid = (result.data.value.mii as any).ref["$link"] as string;
+			setMiiCid(cid);
+
+			// Get blob
+			const blobResult = await rpc.get('com.atproto.sync.getBlob', {
+				params: {
+					did: resolvedActor.did,
+					cid: cid,
+				},
+				as: 'bytes',
+			});
+			console.debug('Fetched mii blob: ', blobResult)
+			if (!blobResult.ok) {
+				console.log('blobResult is not ok');
+				return;
+			}
+			const miiData = new Uint8Array(blobResult.data);
+			setMii(miiData);
 		};
 
 		fetchMii();
