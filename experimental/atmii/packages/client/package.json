@@ -16,11 +16,11 @@
     "@atcute/atproto": "^3.1.9",
     "@atcute/bluesky": "^3.2.14",
     "@atcute/client": "^4.1.1",
+    "@atcute/identity-resolver": "^1.2.1",
     "@atcute/lexicons": "^1.2.6",
     "@atmii/lexicon": "workspace:*",
     "@atproto/api": "^0.14.7",
     "@atproto/xrpc": "^0.6.9",
-    "@atmii/lexicon": "workspace:*",
     "@tailwindcss/vite": "^4.0.9",
     "@tanstack/react-query": "^5.66.11",
     "iron-session": "^8.0.4",
@@ -46,7 +46,6 @@
     "tailwindcss": "^4.0.9",
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
-    "vite-tsconfig-paths": "^5.1.4",
-    "typescript": "^5.8.2"
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }
