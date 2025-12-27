@@ -11,7 +11,7 @@ function App() {
   return (
     <div className="min-h-screen">
       <div className="max-w-4xl mx-auto p-4 w-full">
-        <AuthProvider>
+        {/*<AuthProvider>*/}
           <Routes>
             <Route path="/" element={<div>Home Page</div>} />
             <Route path="/profile/:handle" element={<Profile />} />
@@ -22,7 +22,7 @@ function App() {
             <Route path="/channel/:channelNsid" element={<Channel />} />
             */}
           </Routes>
-        </AuthProvider>
+        {/*</AuthProvider>*/}
       </div>
     </div>
   )
