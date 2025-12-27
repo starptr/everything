@@ -5,6 +5,7 @@ import { AuthProvider } from 'client-src/hooks/useAuth'
 //import LoginPage from '#/pages/LoginPage'
 //import OAuthCallbackPage from '#/pages/OAuthCallbackPage'
 //import Channel from '#/pages/Channel'
+import Profile from 'client-src/pages/Profile'
 
 function App() {
   return (
@@ -12,6 +13,8 @@ function App() {
       <div className="max-w-4xl mx-auto p-4 w-full">
         <AuthProvider>
           <Routes>
+            <Route path="/" element={<div>Home Page</div>} />
+            <Route path="/profile/:handle" element={<Profile />} />
             {/*
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
