@@ -41,6 +41,9 @@ importers:
       '@atcute/client':
         specifier: ^4.1.1
         version: 4.1.1
+      '@atcute/lexicons':
+        specifier: ^1.2.6
+        version: 1.2.6
       '@atmii/lexicon':
         specifier: workspace:*
         version: link:../lexicon
