@@ -1,0 +1,52 @@
+{
+  "name": "@atmii/lexicon",
+  "version": "0.0.1",
+  "description": "Generated API client for ATMii lexicons",
+  "author": "",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "private": true,
+  "scripts": {
+    "build": "pnpm lexgen && tsup",
+    "dev": "tsup --watch",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit",
+    "lexgen": "lex gen-api ./src ../../lexicons/app/andref/*/* ../../lexicons/com/atproto/*/* ../../lexicons/app/bsky/*/* --yes && pnpm format",
+    "format": "prettier --write src"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.14.7",
+    "@atproto/lexicon": "^0.4.14",
+    "@atproto/syntax": "^0.3.3",
+    "@atproto/xrpc": "^0.6.9",
+    "multiformats": "^13.3.2"
+  },
+  "devDependencies": {
+    "@atproto/lex-cli": "^0.6.2",
+    "@types/node": "^22.13.8",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2"
+  },
+  "tsup": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "format": [
+      "cjs",
+      "esm"
+    ],
+    "dts": true,
+    "sourcemap": true,
+    "clean": true
+  }
+}
