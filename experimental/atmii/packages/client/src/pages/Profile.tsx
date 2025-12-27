@@ -1,6 +1,5 @@
-import { useParams, useSearchParams } from 'react-router'
+import { useParams } from 'react-router'
 
-import { ComAtprotoRepoGetRecord } from '@atcute/atproto'
 import { Client, simpleFetchHandler } from '@atcute/client';
 import { isActorIdentifier } from '@atcute/lexicons/syntax';
 import {
@@ -11,46 +10,11 @@ import {
 	PlcDidDocumentResolver,
 	WebDidDocumentResolver,
 	LocalActorResolver,
-	ResolvedActor,
 } from '@atcute/identity-resolver'
-import {
-	getPdsEndpoint
-} from '@atcute/identity'
 
 import Mii from '@pretendonetwork/mii-js';
 
-import { useState, useEffect, useMemo } from 'react'
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  return bytes.buffer;
-}
-
-function base64UrlToUint8Array(base64url: string): Uint8Array {
-  let base64 = base64url
-    .replace(/-/g, '+')
-    .replace(/_/g, '/')
-
-  // pad with '='
-  const pad = base64.length % 4
-  if (pad) {
-    base64 += '='.repeat(4 - pad)
-  }
-
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
+import { useState, useEffect } from 'react'
 
 const handleResolver = new CompositeHandleResolver({
 	methods: {
@@ -73,9 +37,9 @@ const actorResolver = new LocalActorResolver({
 
 const Profile = () => {
 	const { handle } = useParams()
-	const [resolvedActor, setResolvedActor] = useState<ResolvedActor | null>(null);
-	const [rpc, setRpc] = useState<Client>();
-	const [miiCid, setMiiCid] = useState<string | null>(null);
+	//const [resolvedActor, setResolvedActor] = useState<ResolvedActor | null>(null);
+	//const [rpc, setRpc] = useState<Client>();
+	//const [miiCid, setMiiCid] = useState<string | null>(null);
 	const [mii, setMii] = useState<Uint8Array>(new Uint8Array())
 	const [renderUrl, setRenderUrl] = useState<string | null>(null);
 
@@ -88,10 +52,10 @@ const Profile = () => {
 		const fetchMii = async () => {
 			// Fetch pds endpoint
 			const resolvedActor = await actorResolver.resolve(handle);
-			setResolvedActor(resolvedActor)
+			//setResolvedActor(resolvedActor)
 
 			const rpc = new Client({ handler: simpleFetchHandler({ service: resolvedActor.pds }), });
-			setRpc(rpc)
+			//setRpc(rpc)
 
 			const result = await rpc.get('com.atproto.repo.getRecord', {
 				params: {
@@ -109,7 +73,7 @@ const Profile = () => {
 
 			// TODO: add type safety
 			const cid = (result.data.value.mii as any).ref["$link"] as string;
-			setMiiCid(cid);
+			//setMiiCid(cid);
 
 			// Get blob
 			const blobResult = await rpc.get('com.atproto.sync.getBlob', {
