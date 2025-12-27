@@ -13,6 +13,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@atcute/bluesky": "^3.2.14",
+    "@atcute/client": "^4.1.1",
+    "@atmii/lexicon": "workspace:*",
     "@atproto/api": "^0.14.7",
     "@atproto/xrpc": "^0.6.9",
     "@atmii/lexicon": "workspace:*",
@@ -24,6 +27,7 @@
     "react-router": "^7.2.0"
   },
   "devDependencies": {
+    "@parcel/transformer-typescript-types": "^2.12.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@typescript-eslint/eslint-plugin": "^8.25.0",
@@ -35,10 +39,12 @@
     "eslint-plugin-react-compiler": "19.0.0-beta-e1e972c-20250221",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
+    "parcel": "^2.12.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.0.9",
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite-tsconfig-paths": "^5.1.4",
+    "typescript": "^5.8.2"
   }
 }
