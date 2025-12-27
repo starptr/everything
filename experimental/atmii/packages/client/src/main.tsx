@@ -1,11 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-import App from '#/App'
+import App from 'client-src/App'
 
-import '#/index.css'
+//import 'client-src/index.css'
 
 const queryClient = new QueryClient()
 

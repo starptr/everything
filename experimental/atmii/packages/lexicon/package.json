@@ -20,7 +20,7 @@
     "dev": "tsup --watch",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
-    "lexgen": "lex gen-api ./src ../../lexicons/app/andref/*/* ../../lexicons/com/atproto/*/* ../../lexicons/app/bsky/*/* --yes && pnpm format",
+    "lexgen": "lex gen-api ./src ../../lexicons/xyz/statusphere/* ../../lexicons/app/andref/*/* ../../lexicons/com/atproto/*/* ../../lexicons/app/bsky/*/* --yes && pnpm format",
     "format": "prettier --write src"
   },
   "dependencies": {
