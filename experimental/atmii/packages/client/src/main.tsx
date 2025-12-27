@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type {} from '@atcute/bluesky'
+import type {} from '@atcute/atproto'
+import type {} from '@atcute/lexicons'
+import type {} from '@atcute/client'
 
 import App from 'client-src/App'
 
