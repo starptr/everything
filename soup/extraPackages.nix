@@ -23,4 +23,5 @@ in
   # some-qt5-package = pkgs.libsForQt5.callPackage ./pkgs/some-qt5-package { };
   # ...
   love = callPackageWithMaybeFlakeInputs ./pkgs/love { };
+  jujutsu = callPackageWithMaybeFlakeInputs ./pkgs/jujutsu.nix { };
 }

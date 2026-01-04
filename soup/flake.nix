@@ -19,6 +19,13 @@
       url = "https://github.com/love2d/love/releases/download/11.5/love-11.5-macos.zip";
       flake = false;
     };
+    jujutsu = {
+      url = "github:jj-vcs/jj/v0.36.0";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
+
     chaseln = {
       url = "github:starptr/chaseln";
       inputs = {
@@ -68,7 +75,7 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       # TODO: remove in favor of `exports`
       flake-inputs = {
-        inherit (inputs) love chaseln dark-notify fenix check-gits;
+        inherit (inputs) love chaseln dark-notify fenix check-gits jujutsu;
       };
       # List of flake inputs that we want to transparently re-export (i.e. without custom packaging)
       exports = import ./exports.nix;

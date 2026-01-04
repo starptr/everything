@@ -25,4 +25,12 @@
       }
     else
       maybe-flake-inputs.check-gits.overlays.default;
+
+  jujutsu = if builtins.isNull maybe-flake-inputs
+    then
+      self: super: {
+        jujutsu = (self.callPackage ../. { inherit maybe-flake-inputs; }).jujutsu;
+      }
+    else
+      maybe-flake-inputs.jujutsu.overlays.default;
 }
