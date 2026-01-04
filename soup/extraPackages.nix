@@ -6,7 +6,7 @@
 # commands such as:
 #     nix-build -A mypackage
 
-{ pkgs, maybe-flake-inputs }:
+{ pkgs, maybe-flake-inputs, system }:
 let
   flake-lock = builtins.fromJSON (builtins.readFile ./flake.lock);
   callPackageWithMaybeFlakeInputs = pkgs.lib.callPackageWith (pkgs // {
@@ -24,4 +24,5 @@ in
   # ...
   love = callPackageWithMaybeFlakeInputs ./pkgs/love { };
   jujutsu = callPackageWithMaybeFlakeInputs ./pkgs/jujutsu.nix { };
+  jujutsu-bin = (callPackageWithMaybeFlakeInputs ./pkgs/jujutsu-bin/main.nix { }).latest.${system};
 }

@@ -106,6 +106,7 @@
       legacyPackages = forAllSystems (system:
         (default-packages system)
         // (import ./extraPackages.nix {
+          inherit system;
           maybe-flake-inputs = flake-inputs;
           pkgs = import nixpkgs { inherit system; };
         })
