@@ -27,7 +27,7 @@
 
     systems.url = "github:nix-systems/default"; # For soup
     soup = {
-      url = "github:starptr/soup";
+      url = "path:./../../soup";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         nixpkgs-devenv.follows = "nixpkgs"; # Does not need to be devenv's nixpkgs, since we don't use soup's devshell
@@ -66,6 +66,7 @@
               })
               #chaseln.overlays.chaseln
               inputs.soup.overlays.chaseln
+              inputs.soup.overlays.jujutsu
               (final: super: {
                 check-gits = inputs.soup.legacyPackages."aarch64-darwin".check-gits;
               })
