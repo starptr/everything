@@ -66,7 +66,10 @@
               })
               #chaseln.overlays.chaseln
               inputs.soup.overlays.chaseln
-              inputs.soup.overlays.jujutsu
+              #inputs.soup.overlays.jujutsu
+              (final: super: {
+                jujutsu = inputs.soup.legacyPackages."aarch64-darwin".jujutsu-bin;
+              })
               (final: super: {
                 check-gits = inputs.soup.legacyPackages."aarch64-darwin".check-gits;
               })
