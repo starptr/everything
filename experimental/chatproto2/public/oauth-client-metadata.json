@@ -1,0 +1,18 @@
+{
+  "redirect_uris": [
+    "https://{yourdomain.com}"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "scope": "atproto transition:generic",
+  "token_endpoint_auth_method": "none",
+  "application_type": "web",
+  "subject_type": "public",
+  "client_id": "https://{yourdomain.com}/oauth-client-metadata.json",
+  "dpop_bound_access_tokens": true
+}
