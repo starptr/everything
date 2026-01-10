@@ -33,4 +33,10 @@
       }
     else
       maybe-flake-inputs.jujutsu.overlays.default;
+  
+  claude-code-overlay = if builtins.isNull maybe-flake-inputs
+    then
+      throw "claude-code-overlay overlay requires flake inputs"
+    else
+      maybe-flake-inputs.claude-code-overlay.overlays.default;
 }

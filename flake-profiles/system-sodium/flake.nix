@@ -70,6 +70,7 @@
               (final: super: {
                 jujutsu = inputs.soup.legacyPackages."aarch64-darwin".jujutsu-bin;
               })
+              inputs.soup.overlays.claude-code-overlay
               (final: super: {
                 check-gits = inputs.soup.legacyPackages."aarch64-darwin".check-gits;
               })

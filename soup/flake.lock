@@ -163,6 +163,26 @@
         "type": "github"
       }
     },
+    "claude-code-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1768003381,
+        "narHash": "sha256-pHiy4VoXi/xjLLHfmL2prmFTk9qj2h0dBYA+gIc8O6E=",
+        "owner": "ryoppippi",
+        "repo": "claude-code-overlay",
+        "rev": "1816bf298b3961bebc23b66076d7f2c1142586d0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ryoppippi",
+        "repo": "claude-code-overlay",
+        "type": "github"
+      }
+    },
     "dark-notify": {
       "inputs": {
         "cardboard": "cardboard_3",
@@ -892,6 +912,7 @@
       "inputs": {
         "chaseln": "chaseln",
         "check-gits": "check-gits",
+        "claude-code-overlay": "claude-code-overlay",
         "dark-notify": "dark-notify",
         "devenv": "devenv",
         "fenix": "fenix",

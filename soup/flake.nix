@@ -25,6 +25,12 @@
         nixpkgs.follows = "nixpkgs";
       };
     };
+    claude-code-overlay = {
+      url = "github:ryoppippi/claude-code-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
 
     chaseln = {
       url = "github:starptr/chaseln";
@@ -54,10 +60,12 @@
     extra-trusted-public-keys = [
       "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      "ryoppippi.cachix.org-1:b2LbtWNvJeL/qb1B6TYOMK+apaCps4SCbzlPRfSQIms="
     ];
     extra-substituters = [
       "https://devenv.cachix.org"
       "https://nix-community.cachix.org"
+      "https://ryoppippi.cachix.org"
     ];
   };
 
@@ -75,7 +83,7 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       # TODO: remove in favor of `exports`
       flake-inputs = {
-        inherit (inputs) love chaseln dark-notify fenix check-gits jujutsu;
+        inherit (inputs) love chaseln dark-notify fenix check-gits jujutsu claude-code-overlay;
       };
       # List of flake inputs that we want to transparently re-export (i.e. without custom packaging)
       exports = import ./exports.nix;
