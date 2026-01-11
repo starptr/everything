@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "app.andref.chatproto3.message",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["createdAt", "channel"],
+        "properties": {
+          "plaintext": {
+            "type": "string",
+            "minLength": 1,
+            "maxGraphemes": 4000
+          },
+          "createdAt": { "type": "string", "format": "datetime" },
+          "channel": { "type": "string", "format": "nsid" }
+        }
+      }
+    }
+  }
+}
