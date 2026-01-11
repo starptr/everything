@@ -15,5 +15,8 @@
     "astro": "^5.16.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@atcute/lex-cli": "^2.5.2"
   }
 }
