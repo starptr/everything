@@ -11,6 +11,9 @@ importers:
       '@astrojs/react':
         specifier: ^4.4.2
         version: 4.4.2(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@atcute/lexicons':
+        specifier: ^1.2.6
+        version: 1.2.6
       '@types/react':
         specifier: ^18.3.27
         version: 18.3.27
