@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@astrojs/react": "^4.4.2",
+    "@atcute/client": "^4.2.1",
     "@atcute/lexicons": "^1.2.6",
     "@types/react": "^18.3.27",
     "@types/react-dom": "^18.3.7",
