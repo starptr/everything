@@ -15,8 +15,11 @@
             "maxGraphemes": 128
           },
           "writers": {
-            "type": "ref",
-            "ref": "app.andref.chatproto3.writers"
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "app.andref.chatproto3.writers"
+            }
           }
         }
       }
