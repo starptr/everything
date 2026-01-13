@@ -11,6 +11,12 @@ importers:
       '@astrojs/react':
         specifier: ^4.4.2
         version: 4.4.2(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@atcute/atproto':
+        specifier: ^3.1.10
+        version: 3.1.10
+      '@atcute/bluesky':
+        specifier: ^3.2.14
+        version: 3.2.14
       '@atcute/client':
         specifier: ^4.2.1
         version: 4.2.1
@@ -70,6 +76,12 @@ packages:
   '@astrojs/telemetry@3.3.0':
     resolution: {integrity: sha512-UFBgfeldP06qu6khs/yY+q1cDAaArM2/7AEIqQ9Cuvf7B1hNLq0xDrZkct+QoIGyjq56y8IaE2I3CTvG99mlhQ==}
     engines: {node: 18.20.8 || ^20.3.0 || >=22.0.0}
+
+  '@atcute/atproto@3.1.10':
+    resolution: {integrity: sha512-+GKZpOc0PJcdWMQEkTfg/rSNDAAHxmAUGBl60g2az15etqJn5WaUPNGFE2sB7hKpwi5Ue2h/L0OacINcE/JDDQ==}
+
+  '@atcute/bluesky@3.2.14':
+    resolution: {integrity: sha512-XlVuF55AYIyplmKvlGLlj+cUvk9ggxNRPczkTPIY991xJ4qDxDHpBJ39ekAV4dWcuBoRo2o9JynzpafPu2ljDA==}
 
   '@atcute/car@5.0.0':
     resolution: {integrity: sha512-OIY2xTXv8lSpZsDSn/UYQtJSMvDw5Hi4Q+uyvmiqSM+fht08QRAEq/nxa5YFciPZ3nfDFnZ3//EgJw7QhkSXLQ==}
@@ -1872,6 +1884,15 @@ snapshots:
       which-pm-runs: 1.1.0
     transitivePeerDependencies:
       - supports-color
+
+  '@atcute/atproto@3.1.10':
+    dependencies:
+      '@atcute/lexicons': 1.2.6
+
+  '@atcute/bluesky@3.2.14':
+    dependencies:
+      '@atcute/atproto': 3.1.10
+      '@atcute/lexicons': 1.2.6
 
   '@atcute/car@5.0.0':
     dependencies:
