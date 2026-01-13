@@ -16,7 +16,7 @@ const _mainSchema = /*#__PURE__*/ v.record(
 			/*#__PURE__*/ v.stringGraphemes(0, 128),
 		]),
 		get writers() {
-			return AppAndrefChatproto3Writers.mainSchema;
+			return /*#__PURE__*/ v.array(AppAndrefChatproto3Writers.mainSchema);
 		},
 	}),
 );
