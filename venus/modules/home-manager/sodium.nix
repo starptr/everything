@@ -40,6 +40,7 @@
       pkgs.audacity
       pkgs.kubectl
       pkgs.claude-code
+      pkgs.sox
     ];
 
     home.sessionVariables = {
