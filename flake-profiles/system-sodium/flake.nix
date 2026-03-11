@@ -74,6 +74,9 @@
               (final: super: {
                 check-gits = inputs.soup.legacyPackages."aarch64-darwin".check-gits;
               })
+              (final: super: {
+                lute3 = inputs.soup.legacyPackages."aarch64-darwin".lute3;
+              })
             ];
             config = import ./../../venus/app-configs/nixpkgs-config.nix; # Configures pkgs for evaluating this darwinConfiguration ("buildtime" config)
           };

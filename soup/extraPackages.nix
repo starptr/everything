@@ -13,7 +13,7 @@ let
     inherit maybe-flake-inputs flake-lock;
   });
 in
-{
+rec {
   # The `lib`, `modules`, and `overlays` names are special
   #lib = import ./lib { inherit pkgs; }; # functions
   #modules = import ./modules; # NixOS modules
@@ -25,4 +25,8 @@ in
   love = callPackageWithMaybeFlakeInputs ./pkgs/love { };
   jujutsu = callPackageWithMaybeFlakeInputs ./pkgs/jujutsu.nix { };
   jujutsu-bin = (callPackageWithMaybeFlakeInputs ./pkgs/jujutsu-bin/main.nix { }).latest.${system};
+  natto-py = callPackageWithMaybeFlakeInputs ./pkgs/natto-py/default.nix { };
+  lute3 = callPackageWithMaybeFlakeInputs ./pkgs/lute3/default.nix { 
+    natto-py = natto-py;
+  };
 }
