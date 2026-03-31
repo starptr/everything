@@ -9,7 +9,24 @@
   };
 
   # This overlay naively adds all of the pkgs.
-  #default = import ../overlay.nix;
+  #default = (
+  #  # You can use this as a nixpkgs overlay. This is useful in the
+  #  # case where you don't want to add the whole NUR namespace to your
+  #  # configuration.
+  #  # It will add all of the pkgs in the root default.nix.
+  #  
+  #  self: super:
+  #  let
+  #    isReserved = n: n == "lib" || n == "overlays" || n == "modules";
+  #    nameValuePair = n: v: { name = n; value = v; };
+  #    nurAttrs = import ./../default.nix { pkgs = super; };
+  #  
+  #  in
+  #  builtins.listToAttrs
+  #    (map (n: nameValuePair n nurAttrs.${n})
+  #      (builtins.filter (n: !isReserved n)
+  #        (builtins.attrNames nurAttrs)))
+  #);
   chaseln = if builtins.isNull maybe-flake-inputs
     then
       final: super: {
