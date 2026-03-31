@@ -1,5 +1,7 @@
 # This is an ssh configuration file located at $venus/hot-files/ssh.txt
 
+Include ~/.ssh/local-config.txt
+
 Host ctrl-c
   User yuto
   HostName ctrl-c.club
