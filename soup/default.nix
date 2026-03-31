@@ -1,3 +1,4 @@
+# This is a special file that exists only for backwards-compatibility with non-flake consumers and NUR convention.
 (import
   (
     let
