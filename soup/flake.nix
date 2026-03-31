@@ -39,7 +39,7 @@
         devenv.follows = "devenv";
       };
     };
-    dark-notify = {
+    dark-notify-wrapped = {
       url = "github:starptr/dark-notify";
       inputs = {
         nixpkgs.follows = "nixpkgs-devenv";
@@ -83,7 +83,7 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       # TODO: remove in favor of `exports`
       flake-inputs = {
-        inherit (inputs) love chaseln dark-notify fenix check-gits jujutsu claude-code-overlay;
+        inherit (inputs) love chaseln dark-notify-wrapped fenix check-gits jujutsu claude-code-overlay;
       };
       # List of flake inputs that we want to transparently re-export (i.e. without custom packaging)
       exports = import ./exports.nix;

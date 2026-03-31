@@ -1,8 +1,8 @@
 { stdenv, lib, fetchFromGitHub, maybe-flake-inputs, flake-lock }:
 let
-  node-name = flake-lock.nodes.root.inputs.dark-notify;
+  node-name = flake-lock.nodes.root.inputs.dark-notify-wrapped;
   locked = flake-lock.nodes.${node-name}.locked;
-  dark-notify = if builtins.isNull maybe-flake-inputs
+  dark-notify-wrapped = if builtins.isNull maybe-flake-inputs
     then
       import (fetchFromGitHub {
         owner = locked.owner;
@@ -11,6 +11,6 @@ let
         hash = locked.narHash;
       })
     else
-      maybe-flake-inputs.dark-notify.packages.${stdenv.hostPlatform.system}.default;
+      maybe-flake-inputs.dark-notify-wrapped.packages.${stdenv.hostPlatform.system}.default;
 in
-dark-notify
+dark-notify-wrapped
