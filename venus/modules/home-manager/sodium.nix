@@ -42,6 +42,7 @@
       pkgs.claude-code
       pkgs.sox
       #pkgs.lute3
+      #pkgs.moonlight-qt # Closes on start-up
     ];
 
     home.sessionVariables = {
