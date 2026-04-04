@@ -41,7 +41,7 @@
       pkgs.kubectl
       pkgs.claude-code
       pkgs.sox
-      pkgs.lute3
+      #pkgs.lute3
     ];
 
     home.sessionVariables = {
