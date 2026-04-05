@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(darwin-rebuild build:*)",
-      "Bash(jj log:*)"
-    ]
-  }
-}
