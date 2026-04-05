@@ -138,12 +138,14 @@ in
   #  enableUpdateCheck = false;
   #};
 
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+  };
+
   programs.git = {
     enable = true;
     #package = pkgs.git # Use the system git, as it contains Apple-specific patches (TODO: are they important?)
-    delta = {
-      enable = true;
-    };
     includes = [
       {
         # Include the following in an emergency to use git with the old working configuration
@@ -151,8 +153,10 @@ in
         path = ../../legacy-yadm/git-config.txt;
       }
     ];
-    userEmail = "yuto@berkeley.edu";
-    userName = "Yuto Nishida";
+    settings = {
+      user.email = "yuto@berkeley.edu";
+      user.name = "Yuto Nishida";
+    };
   };
 
   programs.bat = {
