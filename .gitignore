@@ -16,3 +16,6 @@ result
 .env.*
 **/.env
 **/.env.*
+
+# Claude
+**/.claude/settings.local.json
