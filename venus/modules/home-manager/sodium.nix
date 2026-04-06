@@ -29,13 +29,15 @@
       pkgs.terminal-notifier
       pkgs.comma
       pkgs.lsd
-      pkgs.jellyfin-mpv-shim # TODO: fix this
+      # Causes apple_sdk_11_0 error - uses soup overlay with outdated nixpkgs
+      #pkgs.jellyfin-mpv-shim
       pkgs.devenv
       pkgs.chaseln
       #pkgs.cinny-desktop
-      pkgs.element-desktop
+      #pkgs.element-desktop # Build fails (unrelated issue)
       pkgs.neovim # Temporary until I figure out how to integrate ammonia into the sodium config
-      pkgs.check-gits
+      # Causes apple_sdk_11_0 error - uses soup overlay with outdated nixpkgs
+      #pkgs.check-gits 
       pkgs.rclone
       pkgs.audacity
       pkgs.kubectl
