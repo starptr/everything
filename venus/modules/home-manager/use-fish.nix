@@ -50,7 +50,14 @@
         plugins = [
           {
             name = "tide";
-            src = pkgs.fishPlugins.tide.src;
+            # Apply fix from https://github.com/IlanCosman/tide/pull/646
+            # Redirects stdin for background prompt workers to prevent hanging
+            src = pkgs.runCommand "tide-patched" {} ''
+              cp -r ${pkgs.fishPlugins.tide.src} $out
+              chmod -R +w $out
+              substituteInPlace $out/functions/fish_prompt.fish \
+                --replace-fail '\" &' '\" </dev/null &'
+            '';
           }
           {
             name = "done";
