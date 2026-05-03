@@ -10,6 +10,10 @@
       ./hardware-configurations/methanol.nix
     ];
 
+  nix = {
+    settings.experimental-features = [ "nix-command" "flakes" ];
+  };
+
   # Use the systemd-boot EFI boot loader.
   #boot.loader.systemd-boot.enable = true;
   # Whether installer can modify the EFI variables. If you encounter errors, set this to `false`.
