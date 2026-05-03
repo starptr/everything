@@ -10,6 +10,16 @@
       ./hardware-configurations/methanol.nix
     ];
 
+  environment.systemPackages = [
+    pkgs.rclone
+    pkgs.vim
+    pkgs.chaseln
+    pkgs.htop
+    pkgs.dig
+    pkgs.ghostty.terminfo
+    pkgs.lsof
+  ];
+
   nix = {
     settings.experimental-features = [ "nix-command" "flakes" ];
   };
