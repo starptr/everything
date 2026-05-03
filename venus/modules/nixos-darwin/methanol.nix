@@ -93,6 +93,12 @@
     useRoutingFeatures = "both";
   };
 
+  services.k3s = {
+    enable = true;
+    role = "server";
+    clusterInit = false;
+  };
+
   # Set your time zone.
   # time.timeZone = "Europe/Amsterdam";
 
