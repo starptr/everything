@@ -58,7 +58,7 @@
   # Required: set a unique hostId for ZFS
   networking.hostId = "7ebc8a61";
 
-  # networking.hostName = "nixos"; # Define your hostname.
+  networking.hostName = "methanol"; # Define your hostname.
 
   # Configure network connections interactively with nmcli or nmtui.
   networking.networkmanager.enable = true;
