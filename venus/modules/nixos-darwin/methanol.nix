@@ -63,6 +63,17 @@
   # Configure network connections interactively with nmcli or nmtui.
   networking.networkmanager.enable = true;
 
+  # Run mDNS responder
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    publish = {
+      enable = true;
+      domain = true;
+      addresses = true;
+    };
+  };
+
   # Set your time zone.
   # time.timeZone = "Europe/Amsterdam";
 
