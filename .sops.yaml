@@ -8,6 +8,7 @@ keys:
   - &methane_root age165lra392e9ssuktvzf22yk63vjke8kfkmn6wrd0kvukwt8w7p5aqzx7exj # ed25519 root pub key to age
   - &ethane_root age18ueht6ascr4y68s9n43f9jf40eve4ghsx848mp7hm86dmydqpgws0xxnqa # ed25519 root pub key to age
   - &tilderef_root age1n8lz243js77lvrscpwxh5lh5ha3nacdrvlxzf8f9v00jugvg3d2qkq4cnk # ed25519 tilderef root pub key to age
+  - &methanol_root age1u898q9sux44uvcden8laz24qpnv5ap0dn9hml67wyeh2fhuw9ats0eksrz # ed25519 methanol root pub key to age
 creation_rules:
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini|txt)$
     key_groups:
@@ -19,6 +20,7 @@ creation_rules:
       - *hydrogen_sulfide
       - *methane_root
       - *ethane_root
+      - *methanol_root
   - path_regex: secrets/personal/[^/]+\.(yaml|json|env|ini)$
     key_groups:
     - pgp:
