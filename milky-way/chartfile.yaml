@@ -13,4 +13,6 @@ requires:
   version: 4.13.0
 - chart: prometheus-community/kube-prometheus-stack
   version: 77.5.0
+- chart: democratic-csi/democratic-csi
+  version: 0.15.1
 version: 1
