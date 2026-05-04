@@ -1,0 +1,23 @@
+{
+  // Config format revision. Currently only "v1alpha1"
+  "apiVersion": "v1alpha1",
+  // Always "Environment". Reserved for future use
+  "kind": "Environment",
+
+  // Descriptive fields
+  "metadata": {
+    // Name of the Environment. Automatically set to the relative
+    // path from the project root
+    "name": "orion-system"
+  },
+
+  // Properties influencing Tanka's behavior
+  "spec": {
+    // The Kubernetes context name(s) to use.
+    // This field supports regular expressions and is mutually exclusive with apiServer field.
+    "contextNames": ["methanol"],
+
+    // Default namespace for objects that don't explicitely specify one
+    "namespace": "default"
+  }
+}
