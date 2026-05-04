@@ -7,7 +7,7 @@ For more information, see https://tailscale.com/kb/1236/kubernetes-operator#stat
 1. Download the [Tailscale Operator manifest file](https://github.com/tailscale/tailscale/blob/main/cmd/k8s-operator/deploy/manifests/operator.yaml).
 
 ```sh
-curl -L -o operator.yaml https://raw.githubusercontent.com/tailscale/tailscale/refs/heads/main/cmd/k8s-operator/deploy/manifests/operator.yaml
+curl -L -o milky-way/tailscale-operator/operator.yaml https://raw.githubusercontent.com/tailscale/tailscale/refs/heads/main/cmd/k8s-operator/deploy/manifests/operator.yaml
 ```
 
 2. Edit the file to set the `client_id` and `client_secret` values.
