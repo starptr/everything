@@ -30,7 +30,10 @@
             default = devenv.lib.mkShell {
               inherit inputs pkgs;
               modules = [
-                {
+                ({ pkgs, config, ...} : {
+                  # Jsonnet imports can be made relative to the DEVENV_ROOT.
+                  env.JSONNET_PATH = config.env.DEVENV_ROOT;
+
                   # https://devenv.sh/reference/options/
                   packages = [ 
                     pkgs.hello
@@ -50,7 +53,7 @@
                   processes.hello.exec = "hello";
 
                   languages.jsonnet.enable = true;
-                }
+                })
               ];
             };
           });
