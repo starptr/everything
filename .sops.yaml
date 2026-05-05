@@ -21,6 +21,12 @@ creation_rules:
       - *methane_root
       - *ethane_root
       - *methanol_root
+  - path_regex: secrets/k8s-config/[^/]+\.(yaml|json|jsonnet)$
+    key_groups:
+    - pgp:
+      age:
+      - *main_pub
+      - *venus_1p
   - path_regex: secrets/personal/[^/]+\.(yaml|json|env|ini)$
     key_groups:
     - pgp:
