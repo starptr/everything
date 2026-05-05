@@ -16,6 +16,8 @@ lib.fix (self: let
       whale-digests = "${selfRelativePathStrings.everythingRepo}/exports/whale/digests";
 
       home = ""; # The home directory is an empty relative path to itself.
+
+      milky-way-secrets = "${selfRelativePathStrings.everythingRepo}/milky-way/secrets";
     });
   };
 in {
