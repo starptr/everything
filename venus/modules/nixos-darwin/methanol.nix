@@ -18,6 +18,7 @@
     pkgs.dig
     pkgs.ghostty.terminfo
     pkgs.lsof
+    pkgs.nfs-utils # K8s node requirement for democratic-csi
   ];
 
   nix = {
@@ -99,6 +100,16 @@
     clusterInit = false;
   };
 
+  # nfs server for democratic-csi
+  #services.nfs = {
+  #  enable = true;
+  #};
+
+  # iSCSI service for democratic-csi
+  services.target = {
+    enable = true;
+  };
+
   # Set your time zone.
   # time.timeZone = "Europe/Amsterdam";
 
@@ -158,6 +169,17 @@
     "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDLrT2/gQXhOz4E4xSphB8EXouild5qNOnZ6ZVXuTnf167z8xxSB10mxNey2gKDaIVig6I/tRFeYy6/N/QutbBlKI/+GNPjGCcVJI0hf7fTZGL4caTW8ggcXRz4LAsFp3JBf6Li0FVrGz5ojD0Etbl54BDn033q/tlVRhme5bXJ6s73yRg04kqdQsWVBRJwyzbUUmCQPrZd9i5Nh4QFVuhZljEyUWIStajE+c9v8OOiY1svv+XjKBjyWphP16HqgzvnEDf5+MQ5AUxE05IvJx43UY43CKTe3evzt4F/IqSdYwYGIQ55DaseRmf5zmHLU8MTTkksmOPQEzJL0nBzAmxyGV3PsMYPoIN+1/gJmxCO6ZaaCxYr9SFK/yoRW5e0PFX433xPhNsITBq7jUrVg6BQ/lr0ntRfvd7pRhFq8v02R3jWokL/99skxp1kjVF42bXEJXYPpHF3XAUhYscjOwmWj8dJgsIsSIKIjh7gRVYxQGrZQXOcJQjMytFgXy7fWHM= yuto@Yutos-MacBook-Pro.local" # Yuto's Sodium
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPtVvX9uhSWD1DPBIRqgkNzFXqjdqvWB/WtDy4seaiJl" # 1Password "ssh key - main"
   ];
+
+  users.users.democratic-csi = {
+    isSystemUser = true;
+    shell = pkgs.bash;
+    group = "democratic-csi";
+    packages = [
+      pkgs.nfs-utils
+      pkgs.targetcli-fb
+    ];
+  };
+  users.groups.democratic-csi = { };
 
   # programs.firefox.enable = true;
 
