@@ -109,9 +109,13 @@
   services.target = {
     enable = true;
   };
+  services.openiscsi = {
+    enable = true;
+    name = "iqn.2003-01.app.andref:methanol";
+  };
 
   # Set your time zone.
-  # time.timeZone = "Europe/Amsterdam";
+  time.timeZone = "America/Los_Angeles";
 
   # Configure network proxy if necessary
   # networking.proxy.default = "http://user:password@proxy:port/";
