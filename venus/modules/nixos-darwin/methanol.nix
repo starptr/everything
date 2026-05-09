@@ -111,7 +111,7 @@
   };
   services.openiscsi = {
     enable = true;
-    name = "iqn.2003-01.app.andref:methanol";
+    name = "iqn.2003-01.app.andref.node-initiator:methanol";
   };
 
   # Set your time zone.
