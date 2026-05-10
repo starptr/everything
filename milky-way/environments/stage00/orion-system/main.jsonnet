@@ -1,5 +1,6 @@
 local secretZfsIscsiDriverConfig = import 'milky-way/secrets/secret-zfs-iscsi-driver-config.jsonnet';
 local charts = import 'milky-way/charts.jsonnet';
+local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
 {
   local this = self,
   democraticCsiNamespace: {
@@ -21,5 +22,13 @@ local charts = import 'milky-way/charts.jsonnet';
     data: {
       "driver-config-file.yaml": std.base64(std.manifestYamlDoc(secretZfsIscsiDriverConfig)),
     },
-  }
+  },
+  testingNamespace: {
+    apiVersion: "v1",
+    kind: "Namespace",
+    metadata: {
+      name: "test-k8s",
+    },
+  },
+  httpEcho: httpEcho.new(),
 }
