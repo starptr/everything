@@ -44,6 +44,15 @@ local helm = tanka.helm.new(std.thisFile);
           },
         },
       ],
+      volumeSnapshotClasses: [
+        {
+          name: "my-custom-zfs-generic-iscsi-snapshotter",
+          deletionPolicy: "Retain",
+          parameters: {
+            detachedSnapshots: "true",
+          },
+        },
+      ],
       driver: {
         // TODO: deploy secret via sops-nix which will symlink inside everything via magic
         existingConfigSecret: "my-custom-zfs-iscsi-democratic-csi-driver-config",
