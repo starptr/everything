@@ -41,6 +41,8 @@ local helm = tanka.helm.new(std.thisFile);
           allowVolumeExpansion: true,
           parameters: {
             fsType: "ext4",
+            detachedVolumesFromSnapshots: false,
+            detachedVolumesFromVolumes: false,
           },
         },
       ],
@@ -49,7 +51,7 @@ local helm = tanka.helm.new(std.thisFile);
           name: "my-custom-zfs-generic-iscsi-snapshotter",
           deletionPolicy: "Retain",
           parameters: {
-            detachedSnapshots: "true",
+            detachedSnapshots: "false",
           },
         },
       ],
