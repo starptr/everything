@@ -1,6 +1,7 @@
 local zfsIscsiDriverConfig = import 'milky-way/environments/stage00/orion-system/my-custom-zfs-iscsi-democratic-csi-driver-config.jsonnet';
 local charts = import 'milky-way/charts.jsonnet';
 local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
+local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.libsonnet';
 {
   local this = self,
   democraticCsiNamespace: {
@@ -31,4 +32,5 @@ local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
     },
   },
   httpEcho: httpEcho.new(),
+  exampleZfsGenericIscsi: exampleZfsGenericIscsi.new(storageClassName="my-custom-zfs-generic-iscsi"),
 }
