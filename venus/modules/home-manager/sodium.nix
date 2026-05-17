@@ -139,12 +139,6 @@
         sopsFile = ./../../../secrets/personal/jupiter.env;
         path = "${config.magic.absolutePathStrings.sodium.jupiter-dotenv}";
       };
-      secrets."k8s-config/secret-zfs-iscsi-driver-config.jsonnet" = {
-        format = "binary";
-        mode = "0400";
-        sopsFile = ./../../../secrets/k8s-config/secret-zfs-iscsi-driver-config.jsonnet;
-        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/secret-zfs-iscsi-driver-config.jsonnet";
-      };
       secrets."k8s-config/secrets-for-zfs-iscsi-driver.jsonnet" = {
         format = "binary";
         mode = "0400";
