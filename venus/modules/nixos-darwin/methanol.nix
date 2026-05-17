@@ -19,6 +19,7 @@
     pkgs.ghostty.terminfo
     pkgs.lsof
     pkgs.nfs-utils # K8s node requirement for democratic-csi
+    pkgs.e2fsprogs # Needed for allowVolumeExpansion (unverified; see https://chatgpt.com/share/6a0a3eba-c328-83e8-8a98-03f3cb85006e)
   ];
 
   nix = {
