@@ -16,6 +16,15 @@ local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
         //"privateKey": "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
     },
     "zfs": {
+        cli: {
+          paths: {
+            // Storage server's binary paths
+            zfs: "/run/current-system/sw/bin/zfs",
+            zpool: "/run/current-system/sw/bin/zpool",
+            sudo: "/run/wrappers/bin/sudo",
+            chroot: "/run/current-system/sw/bin/chroot",
+          },
+        },
         "datasetParentName": "rpool/k8s/democratic-csi/zfs-generic-iscsi",
         "detachedSnapshotsDatasetParentName": "rpool/k8s/democratic-csi/zfs-generic-iscsi-snapshots",
         "zvolCompression": null,
