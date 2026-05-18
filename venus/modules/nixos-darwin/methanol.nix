@@ -176,7 +176,7 @@
   ];
 
   users.users.democratic-csi = {
-    isSystemUser = true;
+    isNormalUser = true;
     createHome = true;
     shell = pkgs.bash;
     group = "democratic-csi";
