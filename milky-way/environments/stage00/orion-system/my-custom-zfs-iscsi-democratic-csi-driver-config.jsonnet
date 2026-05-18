@@ -28,6 +28,12 @@ local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
         },
         "datasetParentName": "rpool/k8s/democratic-csi/my-zfs-generic-iscsi",
         "detachedSnapshotsDatasetParentName": "rpool/k8s/democratic-csi/my-zfs-generic-iscsi-snapshots",
+        // Store PVC metadata in ZFS properties for easy identification
+        "datasetProperties": {
+            "k8s:pvc-namespace": "{{ parameters.[csi.storage.k8s.io/pvc/namespace] }}",
+            "k8s:pvc-name": "{{ parameters.[csi.storage.k8s.io/pvc/name] }}",
+            "k8s:pvc-ns-name": "{{ parameters.[csi.storage.k8s.io/pvc/namespace] }}/{{ parameters.[csi.storage.k8s.io/pvc/name] }}"
+        },
         "zvolCompression": null,
         "zvolDedup": null,
         "zvolEnableReservation": false,
