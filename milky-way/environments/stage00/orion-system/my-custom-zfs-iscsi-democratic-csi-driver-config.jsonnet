@@ -55,7 +55,7 @@ local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
         },
 	    // Via `sudo iscsiadm -m discovery`
         "targetPortal": secrets.iscsiTargetPortal,
-        "targetPortals": [],
+        "targetPortals": secrets.iscsiTargetPortals,
         "interface": "",
         "namePrefix": null,
         "nameSuffix": null
