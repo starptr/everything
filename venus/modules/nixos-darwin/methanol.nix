@@ -177,6 +177,7 @@
 
   users.users.democratic-csi = {
     isSystemUser = true;
+    createHome = true;
     shell = pkgs.bash;
     group = "democratic-csi";
     extraGroups = [ "wheel" ]; # Required for zfs manipulation
