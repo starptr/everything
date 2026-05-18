@@ -179,6 +179,7 @@
     isSystemUser = true;
     shell = pkgs.bash;
     group = "democratic-csi";
+    extraGroups = [ "wheel" ]; # Required for zfs manipulation
     packages = [
       pkgs.nfs-utils
       pkgs.targetcli-fb
