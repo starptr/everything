@@ -17,6 +17,7 @@ local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
     },
     "zfs": {
         cli: {
+          sudoEnabled: true,
           paths: {
             // Storage server's binary paths
             zfs: "/run/current-system/sw/bin/zfs",
