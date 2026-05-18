@@ -53,7 +53,7 @@ local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
                 }
             }
         },
-	    // Via `sudo iscsiadm -m discovery`
+        // Verifiable via `sudo iscsiadm -m discovery -t sendtargets -p <ip>:<port>`
         "targetPortal": secrets.iscsiTargetPortal,
         "targetPortals": secrets.iscsiTargetPortals,
         "interface": "",
