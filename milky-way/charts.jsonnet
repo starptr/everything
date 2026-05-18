@@ -32,6 +32,13 @@ local helm = tanka.helm.new(std.thisFile);
         # should be globally unique for a given cluster
         name: "org.democratic-csi.iscsi",
       },
+      controller: {
+        driver: {
+          securityContext: {
+            privileged: true,
+          },
+        },
+      },
       storageClasses: [
         {
           name: "my-custom-zfs-generic-iscsi",
