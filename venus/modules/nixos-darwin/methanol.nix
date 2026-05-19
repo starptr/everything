@@ -108,14 +108,25 @@
   #  enable = true;
   #};
 
-  # iSCSI service for democratic-csi
-  services.target = {
-    enable = true;
-  };
   services.openiscsi = {
     enable = true;
     name = "iqn.2003-01.app.andref.node-initiator:methanol";
   };
+
+  # iSCSI service for democratic-csi
+  services.target = {
+    enable = true;
+  };
+  # Disable saveconfig.json management by services.target (it creates an empty {} file that overwrites
+  # dynamically created iSCSI targets on every boot)
+  # This lets targetcli manage the file naturally for democratic-csi
+  # TODO: backup /etc/target/saveconfig.json so that the correspondence between zfs and iSCSI targets is preserved
+  environment.etc."target/saveconfig.json".enable = false;
+
+  # Ensure the /etc/target directory still exists (normally created by the etc entry above)
+  systemd.tmpfiles.rules = [
+    "d /etc/target 0700 root root -"
+  ];
 
   # Set your time zone.
   time.timeZone = "America/Los_Angeles";
