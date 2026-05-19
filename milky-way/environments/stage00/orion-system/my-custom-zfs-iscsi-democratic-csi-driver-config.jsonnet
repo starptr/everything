@@ -43,6 +43,9 @@ local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
         "shareStrategy": "targetCli",
         "shareStrategyTargetCli": {
           sudoEnabled: true,
+          paths: {
+            targetcli: "/run/current-system/sw/bin/targetcli",
+          },
             "basename": "iqn.2003-01.app.andref.d-csi",
             "tpg": {
                 "attributes": {
