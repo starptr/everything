@@ -68,7 +68,7 @@ local defaultAppName = "iscsi-test";
             },
             spec: {
               accessModes: [
-                "ReadWriteOnce",
+                "ReadWriteOncePod",
               ],
               storageClassName: storageClassName,
               resources: {
