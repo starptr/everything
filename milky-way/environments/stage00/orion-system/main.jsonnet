@@ -3,6 +3,7 @@ local zfsNfsDriverConfig = import 'milky-way/environments/stage00/orion-system/m
 local charts = import 'milky-way/charts.jsonnet';
 local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
 local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.libsonnet';
+local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
 {
   local this = self,
   democraticCsiNamespace: {
@@ -52,4 +53,5 @@ local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.l
     storageClassName="my-custom-zfs-generic-nfs-csi",
     name="nfs-test",
   ),
+  calibreWebAuto: calibreWebAuto.new(),
 }
