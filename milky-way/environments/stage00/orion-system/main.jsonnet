@@ -12,6 +12,7 @@ local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.l
     },
   },
   zfsIscsiDriver: charts.zfs_iscsi,
+  zfsNfsDriver: charts.zfs_nfs,
   "my-custom-zfs-iscsi-democratic-csi-driver-config": {
     apiVersion: "v1",
     kind: "Secret",
@@ -33,4 +34,9 @@ local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.l
   },
   httpEcho: httpEcho.new(),
   exampleZfsGenericIscsi: exampleZfsGenericIscsi.new(storageClassName="my-custom-zfs-generic-iscsi"),
+  // TODO: rename lib
+  exampleZfsNfs: exampleZfsGenericIscsi.new(
+    storageClassName="my-custom-zfs-generic-nfs-csi",
+    name="nfs-test",
+  ),
 }

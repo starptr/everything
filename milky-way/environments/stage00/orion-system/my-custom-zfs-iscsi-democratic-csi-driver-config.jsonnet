@@ -1,4 +1,5 @@
 // Defined via sops-nix, updated via nixos-rebuild/darwin-rebuild.
+// TODO: rename the file to be more generic
 local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
 
 // Based on https://github.com/democratic-csi/democratic-csi/blob/3974268272a84e9c22c47cae2fca847a8d422bad/examples/zfs-generic-iscsi.yaml

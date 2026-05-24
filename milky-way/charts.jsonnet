@@ -72,4 +72,62 @@ local helm = tanka.helm.new(std.thisFile);
       }
     },
   }),
+  zfs_nfs: helm.template("my-zfs-nfs", "./charts/democratic-csi", {
+    namespace: "democratic-csi",
+
+    // Based on https://github.com/democratic-csi/charts/blob/79a3c02588dfce133fcc3a1dfcdf7f15414fced8/stable/democratic-csi/examples/zfs-generic-nfs.yaml
+    values: {
+      csiDriver: {
+        # should be globally unique for a given cluster
+        name: "org.democratic-csi.my-nfs",
+        fsGroupPolicy: "File",
+      },
+      storageClasses: [
+        {
+          name: "my-custom-zfs-generic-nfs-csi",
+          defaultClass: false,
+          reclaimPolicy: "Retain",
+          volumeBindingMode: "Immediate",
+          allowVolumeExpansion: true,
+          parameters: {
+            # for block-based storage can be ext3, ext4, xfs
+            # for nfs should be nfs
+            fsType: "nfs",
+          },
+      
+          # if true, volumes created from other snapshots will be
+          # zfs send/received instead of zfs cloned
+          detachedVolumesFromSnapshots: false,
+      
+          # if true, volumes created from other volumes will be
+          # zfs send/received instead of zfs cloned
+          detachedVolumesFromVolumes: false,
+      
+          mountOptions: [
+            "noatime",
+            "nfsvers=3",
+          ],
+        },
+      ],
+      
+      # if your cluster supports snapshots you may enable below
+      volumeSnapshotClasses: [],
+      #- name: zfs-generic-nfs-csi
+      #  parameters:
+      #  # if true, snapshots will be created with zfs send/receive
+      #  # detachedSnapshots: "false"
+      #  secrets:
+      #    snapshotter-secret:
+      
+      driver: {
+        existingConfigSecret: "my-custom-zfs-nfs-democratic-csi-driver-config",
+        config: {
+          # please see the most up-to-date example of the corresponding config here:
+          # https://github.com/democratic-csi/democratic-csi/tree/master/examples
+          # YOU MUST COPY THE DATA HERE INLINE!
+          driver: "zfs-generic-nfs",
+        },
+      },
+    },
+  }),
 }
