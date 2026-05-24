@@ -133,6 +133,47 @@
     "d /etc/target 0700 root root -"
   ];
 
+  # Ensure ZFS parent datasets exist for democratic-csi NFS driver
+  # The NFS driver requires mounted datasets (not mountpoint=none) so that chmod and sharenfs work
+  systemd.services.democratic-csi-nfs-dataset = {
+    description = "Create ZFS parent dataset for democratic-csi NFS";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "zfs-import.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -euo pipefail
+
+      zfs="${pkgs.zfs}/bin/zfs"
+      nfs_dataset="rpool/k8s/democratic-csi/my-zfs-nfs"
+      nfs_mountpoint="/export/my-zfs-nfs"
+      snapshots_dataset="rpool/k8s/democratic-csi/my-zfs-nfs-snapshots"
+
+      dataset_exists() {
+        "$zfs" list "$1" >/dev/null 2>&1
+      }
+
+      get_mountpoint() {
+        "$zfs" get -H -o value mountpoint "$1"
+      }
+
+      # Create NFS parent dataset with mountpoint
+      if ! dataset_exists "$nfs_dataset"; then
+        "$zfs" create -o mountpoint="$nfs_mountpoint" "$nfs_dataset"
+      elif [ "$(get_mountpoint "$nfs_dataset")" = "none" ]; then
+        # Fix inherited mountpoint=none from parent
+        "$zfs" set mountpoint="$nfs_mountpoint" "$nfs_dataset"
+      fi
+
+      # Create snapshots dataset (no mountpoint needed)
+      if ! dataset_exists "$snapshots_dataset"; then
+        "$zfs" create -o mountpoint=none "$snapshots_dataset"
+      fi
+    '';
+  };
+
   # Set your time zone.
   time.timeZone = "America/Los_Angeles";
 
