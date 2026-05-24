@@ -104,9 +104,14 @@
   };
 
   # nfs server for democratic-csi
-  #services.nfs = {
-  #  enable = true;
-  #};
+  services.nfs = {
+    server = {
+      enable = true;
+      statdPort = 4000;
+      lockdPort = 4001;
+      mountdPort = 4002;
+    };
+  };
 
   services.openiscsi = {
     enable = true;
@@ -225,8 +230,14 @@
   security.sudo.wheelNeedsPassword = false;
 
   # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
+  networking.firewall.allowedTCPPorts = [
+    111 # rpcbind
+    2049 # nfs
+    config.services.nfs.server.statdPort
+    config.services.nfs.server.mountdPort
+    config.services.nfs.server.lockdPort
+  ];
+  networking.firewall.allowedUDPPorts = config.networking.firewall.allowedTCPPorts;
   # Or disable the firewall altogether.
   # networking.firewall.enable = false;
 
