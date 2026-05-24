@@ -1,4 +1,5 @@
 local zfsIscsiDriverConfig = import 'milky-way/environments/stage00/orion-system/my-custom-zfs-iscsi-democratic-csi-driver-config.jsonnet';
+local zfsNfsDriverConfig = import 'milky-way/environments/stage00/orion-system/my-custom-zfs-nfs-democratic-csi-driver-config.jsonnet';
 local charts = import 'milky-way/charts.jsonnet';
 local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
 local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.libsonnet';
@@ -23,6 +24,18 @@ local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.l
     type: "Opaque",
     data: {
       "driver-config-file.yaml": std.base64(std.manifestYamlDoc(zfsIscsiDriverConfig)),
+    },
+  },
+  "my-custom-zfs-nfs-democratic-csi-driver-config": {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: {
+      name: "my-custom-zfs-nfs-democratic-csi-driver-config",
+      namespace: "democratic-csi",
+    },
+    type: "Opaque",
+    data: {
+      "driver-config-file.yaml": std.base64(std.manifestYamlDoc(zfsNfsDriverConfig)),
     },
   },
   testingNamespace: {

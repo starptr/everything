@@ -28,7 +28,7 @@ local myCustomZfsIscsiDriverConfig = import 'milky-way/environments/stage00/orio
     shareStrategy: "setDatasetProperties",
     shareStrategySetDatasetProperties: {
       properties: {
-        sharefs: "on",
+        sharenfs: "on",
       },
     },
     shareHost: secrets.nfsShareHost,
