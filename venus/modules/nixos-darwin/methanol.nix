@@ -101,6 +101,11 @@
     enable = true;
     role = "server";
     clusterInit = false;
+    extraFlags = [
+      "--flannel-backend=none"
+      "--disable-network-policy"
+      "--disable-kube-proxy"
+    ];
   };
 
   # nfs server for democratic-csi
@@ -270,8 +275,15 @@
   #services.openssh.settings.PermitRootLogin = "yes";
   security.sudo.wheelNeedsPassword = false;
 
+  # Trust Cilium pod-facing interfaces so pods can reach host services
+  # (API server on 6443, etc.) without per-port allowlisting.
+  # lxc+ matches all lxc* veth pairs connecting pod network namespaces.
+  networking.firewall.trustedInterfaces = [ "cilium_host" "cilium_net" "lxc+" ];
+
   # Open ports in the firewall.
   networking.firewall.allowedTCPPorts = [
+    80
+    443
     111 # rpcbind
     2049 # nfs
     config.services.nfs.server.statdPort

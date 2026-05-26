@@ -23,6 +23,29 @@ local helm = tanka.helm.new(std.thisFile);
       persistence: { enabled: true },
     },
   }),
+  cilium: helm.template("cilium", "./charts/cilium", {
+    namespace: "kube-system",
+    values: {
+      operator: {
+        replicas: 1,
+      },
+      kubeProxyReplacement: "true",
+      k8sServiceHost: "127.0.0.1",
+      k8sServicePort: 6443,
+      ipam: {
+        mode: "kubernetes",
+      },
+      clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"],
+      // Use the host's existing cgroup2 mount instead of creating a
+      // separate one. NixOS mounts cgroup2 at /sys/fs/cgroup; Cilium's
+      // default auto-mount creates a separate cgroup2 at /run/cilium/cgroupv2
+      // which is NOT the hierarchy pods live in, breaking Socket LB.
+      cgroup: {
+        autoMount: { enabled: false },
+        hostRoot: "/sys/fs/cgroup",
+      },
+    },
+  }),
   zfs_iscsi: helm.template("zfs-iscsi", "./charts/democratic-csi", {
     namespace: "democratic-csi",
 
