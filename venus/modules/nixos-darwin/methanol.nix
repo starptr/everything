@@ -8,6 +8,7 @@
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configurations/methanol.nix
+      ./use-avahi-aliases.nix
     ];
 
   environment.systemPackages = [
@@ -85,11 +86,21 @@
   services.avahi = {
     enable = true;
     nssmdns4 = true;
+    allowInterfaces = [ "enp42s0" ]; # Restrict to physical interface to avoid K8s network interference
     publish = {
       enable = true;
       domain = true;
-      addresses = true;
+      addresses = true; # Publish hostname via mDNS
+      userServices = true; # Allow avahi-publish to work via D-Bus
     };
+  };
+
+  # Avahi host aliases for LAN IP
+  # Uses avahi-publish-address for proper local address alias publishing
+  services.avahi-aliases = {
+    enable = true;
+    device = "enp42s0";
+    aliases = [ "methanol-storage.local" ];
   };
 
   services.tailscale = {
