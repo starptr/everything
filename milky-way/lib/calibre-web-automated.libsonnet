@@ -3,6 +3,7 @@ local defaultAppName = "calibre-web-auto";
 
 {
   new(
+    domain,
     name=defaultAppName,
     namespace="default",
     image="docker.io/crocodilestick/calibre-web-automated:latest",
@@ -134,7 +135,6 @@ local defaultAppName = "calibre-web-auto";
         namespace: namespace,
       },
       spec: {
-        clusterIP: "None",
         selector: this.statefulset.spec.template.metadata.labels,
         ports: [
           {
@@ -146,6 +146,39 @@ local defaultAppName = "calibre-web-auto";
               );
               utils.assertEqualAndReturn(calibreWebAutoContainer.ports[0].name, "webui"),
             name: "http",
+          },
+        ],
+      },
+    },
+
+    ingress: {
+      apiVersion: "networking.k8s.io/v1",
+      kind: "Ingress",
+      metadata: {
+        name: name,
+        namespace: namespace,
+      },
+      spec: {
+        ingressClassName: "traefik",
+        rules: [
+          {
+            host: domain,
+            http: {
+              paths: [
+                {
+                  path: "/",
+                  pathType: "Prefix",
+                  backend: {
+                    service: {
+                      name: this.service.metadata.name,
+                      port: {
+                        number: utils.assertEqualAndReturn(this.service.spec.ports[0].port, 80),
+                      },
+                    },
+                  },
+                },
+              ],
+            },
           },
         ],
       },

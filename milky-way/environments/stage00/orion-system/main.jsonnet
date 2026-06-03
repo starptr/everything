@@ -53,7 +53,7 @@ local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
     storageClassName="my-custom-zfs-generic-nfs-csi",
     name="nfs-test",
   ),
-  calibreWebAuto: calibreWebAuto.new(),
+  calibreWebAuto: calibreWebAuto.new(domain="cwa-methanol.local"),
 
   cilium: charts.cilium,
 
