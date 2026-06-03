@@ -100,7 +100,7 @@
   services.avahi-aliases = {
     enable = true;
     device = "enp42s0";
-    aliases = [ "methanol-storage.local" ];
+    aliases = [ "cwa-methanol.local" ];
   };
 
   services.tailscale = {
