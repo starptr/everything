@@ -4,6 +4,8 @@ local charts = import 'milky-way/charts.jsonnet';
 local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
 local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.libsonnet';
 local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
+local ddnsUpdater = import 'milky-way/lib/ddns-updater.libsonnet';
+local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
 {
   local this = self,
   democraticCsiNamespace: {
@@ -54,6 +56,22 @@ local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
     name="nfs-test",
   ),
   calibreWebAuto: calibreWebAuto.new(domain="cwa-methanol.local"),
+
+  ddnsUpdater: ddnsUpdater.new(
+    config={
+      settings: [
+        {
+          provider: "cloudflare",
+          zone_identifier: secrets.ddnsUpdater.cloudflare.zone_identifier,
+          domain: "carless-drivers.ddns.andref.app",
+          ttl: 1,
+          token: secrets.ddnsUpdater.cloudflare.token,
+          ip_version: "ipv4",
+        },
+      ],
+    },
+    domain="carless-drivers.ddns.andref.app",
+  ),
 
   cilium: charts.cilium,
 
