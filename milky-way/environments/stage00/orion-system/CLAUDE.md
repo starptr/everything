@@ -95,7 +95,7 @@ Two established ways to get a secret into the cluster:
   does this — `new(config, ...)` renders `std.base64(std.manifestJsonEx(config, '  '))` into a
   `Secret`'s `data`, and the Deployment mounts it read-only. In `main.jsonnet`:
   ```jsonnet
-  local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
+  local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   // ...
   ddnsUpdater: ddnsUpdater.new(
     config={ settings: [{ provider: 'cloudflare',

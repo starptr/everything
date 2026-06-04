@@ -5,7 +5,7 @@ local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
 local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.libsonnet';
 local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
 local ddnsUpdater = import 'milky-way/lib/ddns-updater.libsonnet';
-local secrets = import 'milky-way/secrets/secrets-for-zfs-iscsi-driver.jsonnet';
+local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
   democraticCsiNamespace: {
