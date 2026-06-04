@@ -63,7 +63,7 @@ in {
           ignore-ddns-andref-app = {
             class = "octodns.processor.filter.NameRejectlistFilter";
             rejectlist = [
-              "/\\.ddns$/"  # Match *.ddns (e.g., foo.ddns, bar.baz.ddns)
+              "/-ddns$/"  # Match *-ddns (e.g. carless-drivers-ddns), managed by k8s ddns-updater
             ];
           };
         };

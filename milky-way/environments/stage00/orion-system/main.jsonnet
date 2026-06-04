@@ -63,14 +63,16 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
         {
           provider: "cloudflare",
           zone_identifier: secrets.ddnsUpdater.cloudflare.zone_identifier,
-          domain: "carless-drivers.ddns.andref.app",
+          domain: "carless-drivers-ddns.andref.app",
           ttl: 1,
           token: secrets.ddnsUpdater.cloudflare.token,
           ip_version: "ipv4",
+          # Proxy gives the domain an SSL cert for free
+          proxied: true,
         },
       ],
     },
-    domain="carless-drivers.ddns.andref.app",
+    domain="carless-drivers-ddns.andref.app",
   ),
 
   cilium: charts.cilium,
