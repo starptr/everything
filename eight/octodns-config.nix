@@ -59,6 +59,14 @@ in {
             min_ttl = 60;
           };
         };
+        processors = {
+          ignore-ddns-andref-app = {
+            class = "octodns.processor.filter.NameRejectlistFilter";
+            rejectlist = [
+              "/\\.ddns$/"  # Match *.ddns (e.g., foo.ddns, bar.baz.ddns)
+            ];
+          };
+        };
         zones = {
           # This is a dynamic zone config. The source(s), here `config`, will be
           # queried for a list of zone names and each will dynamically be set up to
@@ -72,7 +80,11 @@ in {
           "yuto.tel." = self."production.yaml".zones."yart.me.";
           "yuto.wiki." = self."production.yaml".zones."yart.me.";
           "yut.to." = self."production.yaml".zones."yart.me.";
-          "andref.app." = self."production.yaml".zones."yart.me.";
+          "andref.app." = {
+            sources = [ "config" ];
+            processors = [ "ignore-ddns-andref-app" ];
+            targets = [ "cloudflare" ];
+          };
         };
       };
     });
