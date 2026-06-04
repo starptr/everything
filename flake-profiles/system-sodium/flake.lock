@@ -141,11 +141,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1768003381,
-        "narHash": "sha256-pHiy4VoXi/xjLLHfmL2prmFTk9qj2h0dBYA+gIc8O6E=",
+        "lastModified": 1780524107,
+        "narHash": "sha256-ZW7xOkYJ1T3aSvexWLbVzFiqAZjaCg0pLVNO0A2jvwA=",
         "owner": "ryoppippi",
         "repo": "claude-code-overlay",
-        "rev": "1816bf298b3961bebc23b66076d7f2c1142586d0",
+        "rev": "9ea1ec8f5a40317893ad79e278602f607f214e9c",
         "type": "github"
       },
       "original": {
@@ -154,7 +154,7 @@
         "type": "github"
       }
     },
-    "dark-notify": {
+    "dark-notify-wrapped": {
       "inputs": {
         "cardboard": "cardboard_3",
         "devenv": [
@@ -704,7 +704,7 @@
         "chaseln": "chaseln",
         "check-gits": "check-gits",
         "claude-code-overlay": "claude-code-overlay",
-        "dark-notify": "dark-notify",
+        "dark-notify-wrapped": "dark-notify-wrapped",
         "devenv": [
           "devenv"
         ],
