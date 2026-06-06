@@ -32,6 +32,15 @@ local helm = tanka.helm.new(std.thisFile);
       kubeProxyReplacement: "true",
       k8sServiceHost: "127.0.0.1",
       k8sServicePort: 6443,
+      // kata pods run their own guest kernel, so their connect()/sendmsg()
+      // syscalls happen inside the VM and never hit the host-cgroup Socket LB
+      // eBPF hook. Restrict Socket LB to the host namespace so pod traffic
+      // (including kata VMs) falls back to the per-packet tc/eBPF LB at the
+      // veth, letting kata pods reach Services and other pods like runc pods.
+      // https://docs.cilium.io/en/stable/network/kubernetes/kata/
+      socketLB: {
+        hostNamespaceOnly: true,
+      },
       ipam: {
         mode: "kubernetes",
       },

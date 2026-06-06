@@ -29,6 +29,18 @@ nix develop ./flake-profiles/milky-way-devenv --impure -c bash -c 'cd milky-way 
 nix develop ./flake-profiles/milky-way-devenv --impure -c bash -c 'cd milky-way && tk apply environments/stage00/orion-system --auto-approve=always'
 ```
 
+> **Gotcha: cilium config changes don't restart the cilium agents.** `tk apply` to
+> cilium Helm values (`charts.jsonnet`) updates the `cilium-config` ConfigMap but does
+> **not** roll the cilium DaemonSet — the vendored chart adds no config-checksum
+> annotation, so the running agents keep the old config (and `kubectl rollout status
+> ds/cilium` reports success because the pod template is unchanged). After such a change:
+> ```bash
+> kubectl --context methanol -n kube-system rollout restart ds/cilium
+> # confirm it took effect, e.g.:
+> kubectl --context methanol -n kube-system exec ds/cilium -c cilium-agent -- \
+>   cilium-dbg status --verbose | grep -iE "Socket LB|KubeProxyReplacement"
+> ```
+
 ### Environments
 
 - `environments/stage00/orion-system/` - Methanol cluster (k3s on NixOS server)

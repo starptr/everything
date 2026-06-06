@@ -119,6 +119,21 @@
     ];
   };
 
+  # kata-containers (QEMU) microVM runtime for pods.
+  # Make the kata shim + runtime visible to k3s/containerd so the `kata`
+  # containerd runtime (registered via the config-v3.toml.tmpl symlink below)
+  # can launch microVMs. The kata RuntimeClass is defined in milky-way.
+  systemd.services.k3s.path = [ pkgs.kata-runtime ];
+
+  # Delegate gives k3s its own cgroup subtree so the kata shim can create the
+  # VM sandbox cgroups. We deliberately do NOT set DeviceAllow: that would flip
+  # the unit to a device allowlist (breaking kubelet's /dev/kmsg and democratic-
+  # csi's iSCSI block devices). The default DevicePolicy=auto already grants the
+  # k3s process tree (incl. the kata QEMU hypervisor) access to /dev/kvm.
+  systemd.services.k3s.serviceConfig = {
+    Delegate = "yes";
+  };
+
   # nfs server for democratic-csi
   services.nfs = {
     server = {
@@ -147,6 +162,11 @@
   # Ensure the /etc/target directory still exists (normally created by the etc entry above)
   systemd.tmpfiles.rules = [
     "d /etc/target 0700 root root -"
+    # Register the kata containerd runtime by extending k3s's v3 containerd
+    # template. k3s reads config-v3.toml.tmpl and regenerates config.toml
+    # (version 3) on (re)start; the symlink only adds the template and never
+    # touches the generated config.toml. Parent dir is created by k3s.
+    "L+ /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl - - - - ${./methanol-containerd-config-v3.toml.tmpl}"
   ];
 
   # Ensure ZFS parent datasets exist for democratic-csi NFS driver

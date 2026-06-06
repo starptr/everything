@@ -1,0 +1,11 @@
+{{ template "base" . }}
+
+# kata-containers (QEMU) microVM runtime. Symlinked to
+# /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl by methanol.nix.
+# `base` pulls in k3s's own generated config; we only append this runtime so the
+# `kata` RuntimeClass (handler: kata) routes pods through the kata v2 shim.
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'kata']
+  runtime_type = "io.containerd.kata.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+  container_annotations = ["io.katacontainers.*"]
