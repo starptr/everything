@@ -3,6 +3,7 @@ local zfsNfsDriverConfig = import 'milky-way/environments/stage00/orion-system/m
 local charts = import 'milky-way/charts.jsonnet';
 local httpEcho = import 'milky-way/lib/http-echo.libsonnet';
 local exampleZfsGenericIscsi = import 'milky-way/lib/example-zfs-generic-iscsi.libsonnet';
+local kataRuntimeClass = import 'milky-way/lib/kata-runtime-class.libsonnet';
 local kataMicrovmTest = import 'milky-way/lib/kata-microvm-test.libsonnet';
 local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
 local ddnsUpdater = import 'milky-way/lib/ddns-updater.libsonnet';
@@ -57,6 +58,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     storageClassName="my-custom-zfs-generic-nfs-csi",
     name="nfs-test",
   ),
+  kataRuntimeClass: kataRuntimeClass.runtimeClass,
   kataMicrovmTest: kataMicrovmTest.new(),
   calibreWebAuto: calibreWebAuto.new(domain="cwa-methanol.local"),
 

@@ -1,5 +1,4 @@
-local utils = import "milky-way/lib/utils.libsonnet";
-local runtimeClassName = "kata";
+local kataRuntimeClass = import "milky-way/lib/kata-runtime-class.libsonnet";
 {
   new(
     name="kata-microvm-test",
@@ -7,17 +6,6 @@ local runtimeClassName = "kata";
     image="busybox:1.36",
   ):: {
     local this = self,
-
-    // Cluster-scoped RuntimeClass that maps to the `kata` containerd runtime
-    // registered on the node via methanol.nix's config-v3.toml.tmpl.
-    runtimeClass: {
-      apiVersion: "node.k8s.io/v1",
-      kind: "RuntimeClass",
-      metadata: {
-        name: runtimeClassName,
-      },
-      handler: runtimeClassName,
-    },
 
     deployment: {
       apiVersion: "apps/v1",
@@ -38,9 +26,9 @@ local runtimeClassName = "kata";
             labels: {} + this.deployment.spec.selector.matchLabels,
           },
           spec: {
-            // Route this pod through the kata microVM runtime. Assert the name
-            // matches the RuntimeClass above so they can never drift apart.
-            runtimeClassName: utils.assertEqualAndReturn(this.runtimeClass.metadata.name, runtimeClassName),
+            // Route this pod through the kata microVM runtime (see
+            // lib/kata-runtime-class.libsonnet for the RuntimeClass itself).
+            runtimeClassName: kataRuntimeClass.name,
             tolerations: [
               {
                 key: "ephemeral",
