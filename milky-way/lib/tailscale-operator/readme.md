@@ -1,0 +1,3 @@
+# Tailscale-Operator
+
+This directory contains the vendored Tailscale Operator manifest, which is mutated before being used by the `milky-way/lib/tailscale-operator.libsonnet` constructor. The manifest is downloaded from https://github.com/tailscale/tailscale/blob/main/cmd/k8s-operator/deploy/manifests/operator.yaml. See the [Tailscale docs](https://tailscale.com/docs/kubernetes-operator/install-operator#install-using-static-manifests-with-kubectl) for more details.

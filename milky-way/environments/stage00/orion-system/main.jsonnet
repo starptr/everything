@@ -8,6 +8,7 @@ local kataMicrovmTest = import 'milky-way/lib/kata-microvm-test.libsonnet';
 local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
 local ddnsUpdater = import 'milky-way/lib/ddns-updater.libsonnet';
 local traefik = import 'milky-way/lib/traefik.libsonnet';
+local tailscaleOperator = import 'milky-way/lib/tailscale-operator.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
@@ -78,6 +79,11 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
       ],
     },
     domain="carless-drivers-ddns.andref.app",
+  ),
+
+  tailscaleOperator: tailscaleOperator.new(
+    client_id = secrets.tailscaleOperatorTrustCredentials.orionSystem.client_id,
+    client_secret = secrets.tailscaleOperatorTrustCredentials.orionSystem.client_secret,
   ),
 
   cilium: charts.cilium,

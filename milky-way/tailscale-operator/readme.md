@@ -1,5 +1,8 @@
 # SOP
 
+> [!CAUTION]
+> This SOP is deprecated; superceded by `milky-way/lib/tailscale-operator.libsonnet`.
+
 We need to this manually because tanka cannot vendor helm charts that require value overriding with secrets (without exposing the secret).
 
 For more information, see https://tailscale.com/kb/1236/kubernetes-operator#static-manifests-with-kubectl.
