@@ -10,6 +10,7 @@ local ddnsUpdater = import 'milky-way/lib/ddns-updater.libsonnet';
 local traefik = import 'milky-way/lib/traefik.libsonnet';
 local tailscaleOperator = import 'milky-way/lib/tailscale-operator.libsonnet';
 local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingress.libsonnet';
+local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
@@ -90,6 +91,12 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   ),
 
   testTailscaleIngress: testTailscaleIngress.new(),
+
+  openclaw: openclaw.new(
+    gatewayToken = secrets.openclaw.OPENCLAW_GATEWAY_TOKEN,
+    geminiApiKey = secrets.openclaw.GEMINI_API_KEY,
+    tailnet = "tail4c9a",
+  ),
 
   cilium: charts.cilium,
 
