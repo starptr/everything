@@ -9,6 +9,7 @@ local calibreWebAuto = import 'milky-way/lib/calibre-web-automated.libsonnet';
 local ddnsUpdater = import 'milky-way/lib/ddns-updater.libsonnet';
 local traefik = import 'milky-way/lib/traefik.libsonnet';
 local tailscaleOperator = import 'milky-way/lib/tailscale-operator.libsonnet';
+local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingress.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
@@ -84,7 +85,11 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   tailscaleOperator: tailscaleOperator.new(
     client_id = secrets.tailscaleOperatorTrustCredentials.orionSystem.client_id,
     client_secret = secrets.tailscaleOperatorTrustCredentials.orionSystem.client_secret,
+    operatorTags = 'tag:k8s-orion-system-operator',
+    proxyTags = 'tag:k8s-orion-system',
   ),
+
+  testTailscaleIngress: testTailscaleIngress.new(),
 
   cilium: charts.cilium,
 
