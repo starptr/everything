@@ -12,6 +12,8 @@ local tailscaleOperator = import 'milky-way/lib/tailscale-operator.libsonnet';
 local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingress.libsonnet';
 local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3.libsonnet';
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
+local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
+local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
@@ -100,6 +102,18 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     geminiApiKey = secrets.openclaw.GEMINI_API_KEY,
     tailnet = "tail4c9a",
   ),
+
+  // Headless qbittorrent whose traffic is forced through a NordVPN/WireGuard tunnel by an embedded
+  // gluetun sidecar killswitch (lib/gluetun.libsonnet). WebUI via Tailscale L7 ingress.
+  qbittorrent: qbittorrent.new(
+    wireguardPrivateKey = secrets.vpn.wireguard[0].privateKey,
+    tailscaleHostname = "qbittorrent",
+    serverCountries = "United States",
+  ),
+
+  // Continuously asserts qbittorrent's egress is the VPN exit (not the home IP) and exercises a real
+  // ipleak.net torrent magnet; crashloops on a detected leak.
+  gluetunLeakTest: gluetunLeakTest.new(),
 
   cilium: charts.cilium,
 
