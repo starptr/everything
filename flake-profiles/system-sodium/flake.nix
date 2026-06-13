@@ -52,7 +52,51 @@
     ];
   };
 
-  outputs = inputs @ { self, ... }: {
+  outputs = inputs @ { self, nixpkgs, ... }: let
+    system = "aarch64-darwin";
+    pkgs = nixpkgs.legacyPackages.${system};
+  in {
+    # Recover the linux-builder VM from nix-store corruption (symptom: x86_64-linux
+    # builds fail with `path '…' is not valid` because the guest's binfmt config got
+    # truncated, so QEMU x86_64 emulation never registers). Resets the persistent
+    # qcow2 disk (keys/ are preserved) so the build closure re-copies cleanly.
+    #   nix run ./flake-profiles/system-sodium#reset-linux-builder
+    packages.${system}.reset-linux-builder = pkgs.writeShellApplication {
+      name = "reset-linux-builder";
+      runtimeInputs = [ pkgs.coreutils ];
+      text = ''
+        set -euo pipefail
+
+        echo "Resetting the linux-builder VM (you will be prompted for sudo)."
+        echo "This wipes the builder's persistent nix store (keys/ are preserved) and"
+        echo "forces a clean re-copy of the build closure on next build. Use it to"
+        echo "recover from 'path ... is not valid' x86_64-linux build failures."
+        echo
+
+        sudo launchctl bootout system/org.nixos.linux-builder || echo "(service was not running)"
+        sleep 2
+        sudo rm -f /var/lib/linux-builder/nixos.qcow2
+        sudo launchctl bootstrap system /Library/LaunchDaemons/org.nixos.linux-builder.plist
+
+        echo "Waiting for the builder to come back up..."
+        for _ in $(seq 1 40); do
+          if sudo ssh -i /etc/nix/builder_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=3 builder@linux-builder true 2>/dev/null; then
+            break
+          fi
+          sleep 3
+        done
+
+        echo "Verifying x86_64 emulation is registered..."
+        if sudo ssh -i /etc/nix/builder_ed25519 -o StrictHostKeyChecking=no builder@linux-builder "test -e /proc/sys/fs/binfmt_misc/x86_64-linux"; then
+          echo "OK: x86_64-linux binfmt handler is registered. The builder is ready."
+        else
+          echo "WARNING: x86_64-linux binfmt handler not found. Inspect the builder:"
+          echo "  sudo ssh -i /etc/nix/builder_ed25519 builder@linux-builder"
+          exit 1
+        fi
+      '';
+    };
+
     darwinConfigurations."Yutos-Sodium" = inputs.nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
       modules = [

@@ -84,6 +84,19 @@
     linux-builder = {
       enable = true;
       maxJobs = 4;
+      # Advertise x86_64-linux in addition to the default aarch64-linux, and let the
+      # aarch64 guest VM execute x86_64 build steps via QEMU binfmt. Container images
+      # of prebuilt packages only emulate the tar/gzip assembly, so this stays cheap.
+      # This is what lets whale's x86_64-linux images build on the M1 (see whale/readme.md).
+      #
+      # Note: after changing `config` here, `darwin-rebuild switch` only reloads the
+      # service; the running VM keeps the old image until restarted. If x86_64 builds
+      # fail with `path '…' is not valid` (guest store corruption), reset the builder:
+      #   nix run ./flake-profiles/system-sodium#reset-linux-builder
+      systems = [ "aarch64-linux" "x86_64-linux" ];
+      config = {
+        boot.binfmt.emulatedSystems = [ "x86_64-linux" ];
+      };
     };
   };
 
