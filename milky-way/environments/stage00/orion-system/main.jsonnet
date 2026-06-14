@@ -18,6 +18,7 @@ local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-ima
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
+  local mdataPvcName = 'mdata',
   democraticCsiNamespace: {
     apiVersion: "v1",
     kind: "Namespace",
@@ -105,12 +106,28 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     tailnet = "tail4c9a",
   ),
 
+  // Shared media library volume. Apps mount this whole PVC and hardlink between subdirs
+  // (e.g. qbittorrent writes downloads/qbittorrent/, *arr apps hardlink into a library/ tree).
+  // Hardlinks require a single filesystem, so everything that shares files mounts this one PVC.
+  mdataPvc: {
+    apiVersion: "v1",
+    kind: "PersistentVolumeClaim",
+    metadata: { name: mdataPvcName, namespace: "default" },
+    spec: {
+      accessModes: ["ReadWriteMany"],
+      storageClassName: "my-custom-zfs-generic-nfs-csi",
+      resources: { requests: { storage: "1Ti" } },
+    },
+  },
+
   // Headless qbittorrent whose traffic is forced through a NordVPN/WireGuard tunnel by an embedded
-  // gluetun sidecar killswitch (lib/gluetun.libsonnet). WebUI via Tailscale L7 ingress.
+  // gluetun sidecar killswitch (lib/gluetun.libsonnet). WebUI via Tailscale L7 ingress. Downloads
+  // land in downloads/qbittorrent/ on the shared mdata volume (mounted at /data).
   qbittorrent: qbittorrent.new(
     wireguardPrivateKey = secrets.vpn.wireguard[0].privateKey,
     tailscaleHostname = "qbittorrent",
     serverCountries = "United States",
+    mediaClaimName = mdataPvcName,
   ),
 
   // Continuously asserts qbittorrent's egress is the VPN exit (not the home IP) and exercises a real

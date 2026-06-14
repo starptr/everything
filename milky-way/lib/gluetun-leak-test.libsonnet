@@ -19,8 +19,8 @@ local utils = import 'milky-way/lib/utils.libsonnet';
 {
   new(
     name='gluetun-leak-test',
-    namespace='qbittorrent',
-    qbittorrentService='qbittorrent.qbittorrent.svc.cluster.local',
+    namespace='default',
+    qbittorrentService='qbittorrent.%s.svc.cluster.local' % namespace,
     webuiPort=8080,
     controlPort=8000,
     // ipleak.net torrent-address-detection magnet (their fixed detection info-hash + trackers).

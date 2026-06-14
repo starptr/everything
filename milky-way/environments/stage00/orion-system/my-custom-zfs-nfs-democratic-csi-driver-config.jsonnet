@@ -10,6 +10,7 @@ local myCustomZfsIscsiDriverConfig = import 'milky-way/environments/stage00/orio
     cli: myCustomZfsIscsiDriverConfig.zfs.cli,
 
     datasetParentName: "rpool/k8s/democratic-csi/my-zfs-nfs",
+    detachedSnapshots: false,
     detachedSnapshotsDatasetParentName: "rpool/k8s/democratic-csi/my-zfs-nfs-snapshots",
     // Store PVC metadata in ZFS properties for easy identification
     datasetProperties: {

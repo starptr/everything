@@ -7,25 +7,29 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
 // the only thing reachable from outside is the WebUI, exposed via Tailscale L7 ingress.
 //
 // Storage: config on iSCSI (RWO) -- qbittorrent rewrites qBittorrent.conf at runtime, so it's
-// seeded once (only-if-empty) into the PVC; downloads on NFS (RWX) so other pods (media servers,
-// etc.) can mount the completed-downloads tree.
+// seeded once (only-if-empty) into the PVC. Downloads live on a SHARED media volume (the external
+// `mdata` RWX-NFS PVC, mounted at /data) under downloads/qbittorrent/ -- other apps mount the same
+// volume and hardlink between subdirs (hardlinks require one filesystem), so the media tree is not
+// owned by qbittorrent here.
 {
   new(
     wireguardPrivateKey,                // positional, required -> gluetun (NordVPN/WireGuard)
     name='qbittorrent',
-    namespace='qbittorrent',
+    namespace='default',
     image='lscr.io/linuxserver/qbittorrent:5.2.1@sha256:1784d5a65d08d01de308c7d87ff2c1dba328379e180eeca41cc6b96bdf6a0ffc',
     webuiPort=8080,
     tailscaleHostname='qbittorrent',    // -> https://qbittorrent.<tailnet>.ts.net
     serverCountries='United States',
     configStorageClassName='my-custom-zfs-generic-iscsi',     // RWO
     configStorageSize='5Gi',
-    downloadsStorageClassName='my-custom-zfs-generic-nfs-csi',  // RWX, shareable
-    downloadsStorageSize='100Gi',
+    mediaClaimName='mdata',             // external shared RWX media PVC (defined in main.jsonnet)
+    mediaMountPath='/data',             // whole media volume mounted here
+    downloadsSubdir='downloads/qbittorrent',  // qbittorrent's save dir within the media volume
     initImage='busybox:1.37',
   ):: {
     local this = self,
     local controlPort = 8000,           // gluetun control server (publicip route)
+    local downloadsPath = mediaMountPath + '/' + downloadsSubdir,   // /data/downloads/qbittorrent
 
     // Cluster CIDRs (k3s defaults; verified on methanol). Used for the killswitch allowlist AND the
     // qbittorrent reverse-proxy / auth-subnet whitelist below.
@@ -56,7 +60,7 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
       'FileLogger\\Enabled=true',
       '',
       '[BitTorrent]',
-      'Session\\DefaultSavePath=/downloads',
+      'Session\\DefaultSavePath=%s' % downloadsPath,
       'Session\\Port=6881',
       '',
       '[Preferences]',
@@ -74,12 +78,6 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
       '',
     ]),
     local configData = { 'qBittorrent.conf': qbtConf },
-
-    namespace_: {
-      apiVersion: 'v1',
-      kind: 'Namespace',
-      metadata: { name: namespace },
-    },
 
     // Re-emit the gluetun-owned manifests so Tanka applies them.
     vpnSecret: this.vpn.secret,
@@ -100,17 +98,6 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
         accessModes: ['ReadWriteOncePod'],
         storageClassName: configStorageClassName,
         resources: { requests: { storage: configStorageSize } },
-      },
-    },
-
-    downloadsPvc: {
-      apiVersion: 'v1',
-      kind: 'PersistentVolumeClaim',
-      metadata: { name: name + '-downloads', namespace: namespace },
-      spec: {
-        accessModes: ['ReadWriteMany'],   // RWX (NFS) so other pods can mount completed downloads
-        storageClassName: downloadsStorageClassName,
-        resources: { requests: { storage: downloadsStorageSize } },
       },
     },
 
@@ -140,15 +127,23 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
                 // the file persist across restarts (mirrors openclaw's init-config seed pattern).
                 name: 'init-config',
                 image: initImage,
-                command: ['sh', '-c', |||
+                // Seed the config (only-if-empty) AND ensure the save dir exists and is writable by
+                // the qbittorrent uid (1000) on the shared media volume. The NFS export root-squashes,
+                // so chown(1000) from this root container is EPERM; instead chmod the leaf 0777 (the
+                // creating owner may chmod), matching the driver's 0777 volume-root convention. The
+                // parents stay 0755/traversable.
+                command: ['sh', '-c', (|||
                   set -eu
                   mkdir -p /config/qBittorrent
                   [ -s /config/qBittorrent/qBittorrent.conf ] \
                     || cp /seed/qBittorrent.conf /config/qBittorrent/qBittorrent.conf
-                |||],
+                  mkdir -p %(dl)s
+                  chmod 0777 %(dl)s
+                |||) % { dl: downloadsPath }],
                 volumeMounts: [
                   { name: 'config', mountPath: '/config' },
                   { name: 'config-seed', mountPath: '/seed', readOnly: true },
+                  { name: 'media', mountPath: mediaMountPath },
                 ],
                 resources: {
                   requests: { memory: '16Mi', cpu: '25m' },
@@ -171,7 +166,7 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
                 ports: [{ name: 'webui', containerPort: webuiPort }],
                 volumeMounts: [
                   { name: 'config', mountPath: '/config' },
-                  { name: 'downloads', mountPath: '/downloads' },
+                  { name: 'media', mountPath: mediaMountPath },
                 ],
                 readinessProbe: {
                   httpGet: { path: '/', port: 'webui' },
@@ -186,7 +181,7 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
             ],
             volumes: this.vpn.volumes + [
               { name: 'config', persistentVolumeClaim: { claimName: this.configPvc.metadata.name } },
-              { name: 'downloads', persistentVolumeClaim: { claimName: this.downloadsPvc.metadata.name } },
+              { name: 'media', persistentVolumeClaim: { claimName: mediaClaimName } },
               { name: 'config-seed', configMap: { name: this.configMap.metadata.name } },
             ],
           },

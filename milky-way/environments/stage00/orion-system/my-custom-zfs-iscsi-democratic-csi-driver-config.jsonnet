@@ -27,6 +27,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
           },
         },
         "datasetParentName": "rpool/k8s/democratic-csi/my-zfs-generic-iscsi",
+        "detachedSnapshots": false,
         "detachedSnapshotsDatasetParentName": "rpool/k8s/democratic-csi/my-zfs-generic-iscsi-snapshots",
         // Store PVC metadata in ZFS properties for easy identification
         "datasetProperties": {
