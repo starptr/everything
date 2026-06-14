@@ -1,12 +1,10 @@
+local digests = import 'milky-way/lib/digests.libsonnet';
 {
   new(
     name="test-example-whale-image-digest",
     namespace="test-k8s",
-    // Pull the exact image whale pushed, pinned by its manifest digest. The digest
-    // file is written by `nix run ./flake-profiles/whale#whale-push-example` and
-    // imported here via the vendor/exports -> ../../exports jpath symlink.
-    image="docker.io/yuto7/example-image@"
-          + std.trim(importstr "exports/whale/digests/example-image.txt"),
+    // Pinned by manifest digest from exports/whale/digests/, via the shared digests lib.
+    image=digests["example-image"].fullyQualifiedImageReference,
   ):: {
     local this = self,
 
