@@ -21,7 +21,7 @@
       mkPushScript = pkgs: pkgs.writeShellApplication {
         name = "push-${name}";
         # We have to use skopeo; docker CLI requires the docker daemon to be running.
-        runtimeInputs = [ pkgs.skopeo pkgs.jq pkgs.docker-credential-helpers ];
+        runtimeInputs = [ pkgs.skopeo pkgs.docker-credential-helpers ];
         text = ''
           set -euo pipefail
 
@@ -40,19 +40,17 @@
           fi
 
           echo "Pushing to $dest..."
-          skopeo --insecure-policy copy "docker-archive:${image}" "$dest"
+          # --digestfile records the MANIFEST digest of the image as pushed to the
+          # registry (what you pull with image@sha256:...). This is the value
+          # docker.io lists; do NOT use `inspect --raw | .config.digest` (that is the
+          # config-blob digest, which is not a pullable manifest reference).
+          digestfile="$HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
+          skopeo --insecure-policy copy --digestfile "$digestfile" "docker-archive:${image}" "$dest"
           echo "Done!"
 
-          echo "Saving digest to $HOME/${digests-directory-home-relative-pathstr}/${name}.txt ..."
-          digest=$(skopeo inspect --raw "docker-archive:${image}" | jq -r '.config.digest')
-          if [[ -z "$digest" ]]; then
-            echo "Error: Failed to get digest."
-            exit 1
-          fi
-
-          echo "Image digest: $digest"
-          echo "$digest" > "$HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
-          echo "Digest written to $HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
+          digest=$(cat "$digestfile")
+          echo "Image manifest digest: $digest"
+          echo "Digest written to $digestfile"
         '';
       };
     in {
@@ -69,8 +67,14 @@
     name = "example-image";
     buildLayeredImageArg = {
       tag = "latest";
-      contents = [ imagePkgs.curl ];
-      config.Cmd = [ "curl" "--version" ];
+      contents = [ imagePkgs.curl imagePkgs.coreutils imagePkgs.dumb-init ];
+      config = {
+        # dumb-init is PID 1 and forwards signals (so k8s SIGTERM terminates the pod
+        # promptly); sleep keeps the container alive as a long-running test target.
+        # curl stays available for `kubectl exec ... -- curl --version`.
+        Entrypoint = [ "dumb-init" "--" ];
+        Cmd = [ "sleep" "infinity" ];
+      };
     };
   };
   mopidy = image-nix-artifacts {

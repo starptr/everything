@@ -8,8 +8,7 @@ local digests = {
     for field in std.objectFields(this.raw)
   },
   nickNameToFullyQualifiedName: {
-    # TODO: Fix digest not matching listed value on docker.io
-    #mopidy: "docker.io/yuto7/mopidy@" + this.clean.mopidy, 
+    mopidy: "docker.io/yuto7/mopidy@" + this.clean.mopidy, 
   },
 };
 digests.nickNameToFullyQualifiedName

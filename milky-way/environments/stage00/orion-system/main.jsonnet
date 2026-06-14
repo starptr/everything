@@ -14,6 +14,7 @@ local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
+local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
@@ -66,6 +67,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   ),
   kataRuntimeClass: kataRuntimeClass.runtimeClass,
   kataMicrovmTest: kataMicrovmTest.new(),
+  testExampleWhaleImageDigest: testExampleWhaleImageDigest.new(),
   calibreWebAuto: calibreWebAuto.new(domain="cwa-methanol.local"),
 
   ddnsUpdater: ddnsUpdater.new(
