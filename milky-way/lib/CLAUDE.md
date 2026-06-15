@@ -104,9 +104,23 @@ digest**, never a floating tag.
   `nix run ./flake-profiles/whale#whale-push-<name>`), so the pin tracks the build automatically
   — when you push a new image, the default updates with it. To onboard a new whale image, add it
   to the `raw` map in `digests.libsonnet`.
-- **Third-party images:** `digests.libsonnet` is whale-export-backed and doesn't cover them, so
-  pin inline as `repo:tag@sha256:…` (e.g. the `lscr.io/linuxserver/...` and `qmcgaw/gluetun:...`
-  defaults). The tag stays for readability; the digest is what's enforced.
+- **Third-party images with a known digest:** centralize them in `digests.libsonnet` too — add a
+  `raw` entry whose digest is a `{ hash, tagHint? }` object and default the param to
+  `digests["<name>"].fullyQualifiedImageReferencePinned`. `hash` (`sha256:…`) is what's enforced;
+  the optional `tagHint` (e.g. `v3.41.1`) is folded back in for readability, rendering
+  `repo:tagHint@sha256:…`. An image shared by several consumers (e.g. `traefik/whoami` across the
+  tailscale smoke tests) uses one `digestFor<Consumer>` object per consumer →
+  `digests.whoami.fullyQualifiedImageReferencePinnedFor<Consumer>`.
+- **Third-party images without a digest (tag-only):** still centralize them in `digests.libsonnet`
+  rather than inlining a bare tag string — add a `raw` entry and default the param to its derived
+  reference. A single-service image uses `defaultTagForImageParameter` →
+  `digests["<name>"].fullyQualifiedImageReferenceTagged`; an image shared by several services at
+  (possibly) different versions (e.g. `busybox` used as an init/helper image) gets one
+  `tagFor<Consumer>` property per consumer →
+  `digests.busybox.fullyQualifiedImageReferenceTaggedFor<Consumer>`. These tagged references are
+  **DEPRECATED** — they exist to migrate off inline tag strings and to give one editing point per
+  image; prefer a real digest pin whenever one is available. (When no tag is specified upstream,
+  use `latest`, matching Kubernetes' default.)
 
 ## Builders vs. service libs
 

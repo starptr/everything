@@ -1,9 +1,10 @@
 local kataRuntimeClass = import "milky-way/lib/kata-runtime-class.libsonnet";
+local digests = import "milky-way/lib/digests.libsonnet";
 {
   new(
     name="kata-microvm-test",
     namespace="test-k8s",
-    image="busybox:1.36",
+    image=digests.busybox.fullyQualifiedImageReferenceTaggedForKataMicrovmTest,
   ):: {
     local this = self,
 

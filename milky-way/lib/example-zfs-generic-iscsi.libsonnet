@@ -1,4 +1,5 @@
 local utils = import 'milky-way/environments/default/utils.jsonnet';
+local digests = import 'milky-way/lib/digests.libsonnet';
 local defaultAppName = "iscsi-test";
 {
   new(
@@ -35,7 +36,7 @@ local defaultAppName = "iscsi-test";
             containers: [
               {
                 name: "writer",
-                image: "busybox:1.36",
+                image: digests.busybox.fullyQualifiedImageReferenceTaggedForExampleZfs,
                 command: [
                   "sh",
                   "-c",

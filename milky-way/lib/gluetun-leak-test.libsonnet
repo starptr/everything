@@ -1,4 +1,5 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
+local digests = import 'milky-way/lib/digests.libsonnet';
 
 // VPN leak-test for the qbittorrent + gluetun pod. It continuously verifies that the torrent
 // client's egress is the VPN exit, never the home/ISP IP, and exercises a REAL torrent magnet
@@ -37,7 +38,7 @@ local utils = import 'milky-way/lib/utils.libsonnet';
     // real gate is exit-org != home-org. Set e.g. '(?i)nord|tefincom|m247|datacamp' to also require a match.
     expectedVpnOrgRegex='',
     checkIntervalSeconds=300,
-    image='python:3.12-alpine@sha256:2d07747661646f3d904e995a232fb19e461afde69e67e6f7f3b52c7b968a88b3',
+    image=digests.python.fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
 
