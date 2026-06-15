@@ -100,7 +100,7 @@
   services.avahi-aliases = {
     enable = true;
     device = "enp42s0";
-    aliases = [ "cwa-methanol.local" ];
+    aliases = [ "cwa-methanol.local" "mdata-methanol.local" ];
   };
 
   services.tailscale = {
@@ -320,6 +320,7 @@
     config.services.nfs.server.statdPort
     config.services.nfs.server.mountdPort
     config.services.nfs.server.lockdPort
+    30022 # mdata-sftp NodePort (SFTP over .local; see milky-way lib/sftp.libsonnet)
   ];
   networking.firewall.allowedUDPPorts = config.networking.firewall.allowedTCPPorts;
   # Or disable the firewall altogether.

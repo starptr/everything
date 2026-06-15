@@ -47,6 +47,12 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/qbittorrent",
       defaultDigest: { hash: "sha256:1784d5a65d08d01de308c7d87ff2c1dba328379e180eeca41cc6b96bdf6a0ffc", tagHint: "5.2.1" },
     },
+    // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
+    // matches methanol -- so the digest below is that manifest, not a multi-arch index.
+    "atmoz-sftp": {
+      fullyQualifiedRepository: "docker.io/atmoz/sftp",
+      defaultDigest: { hash: "sha256:a6cb3eb29202ca7f57e73bb7e527286e66e0e822fff65609207c7e0ef2d135a3", tagHint: "alpine" },
+    },
     // traefik/whoami is shared by the two tailscale-operator smoke tests at the same digest;
     // one digestFor<Consumer> per consumer, following the per-consumer convention.
     whoami: {

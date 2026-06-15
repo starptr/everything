@@ -13,6 +13,7 @@ local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingre
 local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3.libsonnet';
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
+local sftp = import 'milky-way/lib/sftp.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
@@ -127,6 +128,21 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     tailscaleHostname = "qbittorrent",
     serverCountries = "United States",
     mediaClaimName = this.mdataPvc.metadata.name,
+  ),
+
+  // Public-key-only SFTP front door onto the shared mdata volume (read-write), reached over the
+  // tailnet (mdata-sftp.tail4c9a.ts.net:22) and over the LAN via methanol's mDNS alias
+  // (mdata-methanol.local:30022 -- alias + firewall port live in venus methanol.nix). Authorized
+  // identities: sodium's key and the 1Password key (public keys, mirrored from methanol.nix).
+  mdataSftp: sftp.new(
+    claimName = this.mdataPvc.metadata.name,
+    name = "mdata-sftp",
+    sftpUser = "mdata",
+    nodePort = 30022,
+    authorizedKeys = [
+      "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDLrT2/gQXhOz4E4xSphB8EXouild5qNOnZ6ZVXuTnf167z8xxSB10mxNey2gKDaIVig6I/tRFeYy6/N/QutbBlKI/+GNPjGCcVJI0hf7fTZGL4caTW8ggcXRz4LAsFp3JBf6Li0FVrGz5ojD0Etbl54BDn033q/tlVRhme5bXJ6s73yRg04kqdQsWVBRJwyzbUUmCQPrZd9i5Nh4QFVuhZljEyUWIStajE+c9v8OOiY1svv+XjKBjyWphP16HqgzvnEDf5+MQ5AUxE05IvJx43UY43CKTe3evzt4F/IqSdYwYGIQ55DaseRmf5zmHLU8MTTkksmOPQEzJL0nBzAmxyGV3PsMYPoIN+1/gJmxCO6ZaaCxYr9SFK/yoRW5e0PFX433xPhNsITBq7jUrVg6BQ/lr0ntRfvd7pRhFq8v02R3jWokL/99skxp1kjVF42bXEJXYPpHF3XAUhYscjOwmWj8dJgsIsSIKIjh7gRVYxQGrZQXOcJQjMytFgXy7fWHM= yuto@Yutos-MacBook-Pro.local",  // Yuto's Sodium
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPtVvX9uhSWD1DPBIRqgkNzFXqjdqvWB/WtDy4seaiJl",  // 1Password "ssh key - main"
+    ],
   ),
 
   // Continuously asserts qbittorrent's egress is the VPN exit (not the home IP) and exercises a real
