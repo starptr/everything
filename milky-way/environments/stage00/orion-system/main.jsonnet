@@ -18,7 +18,6 @@ local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-ima
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 {
   local this = self,
-  local mdataPvcName = 'mdata',
   democraticCsiNamespace: {
     apiVersion: "v1",
     kind: "Namespace",
@@ -112,7 +111,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   mdataPvc: {
     apiVersion: "v1",
     kind: "PersistentVolumeClaim",
-    metadata: { name: mdataPvcName, namespace: "default" },
+    metadata: { name: "mdata", namespace: "default" },
     spec: {
       accessModes: ["ReadWriteMany"],
       storageClassName: "my-custom-zfs-generic-nfs-csi",
@@ -127,7 +126,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     wireguardPrivateKey = secrets.vpn.wireguard[0].privateKey,
     tailscaleHostname = "qbittorrent",
     serverCountries = "United States",
-    mediaClaimName = mdataPvcName,
+    mediaClaimName = this.mdataPvc.metadata.name,
   ),
 
   // Continuously asserts qbittorrent's egress is the VPN exit (not the home IP) and exercises a real
