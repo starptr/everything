@@ -81,6 +81,32 @@ Conventions baked into the existing libs — follow them:
 
 That's it — Tanka picks up every field automatically. There is no separate registry list.
 
+## Namespaces
+
+Declare every `Namespace` as a top-level field directly in `main.jsonnet` — **never** create one
+inside a `lib/` constructor. The top-level object is the single readable manifest of *what runs*;
+keeping namespaces there means the full set of namespaces is visible in one place, and no service
+constructor implicitly owns a namespace that other resources (or other services) share.
+
+Existing examples in `main.jsonnet`:
+
+```jsonnet
+democraticCsiNamespace: {
+  apiVersion: "v1",
+  kind: "Namespace",
+  metadata: { name: "democratic-csi" },
+},
+testingNamespace: {
+  apiVersion: "v1",
+  kind: "Namespace",
+  metadata: { name: "test-k8s" },
+},
+```
+
+A `lib/` constructor's resources reference their namespace by name (the `namespace:` field on
+each manifest) and rely on the namespace declared here — they must not emit a `Namespace`
+themselves.
+
 ## Secrets
 
 Secrets must come from the sops-managed files in `milky-way/secrets/` — these are
