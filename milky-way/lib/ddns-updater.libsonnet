@@ -1,5 +1,5 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 
 {
   new(
@@ -7,7 +7,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     domain,                       // Ingress host for the web UI
     name='ddns-updater',
     namespace='default',
-    image=digests["ddns-updater"].fullyQualifiedImageReferenceTagged,
+    image=images["ddns-updater"].fullyQualifiedImageReferenceTagged,
     port=8000,
   ):: {
     local this = self,

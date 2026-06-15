@@ -1,6 +1,6 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
 local kataRuntimeClass = import 'milky-way/lib/kata-runtime-class.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 
 // OpenClaw AI agent gateway. We draw on OpenClaw's official k8s manifests
 // (https://docs.openclaw.ai/install/kubernetes) but follow this repo's convention instead of
@@ -21,7 +21,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     geminiApiKey,                       // -> GEMINI_API_KEY (the google/* provider)
     name='openclaw',
     namespace='openclaw',               // OPENCLAW_NAMESPACE equivalent
-    image=digests.openclaw.fullyQualifiedImageReferenceTagged,
+    image=images.openclaw.fullyQualifiedImageReferenceTagged,
     port=18789,
     model='google/gemini-3-flash-preview',
     tailscaleHostname='openclaw',       // -> https://openclaw.<tailnet>.ts.net
@@ -29,7 +29,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
                                         // origin https://<tailscaleHostname>.<tailnet>.ts.net is allowed
     storageClassName='my-custom-zfs-generic-iscsi',
     storageSize='10Gi',
-    initImage=digests.busybox.fullyQualifiedImageReferenceTaggedForOpenclaw,
+    initImage=images.busybox.fullyQualifiedImageReferenceTaggedForOpenclaw,
     debugIdle=false,                    // when true: replace the gateway with a no-op idle command and
                                         // drop the probes so the pod stays up WITHOUT running the gateway.
                                         // Lets you `kubectl exec` in to repair ~/.openclaw (e.g. a bad

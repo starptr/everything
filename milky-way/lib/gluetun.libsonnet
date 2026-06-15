@@ -1,5 +1,5 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 
 // gluetun VPN-sidecar BUILDER (https://github.com/qdm12/gluetun). Unlike the other libs this does
 // NOT return a Deployment -- it returns embeddable fragments that a HOST lib (e.g. qbittorrent)
@@ -37,7 +37,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     // the methanol cluster: pod 10.42.0.0/16, service 10.43.0.0/16). Re-check if networking changes.
     firewallOutboundSubnets='10.42.0.0/16,10.43.0.0/16',
     firewallInputPorts=[controlPort],   // host adds its app port (e.g. WebUI) too
-    image=digests.gluetun.fullyQualifiedImageReferencePinned,
+    image=images.gluetun.fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
     assert vpnType == 'wireguard' || vpnType == 'openvpn'

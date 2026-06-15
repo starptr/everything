@@ -1,5 +1,5 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 
 // A minimal smoke test for the Tailscale operator's L3 tailnet-exposure path
 // (a `ProxyGroup` of type `ingress` + a `Service` of `type: LoadBalancer` with
@@ -54,7 +54,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     name='test-ts-l3',
     namespace='test-k8s',
     // whoami echoes the request + headers, making a successful proxy hop self-evident.
-    image=digests.whoami.fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test,
+    image=images.whoami.fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test,
     replicas=1,  // ProxyGroup proxy replicas (the doc uses 2; 1 keeps the test light)
   ):: {
     local this = self,

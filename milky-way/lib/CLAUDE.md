@@ -86,38 +86,38 @@ to cross-reference resources, and the helpers in `utils.libsonnet`:
 Drive pod labels and Service selectors off one `spec.selector.matchLabels`
 (`{} + this.deployment.spec.selector.matchLabels`) so they can't drift apart.
 
-## Pin images by digest, default from `digests.libsonnet`
+## Pin images by digest, default from `images.libsonnet`
 
 Give every service a default `image` parameter, and make that default resolve to an **immutable
 digest**, never a floating tag.
 
-- **Our own (whale-built) images:** the default should come from `digests.libsonnet` — never
+- **Our own (whale-built) images:** the default should come from `images.libsonnet` — never
   hand-write the digest. Default the param to
-  `digests["<name>"].fullyQualifiedImageReferencePinned`, exactly as
+  `images["<name>"].fullyQualifiedImageReferencePinned`, exactly as
   `test-example-whale-image-digest.libsonnet` does:
   ```jsonnet
-  local digests = import 'milky-way/lib/digests.libsonnet';
+  local images = import 'milky-way/lib/images.libsonnet';
   // ...
-  image=digests["example-image"].fullyQualifiedImageReferencePinned,
+  image=images["example-image"].fullyQualifiedImageReferencePinned,
   ```
   Those digests are read from `exports/whale/digests/<name>.txt` (written by
   `nix run ./flake-profiles/whale#whale-push-<name>`), so the pin tracks the build automatically
   — when you push a new image, the default updates with it. To onboard a new whale image, add it
-  to the `raw` map in `digests.libsonnet`.
-- **Third-party images with a known digest:** centralize them in `digests.libsonnet` too — add a
+  to the `raw` map in `images.libsonnet`.
+- **Third-party images with a known digest:** centralize them in `images.libsonnet` too — add a
   `raw` entry whose digest is a `{ hash, tagHint? }` object and default the param to
-  `digests["<name>"].fullyQualifiedImageReferencePinned`. `hash` (`sha256:…`) is what's enforced;
+  `images["<name>"].fullyQualifiedImageReferencePinned`. `hash` (`sha256:…`) is what's enforced;
   the optional `tagHint` (e.g. `v3.41.1`) is folded back in for readability, rendering
   `repo:tagHint@sha256:…`. An image shared by several consumers (e.g. `traefik/whoami` across the
   tailscale smoke tests) uses one `digestFor<Consumer>` object per consumer →
-  `digests.whoami.fullyQualifiedImageReferencePinnedFor<Consumer>`.
-- **Third-party images without a digest (tag-only):** still centralize them in `digests.libsonnet`
+  `images.whoami.fullyQualifiedImageReferencePinnedFor<Consumer>`.
+- **Third-party images without a digest (tag-only):** still centralize them in `images.libsonnet`
   rather than inlining a bare tag string — add a `raw` entry and default the param to its derived
   reference. A single-service image uses `defaultTag` →
-  `digests["<name>"].fullyQualifiedImageReferenceTagged`; an image shared by several services at
+  `images["<name>"].fullyQualifiedImageReferenceTagged`; an image shared by several services at
   (possibly) different versions (e.g. `busybox` used as an init/helper image) gets one
   `tagFor<Consumer>` property per consumer →
-  `digests.busybox.fullyQualifiedImageReferenceTaggedFor<Consumer>`. These tagged references are
+  `images.busybox.fullyQualifiedImageReferenceTaggedFor<Consumer>`. These tagged references are
   **DEPRECATED** — they exist to migrate off inline tag strings and to give one editing point per
   image; prefer a real digest pin whenever one is available. (When no tag is specified upstream,
   use `latest`, matching Kubernetes' default.)

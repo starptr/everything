@@ -1,10 +1,10 @@
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 {
   new(
     name="test-example-whale-image-digest",
     namespace="test-k8s",
-    // Pinned by manifest digest from exports/whale/digests/, via the shared digests lib.
-    image=digests["example-image"].fullyQualifiedImageReferencePinned,
+    // Pinned by manifest digest from exports/whale/digests/, via the shared images lib.
+    image=images["example-image"].fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
 

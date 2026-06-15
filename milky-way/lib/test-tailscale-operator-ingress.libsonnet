@@ -1,5 +1,5 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 
 // A minimal smoke test for the Tailscale operator's L7 Ingress path
 // (`ingressClassName: tailscale`). It deploys a single whoami pod, a ClusterIP
@@ -15,7 +15,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     name='test-ts-ingress',
     namespace='test-k8s',
     // whoami echoes the request + headers, making a successful proxy hop self-evident.
-    image=digests.whoami.fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest,
+    image=images.whoami.fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest,
   ):: {
     local this = self,
 

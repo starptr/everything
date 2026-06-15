@@ -1,9 +1,9 @@
 local utils = import "milky-way/lib/utils.libsonnet";
-local digests = import "milky-way/lib/digests.libsonnet";
+local images = import "milky-way/lib/images.libsonnet";
 {
   new(
     name="http-echo",
-    image=digests["http-echo"].fullyQualifiedImageReferenceTagged,
+    image=images["http-echo"].fullyQualifiedImageReferenceTagged,
     port=5678,
   ):: {
     local this = self,

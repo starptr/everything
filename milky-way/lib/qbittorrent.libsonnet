@@ -1,6 +1,6 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
 local gluetun = import 'milky-way/lib/gluetun.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 
 // Headless qbittorrent whose traffic is forced through a VPN by an embedded gluetun sidecar (see
 // lib/gluetun.libsonnet). gluetun + qbittorrent share one network namespace (same pod), and
@@ -17,7 +17,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     wireguardPrivateKey,                // positional, required -> gluetun (NordVPN/WireGuard)
     name='qbittorrent',
     namespace='default',
-    image=digests.qbittorrent.fullyQualifiedImageReferencePinned,
+    image=images.qbittorrent.fullyQualifiedImageReferencePinned,
     webuiPort=8080,
     tailscaleHostname='qbittorrent',    // -> https://qbittorrent.<tailnet>.ts.net
     serverCountries='United States',
@@ -26,7 +26,7 @@ local digests = import 'milky-way/lib/digests.libsonnet';
     mediaClaimName='mdata',             // external shared RWX media PVC (defined in main.jsonnet)
     mediaMountPath='/data',             // whole media volume mounted here
     downloadsSubdir='downloads/qbittorrent',  // qbittorrent's save dir within the media volume
-    initImage=digests.busybox.fullyQualifiedImageReferenceTaggedForQbittorrent,
+    initImage=images.busybox.fullyQualifiedImageReferenceTaggedForQbittorrent,
   ):: {
     local this = self,
     local controlPort = 8000,           // gluetun control server (publicip route)

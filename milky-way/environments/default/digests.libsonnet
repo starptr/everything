@@ -1,1 +1,1 @@
-import 'milky-way/lib/digests.libsonnet'
+import 'milky-way/lib/images.libsonnet'

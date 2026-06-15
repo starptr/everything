@@ -1,4 +1,4 @@
-local digests = {
+local images = {
   local this = self,
 
   // Render a pinned image reference from a digest object { hash, tagHint? }. The hash (e.g.
@@ -110,4 +110,4 @@ local digests = {
     for field in std.objectFields(this.embellished)
   },
 };
-digests.public
+images.public

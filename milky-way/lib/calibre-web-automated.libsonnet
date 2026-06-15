@@ -1,5 +1,5 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
-local digests = import 'milky-way/lib/digests.libsonnet';
+local images = import 'milky-way/lib/images.libsonnet';
 local defaultAppName = "calibre-web-auto";
 
 {
@@ -7,7 +7,7 @@ local defaultAppName = "calibre-web-auto";
     domain,
     name=defaultAppName,
     namespace="default",
-    image=digests["calibre-web-automated"].fullyQualifiedImageReferenceTagged,
+    image=images["calibre-web-automated"].fullyQualifiedImageReferenceTagged,
     timezone="UTC",
   ):: {
     local this = self,
