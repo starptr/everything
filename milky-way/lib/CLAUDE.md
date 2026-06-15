@@ -122,6 +122,49 @@ digest**, never a floating tag.
   image; prefer a real digest pin whenever one is available. (When no tag is specified upstream,
   use `latest`, matching Kubernetes' default.)
 
+## Never default a `tailscaleHostname` parameter
+
+A `tailscaleHostname` parameter must **never** have a default value — make it required so every
+caller passes one explicitly. The value becomes the proxy's tailnet device name (via the
+`tailscale` ingressClass / `tailscale` loadBalancerClass), and a tailnet MagicDNS name **must be
+unique across the whole tailnet**. A default invites two services to silently request the same
+hostname; Tailscale resolves the collision by appending `-1`/`-2`/… to the *later* registrant, so
+its URL silently shifts (e.g. `qbittorrent.<tailnet>.ts.net` → `qbittorrent-1.<tailnet>.ts.net`)
+and the original name can stop resolving entirely. A required parameter turns "did you pick a
+unique name?" into a question the caller is forced to answer at the wiring point, instead of a
+default that's correct only as long as exactly one caller uses it.
+
+This applies to L4 (`mopidy`/`sftp`-style raw `tailscale` LoadBalancer Services) and L7
+(`qbittorrent`/`openclaw`-style `tailscale` Ingresses) alike. Several existing libs still default
+it (`qbittorrent.libsonnet`, `openclaw.libsonnet`, `sftp.libsonnet`, the two
+`test-tailscale-operator-*` libs) — fix those to required when next touched, and don't copy the
+pattern into new libs.
+
+### Migrating an exposure: let the old finalizer finish before creating the new one
+
+Even a *unique* hostname collides with **itself** during a migration that moves a `tailscale`
+Ingress/Service (e.g. to a new namespace or a renamed object). The operator deletes a proxy's
+tailnet device in the `tailscale.com/finalizer` that runs on the **old** object's deletion; until
+that finalizer completes, the old device still holds the name. If the **new** object is created
+first (or concurrently), its proxy registers while the old device is still present, Tailscale
+appends `-1`, and the old name stops resolving once the old device is finally reaped — exactly how
+`qbittorrent` became `qbittorrent-1`.
+
+So a migration must be **delete-old-then-create-new**, not a single `tk apply` that does both at
+once (Tanka applies the whole environment, so a rename creates the new object before the old one's
+finalizer has run). Sequence it by hand:
+
+```sh
+kubectl delete ingress <old-name> -n <old-ns>   # blocks until the finalizer reaps the device
+tailscale status | grep <hostname>              # confirm the device is gone (name is free)
+# only now apply the environment that creates the new Ingress/Service
+nix develop ./flake-profiles/milky-way-devenv --impure -c bash -c \
+  'cd milky-way && tk apply environments/stage00/orion-system --auto-approve=always'
+```
+
+This same sequence is how a `-1` name is recovered after the fact: delete the live Ingress to free
+the name, confirm the device is gone, then re-apply to recreate it cleanly.
+
 ## Builders vs. service libs
 
 Most libs return a full service (Deployment + Service + Ingress). A few are **builders** that
