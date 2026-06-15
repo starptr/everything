@@ -81,6 +81,30 @@ Conventions baked into the existing libs — follow them:
 
 That's it — Tanka picks up every field automatically. There is no separate registry list.
 
+## Ingress & `.local` name resolution
+
+Every service here is reached at a `<name>.local` host, and the whole request path is anchored to
+the **methanol** node — *independent* of which node actually runs the pod. So a service's pod needs
+no `nodeSelector`/`nodeAffinity` for its `.local` name to keep working; entry is fixed to methanol,
+pod placement is free. The path:
+
+1. **mDNS name → methanol's NIC.** `<name>.local` is published by an `avahi-publish-address` systemd
+   service on methanol, bound to its physical interface (`enp42s0`) — a static address alias, not
+   tied to the pod. Add a new name to `services.avahi-aliases.aliases` in
+   `venus/modules/nixos-darwin/methanol.nix`; the publishing mechanism is
+   `venus/modules/nixos-darwin/use-avahi-aliases.nix`.
+2. **HTTP → hostNetwork Traefik.** Traefik runs as a hostNetwork DaemonSet (`traefikConfig` in
+   `main.jsonnet`, defined in `lib/traefik.libsonnet`), so it listens directly on methanol's ports
+   80/443. The Ingress `host` rule matches `<name>.local`.
+3. **Traefik → ClusterIP → pod, anywhere.** The Ingress targets a ClusterIP Service; Cilium
+   (`kubeProxyReplacement: true`, eBPF — see `charts.jsonnet`) load-balances that ClusterIP to the
+   pod on whatever node it landed on. NFS-backed PVCs (`my-custom-zfs-generic-nfs-csi`) also mount
+   from any node, so storage doesn't pin the pod either.
+
+The one dependency is that **methanol itself is up**: it both publishes the name and receives the
+traffic. If methanol is down the name is unreachable regardless of where the pod runs; if methanol
+is up, the pod can be anywhere.
+
 ## Namespaces
 
 Declare every `Namespace` as a top-level field directly in `main.jsonnet` — **never** create one
