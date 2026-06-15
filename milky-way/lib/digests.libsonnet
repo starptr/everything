@@ -7,6 +7,9 @@ local digests = {
   local pinnedRef(repository, digest) =
     repository + (if std.objectHas(digest, "tagHint") then ":" + digest.tagHint else "") + "@" + digest.hash,
 
+  // Render a tagged image reference -> "repo:tag".
+  local taggedRef(repository, tag) = repository + ":" + tag,
+
   /**
    * For each image, we have a dictionary of relevant data.
    * - fullyQualifiedRepository: the repository part of the image reference, without tag or digest.
@@ -82,11 +85,11 @@ local digests = {
     local prev = this.raw[field],
     [field]: prev + {
       [if std.objectHas(prev, "defaultDigest") then "fullyQualifiedImageReferencePinned"]: pinnedRef(prev.fullyQualifiedRepository, prev.defaultDigest),
-      [if std.objectHas(prev, "defaultTag") then "fullyQualifiedImageReferenceTagged"]: prev.fullyQualifiedRepository + ":" + prev.defaultTag,
-      [if std.objectHas(prev, "tagForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: prev.fullyQualifiedRepository + ":" + prev.tagForOpenclaw,
-      [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: prev.fullyQualifiedRepository + ":" + prev.tagForQbittorrent,
-      [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: prev.fullyQualifiedRepository + ":" + prev.tagForKataMicrovmTest,
-      [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: prev.fullyQualifiedRepository + ":" + prev.tagForExampleZfs,
+      [if std.objectHas(prev, "defaultTag") then "fullyQualifiedImageReferenceTagged"]: taggedRef(prev.fullyQualifiedRepository, prev.defaultTag),
+      [if std.objectHas(prev, "tagForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForOpenclaw),
+      [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForQbittorrent),
+      [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForKataMicrovmTest),
+      [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForExampleZfs),
       [if std.objectHas(prev, "digestForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorIngressTest),
       [if std.objectHas(prev, "digestForTailscaleOperatorNetworkL3Test") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorNetworkL3Test),
     }
