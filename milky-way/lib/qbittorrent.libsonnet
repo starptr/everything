@@ -55,7 +55,7 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
     //   * AuthSubnetWhitelist (pod+service CIDRs) bypasses login for in-cluster callers -- this also
     //     covers the Tailscale operator proxy pod, so the tailnet itself is the auth boundary (same
     //     model as openclaw) and the leak-test needs no credentials.
-    local qbtConf = std.join('\n', [
+    local qbtConfInitialSeed = std.join('\n', [
       '[Application]',
       'FileLogger\\Enabled=true',
       '',
@@ -77,17 +77,17 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
       'WebUI\\Username=admin',
       '',
     ]),
-    local configData = { 'qBittorrent.conf': qbtConf },
+    local configDataInitialSeed = { 'qBittorrent.conf': qbtConfInitialSeed },
 
     // Re-emit the gluetun-owned manifests so Tanka applies them.
     vpnSecret: this.vpn.secret,
     vpnControlConfig: this.vpn.configMap,
 
-    configMap: {
+    configMapInitialSeed: {
       apiVersion: 'v1',
       kind: 'ConfigMap',
       metadata: { name: name + '-config', namespace: namespace },
-      data: configData,
+      data: configDataInitialSeed,
     },
 
     configPvc: {
@@ -112,7 +112,7 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
         template: {
           metadata: {
             labels: {} + this.deployment.spec.selector.matchLabels,
-            annotations: { 'checksum/config': std.md5(std.manifestJsonEx(configData, '')) },
+            annotations: { 'checksum/config': std.md5(std.manifestJsonEx(configDataInitialSeed, '')) },
           },
           spec: {
             tolerations: [
@@ -182,7 +182,7 @@ local gluetun = import 'milky-way/lib/gluetun.libsonnet';
             volumes: this.vpn.volumes + [
               { name: 'config', persistentVolumeClaim: { claimName: this.configPvc.metadata.name } },
               { name: 'media', persistentVolumeClaim: { claimName: mediaClaimName } },
-              { name: 'config-seed', configMap: { name: this.configMap.metadata.name } },
+              { name: 'config-seed', configMap: { name: this.configMapInitialSeed.metadata.name } },
             ],
           },
         },
