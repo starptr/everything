@@ -19,7 +19,7 @@ local images = import 'milky-way/lib/images.libsonnet';
     namespace='default',
     image=images.qbittorrent.fullyQualifiedImageReferencePinned,
     webuiPort=8080,
-    tailscaleHostname='qbittorrent',    // -> https://qbittorrent.<tailnet>.ts.net
+    tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
     serverCountries='United States',
     configStorageClassName='my-custom-zfs-generic-iscsi',     // RWO
     configStorageSize='5Gi',

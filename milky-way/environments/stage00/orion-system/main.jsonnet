@@ -96,13 +96,14 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     proxyTags = 'tag:k8s-orion-system',
   ),
 
-  testTailscaleIngress: testTailscaleIngress.new(),
+  testTailscaleIngress: testTailscaleIngress.new(tailscaleHostname = "test-ts-ingress"),
 
-  testTailscaleL3: testTailscaleL3.new(),
+  testTailscaleL3: testTailscaleL3.new(tailscaleHostname = "test-ts-l3"),
 
   openclaw: openclaw.new(
     gatewayToken = secrets.openclaw.OPENCLAW_GATEWAY_TOKEN,
     geminiApiKey = secrets.openclaw.GEMINI_API_KEY,
+    tailscaleHostname = "openclaw",
     tailnet = "tail4c9a",
   ),
 
@@ -137,6 +138,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   mdataSftp: sftp.new(
     claimName = this.mdataPvc.metadata.name,
     name = "mdata-sftp",
+    tailscaleHostname = "mdata-sftp",
     sftpUser = "mdata",
     nodePort = 30022,
     authorizedKeys = [

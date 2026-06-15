@@ -11,7 +11,7 @@ local images = import 'milky-way/lib/images.libsonnet';
 // service-exposure mechanism).
 {
   new(
-    tailscaleHostname='test-ts-ingress',  // becomes the tailnet device name; reachable at https://<hostname>.<tailnet>.ts.net
+    tailscaleHostname,  // required, unique tailnet-wide; becomes the tailnet device name; reachable at https://<hostname>.<tailnet>.ts.net
     name='test-ts-ingress',
     namespace='test-k8s',
     // whoami echoes the request + headers, making a successful proxy hop self-evident.

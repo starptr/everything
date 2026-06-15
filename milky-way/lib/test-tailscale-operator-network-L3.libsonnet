@@ -50,7 +50,7 @@ local images = import 'milky-way/lib/images.libsonnet';
 //   curl http://test-ts-l3.<tailnet>.ts.net/   # returns the whoami echo
 {
   new(
-    tailscaleHostname='test-ts-l3',  // becomes the tailnet device name; reachable at test-ts-l3.<tailnet>.ts.net
+    tailscaleHostname,  // required, unique tailnet-wide; becomes the tailnet device name; reachable at <tailscaleHostname>.<tailnet>.ts.net
     name='test-ts-l3',
     namespace='test-k8s',
     // whoami echoes the request + headers, making a successful proxy hop self-evident.

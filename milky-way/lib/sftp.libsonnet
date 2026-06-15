@@ -38,7 +38,7 @@ local images = import 'milky-way/lib/images.libsonnet';
     sftpGid=1000,
     dataDirName='data',                 // subdir under the chroot home where the PVC is mounted
     dataReadOnly=false,                 // expose the PVC read-only when true
-    tailscaleHostname=name,             // -> sftp <user>@<tailscaleHostname>.<tailnet>.ts.net
+    tailscaleHostname,                  // required, unique tailnet-wide -> sftp <user>@<tailscaleHostname>.<tailnet>.ts.net
     hostKeysStorageClassName='my-custom-zfs-generic-iscsi',  // iSCSI/RWO: real root, no NFS squash
     hostKeysStorageSize='1Gi',
   ):: {

@@ -24,7 +24,7 @@ local images = import 'milky-way/lib/images.libsonnet';
     image=images.openclaw.fullyQualifiedImageReferenceTagged,
     port=18789,
     model='google/gemini-3-flash-preview',
-    tailscaleHostname='openclaw',       // -> https://openclaw.<tailnet>.ts.net
+    tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
     tailnet=null,                       // tailnet name (e.g. 'tail4c9a'); when set, the control UI
                                         // origin https://<tailscaleHostname>.<tailnet>.ts.net is allowed
     storageClassName='my-custom-zfs-generic-iscsi',
