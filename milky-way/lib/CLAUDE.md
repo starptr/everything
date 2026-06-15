@@ -113,7 +113,7 @@ digest**, never a floating tag.
   `digests.whoami.fullyQualifiedImageReferencePinnedFor<Consumer>`.
 - **Third-party images without a digest (tag-only):** still centralize them in `digests.libsonnet`
   rather than inlining a bare tag string — add a `raw` entry and default the param to its derived
-  reference. A single-service image uses `defaultTagForImageParameter` →
+  reference. A single-service image uses `defaultTag` →
   `digests["<name>"].fullyQualifiedImageReferenceTagged`; an image shared by several services at
   (possibly) different versions (e.g. `busybox` used as an init/helper image) gets one
   `tagFor<Consumer>` property per consumer →

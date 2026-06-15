@@ -10,8 +10,8 @@ local digests = {
   /**
    * For each image, we have a dictionary of relevant data.
    * - fullyQualifiedRepository: the repository part of the image reference, without tag or digest.
-   * - defaultDigestForImageParameter: a digest object { hash, tagHint? } used as the default pin for the `image` parameter commonly accepted by a `new()` constructor for instantiating the service. `hash` is the immutable digest ("sha256:..."); the optional `tagHint` is a human-readable version tag folded into the rendered reference (NOT enforced -- the digest is).
-   * - defaultTagForImageParameter: a tag string used as the default for the `image` parameter when no digest is available. DEPRECATED, only for migrating off inline tag strings.
+   * - defaultDigest: a digest object { hash, tagHint? } used as the default pin for the `image` parameter commonly accepted by a `new()` constructor for instantiating the service. `hash` is the immutable digest ("sha256:..."); the optional `tagHint` is a human-readable version tag folded into the rendered reference (NOT enforced -- the digest is).
+   * - defaultTag: a tag string used as the default for the `image` parameter when no digest is available. DEPRECATED, only for migrating off inline tag strings.
    * - tagFor<Consumer> / digestFor<Consumer>: for an image shared by multiple consumers at (possibly) different versions (e.g. busybox as an init/helper image, or traefik/whoami across smoke tests), name one property per consumer rather than a single `default`. A digestFor<Consumer> is also a { hash, tagHint? } object. Each yields a per-consumer reference field below.
    * - fullyQualifiedImageReferencePinned: the rendered pinned reference, "repo[:tagHint]@hash" (e.g. "docker.io/yuto7/mopidy@sha256:abc123..."). This is what should be used in the `image` field of the container spec for maximum immutability and reproducibility.
    * - fullyQualifiedImageReferenceTagged: the fully qualified tagged image reference with a tag (e.g. "docker.io/yuto7/mopidy:latest"). This is DEPRECATED and only here for migration.
@@ -25,24 +25,24 @@ local digests = {
   raw: {
     mopidy: {
       fullyQualifiedRepository: "docker.io/yuto7/mopidy",
-      defaultDigestForImageParameter: { hash: std.trim(importstr "exports/whale/digests/mopidy.txt") },
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/mopidy.txt") },
     },
     "example-image": {
       fullyQualifiedRepository: "docker.io/yuto7/example-image",
-      defaultDigestForImageParameter: { hash: std.trim(importstr "exports/whale/digests/example-image.txt") },
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/example-image.txt") },
     },
     // Third-party images pinned by digest (the hash is enforced; tagHint is the readable version).
     gluetun: {
       fullyQualifiedRepository: "qmcgaw/gluetun",
-      defaultDigestForImageParameter: { hash: "sha256:2f33c71e5e164fcd51a962cb950134df25155593edf0c3e1201f888d027049b4", tagHint: "v3.41.1" },
+      defaultDigest: { hash: "sha256:2f33c71e5e164fcd51a962cb950134df25155593edf0c3e1201f888d027049b4", tagHint: "v3.41.1" },
     },
     python: {
       fullyQualifiedRepository: "python",
-      defaultDigestForImageParameter: { hash: "sha256:2d07747661646f3d904e995a232fb19e461afde69e67e6f7f3b52c7b968a88b3", tagHint: "3.12-alpine" },
+      defaultDigest: { hash: "sha256:2d07747661646f3d904e995a232fb19e461afde69e67e6f7f3b52c7b968a88b3", tagHint: "3.12-alpine" },
     },
     qbittorrent: {
       fullyQualifiedRepository: "lscr.io/linuxserver/qbittorrent",
-      defaultDigestForImageParameter: { hash: "sha256:1784d5a65d08d01de308c7d87ff2c1dba328379e180eeca41cc6b96bdf6a0ffc", tagHint: "5.2.1" },
+      defaultDigest: { hash: "sha256:1784d5a65d08d01de308c7d87ff2c1dba328379e180eeca41cc6b96bdf6a0ffc", tagHint: "5.2.1" },
     },
     // traefik/whoami is shared by the two tailscale-operator smoke tests at the same digest;
     // one digestFor<Consumer> per consumer, following the per-consumer convention.
@@ -54,19 +54,19 @@ local digests = {
     // Third-party images that lack a digest pin: migrated off inline tag strings, one tag each.
     "calibre-web-automated": {
       fullyQualifiedRepository: "docker.io/crocodilestick/calibre-web-automated",
-      defaultTagForImageParameter: "latest",
+      defaultTag: "latest",
     },
     "ddns-updater": {
       fullyQualifiedRepository: "qmcgaw/ddns-updater",
-      defaultTagForImageParameter: "latest",
+      defaultTag: "latest",
     },
     "http-echo": {
       fullyQualifiedRepository: "hashicorp/http-echo",
-      defaultTagForImageParameter: "latest",
+      defaultTag: "latest",
     },
     openclaw: {
       fullyQualifiedRepository: "ghcr.io/openclaw/openclaw",
-      defaultTagForImageParameter: "2026.6.1",
+      defaultTag: "2026.6.1",
     },
     // busybox is shared as an init/helper image across several services, pinned at different
     // versions; one tag per consumer rather than a single default.
@@ -81,8 +81,8 @@ local digests = {
   embellished: {
     local prev = this.raw[field],
     [field]: prev + {
-      [if std.objectHas(prev, "defaultDigestForImageParameter") then "fullyQualifiedImageReferencePinned"]: pinnedRef(prev.fullyQualifiedRepository, prev.defaultDigestForImageParameter),
-      [if std.objectHas(prev, "defaultTagForImageParameter") then "fullyQualifiedImageReferenceTagged"]: prev.fullyQualifiedRepository + ":" + prev.defaultTagForImageParameter,
+      [if std.objectHas(prev, "defaultDigest") then "fullyQualifiedImageReferencePinned"]: pinnedRef(prev.fullyQualifiedRepository, prev.defaultDigest),
+      [if std.objectHas(prev, "defaultTag") then "fullyQualifiedImageReferenceTagged"]: prev.fullyQualifiedRepository + ":" + prev.defaultTag,
       [if std.objectHas(prev, "tagForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: prev.fullyQualifiedRepository + ":" + prev.tagForOpenclaw,
       [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: prev.fullyQualifiedRepository + ":" + prev.tagForQbittorrent,
       [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: prev.fullyQualifiedRepository + ":" + prev.tagForKataMicrovmTest,
