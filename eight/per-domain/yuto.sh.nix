@@ -72,6 +72,16 @@
     type = "A";
     value = "100.101.227.126";
   };
+  "grand-central" = {
+    octodns = {
+      cloudflare = {
+        auto-ttl = true;
+      };
+    };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
   "www" = {
     octodns = {
       cloudflare = {
