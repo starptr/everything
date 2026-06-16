@@ -77,16 +77,26 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
         {
           provider: "cloudflare",
           zone_identifier: secrets.ddnsUpdater.cloudflare.zone_identifier,
-          domain: "carless-drivers-ddns.andref.app",
+          domain: "carless-drivers-cfproxied-ddns.andref.app",
           ttl: 1,
           token: secrets.ddnsUpdater.cloudflare.token,
           ip_version: "ipv4",
           # Proxy gives the domain an SSL cert for free
           proxied: true,
         },
+        {
+          provider: "cloudflare",
+          zone_identifier: secrets.ddnsUpdater.cloudflare.zone_identifier,
+          domain: "carless-drivers-ddns.andref.app",
+          ttl: 1,
+          token: secrets.ddnsUpdater.cloudflare.token,
+          ip_version: "ipv4",
+          # Non-proxied: resolves directly to the home IP (no Cloudflare SSL/proxy).
+          proxied: false,
+        },
       ],
     },
-    domain="carless-drivers-ddns.andref.app",
+    webuiEndpointDomain="carless-drivers-cfproxied-ddns.andref.app",
   ),
 
   tailscaleOperator: tailscaleOperator.new(

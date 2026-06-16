@@ -4,7 +4,7 @@ local images = import 'milky-way/lib/images.libsonnet';
 {
   new(
     config,                       // ddns-updater config object, e.g. { settings: [...] }
-    domain,                       // Ingress host for the web UI
+    webuiEndpointDomain,          // Ingress host for the web UI
     name='ddns-updater',
     namespace='default',
     image=images["ddns-updater"].fullyQualifiedImageReferenceTagged,
@@ -111,7 +111,7 @@ local images = import 'milky-way/lib/images.libsonnet';
       spec: {
         ingressClassName: 'traefik',
         rules: [{
-          host: domain,
+          host: webuiEndpointDomain,
           http: {
             paths: [{
               path: '/',
