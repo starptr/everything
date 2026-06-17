@@ -14,6 +14,7 @@ local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
+local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
@@ -154,6 +155,36 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     authorizedKeys = [
       "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDLrT2/gQXhOz4E4xSphB8EXouild5qNOnZ6ZVXuTnf167z8xxSB10mxNey2gKDaIVig6I/tRFeYy6/N/QutbBlKI/+GNPjGCcVJI0hf7fTZGL4caTW8ggcXRz4LAsFp3JBf6Li0FVrGz5ojD0Etbl54BDn033q/tlVRhme5bXJ6s73yRg04kqdQsWVBRJwyzbUUmCQPrZd9i5Nh4QFVuhZljEyUWIStajE+c9v8OOiY1svv+XjKBjyWphP16HqgzvnEDf5+MQ5AUxE05IvJx43UY43CKTe3evzt4F/IqSdYwYGIQ55DaseRmf5zmHLU8MTTkksmOPQEzJL0nBzAmxyGV3PsMYPoIN+1/gJmxCO6ZaaCxYr9SFK/yoRW5e0PFX433xPhNsITBq7jUrVg6BQ/lr0ntRfvd7pRhFq8v02R3jWokL/99skxp1kjVF42bXEJXYPpHF3XAUhYscjOwmWj8dJgsIsSIKIjh7gRVYxQGrZQXOcJQjMytFgXy7fWHM= yuto@Yutos-MacBook-Pro.local",  // Yuto's Sodium
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPtVvX9uhSWD1DPBIRqgkNzFXqjdqvWB/WtDy4seaiJl",  // 1Password "ssh key - main"
+    ],
+  ),
+
+  // One-stop-shop SSH jump bastion for reaching my personal machines (lib/grand-central.libsonnet).
+  // Reached publicly at grand-central.yuto.sh -> CNAME carless-drivers-ddns.andref.app (the
+  // NON-proxied ddns record above, so it resolves straight to the home IP -- Cloudflare's proxy
+  // can't carry raw SSH) -> home router forwards WAN 30023 -> this NodePort on methanol.
+  //
+  // ONE list of authorized participant keys (no client/target split). An entry is a bare pubkey
+  // string (may open a reverse listener on any loopback port + reach any target), or
+  // { key, listenPorts: [..] } pinning which port(s) it may register a reverse listener on. A
+  // machine becomes reachable by running its own reverse-tunnel agent on its assigned port (e.g.
+  // Sodium's launchd `-R localhost:2222`); add future targets on distinct ports.
+  grandCentral: grandCentral.new(
+    nodePort = 30023,
+    authorizedKeys = [
+      // Sodium -- a target pinned to its reverse-listener port 2222 (launchd agent in venus
+      // sodium.nix; tunnel priv key in sops secrets/personal/grand-central-tunnel.json).
+      { key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBWjndergDSUeNxqTByOVeon92N6X52NaNydd4XUXR2A grand-central-tunnel-sodium", listenPorts: [2222] },
+      // magnesium-hydroxide -- a client (also in Sodium's inbound authorized_keys for the final
+      // hop). Bare string: may reach any target, no edits here when targets are added.
+      //
+      // Screen Share INTO Sodium from this client (Standard mode only; VNC rides the ssh jump):
+      //   ssh -i ~/.ssh/grand-central -o IdentitiesOnly=yes \
+      //       -o ProxyCommand="ssh -i ~/.ssh/grand-central -o IdentitiesOnly=yes -W %h:%p -p 30023 relay@grand-central.yuto.sh" \
+      //       -L 5901:127.0.0.1:5900 -p 2222 yuto@localhost
+      //   open vnc://localhost:5901
+      // (If this client has a `Host sodium` ssh_config block, just: ssh -L 5901:127.0.0.1:5900 sodium)
+      // High Performance screen sharing can't traverse grand-central -- it needs native UDP 5900-5902.
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKRpVN+BI0l+wj28mUVq3ldRBZUgbsa9CymdCtXF7Vs grand-central yuto.nishida@magnesium-hydroxide",
     ],
   ),
 

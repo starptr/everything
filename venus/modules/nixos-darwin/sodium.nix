@@ -113,7 +113,21 @@
     name = "yuto";
     home = "/Users/yuto";
     shell = pkgs.fish;
+    # Inbound SSH (the FINAL hop of a grand-central jump). A client jumps client -> grand-central
+    # -> Sodium; grand-central only pipes raw TCP, so Sodium's own sshd authenticates the client
+    # end-to-end and the client's key must live here. nix-darwin renders these to
+    # /etc/ssh/nix_authorized_keys.d/yuto (see /etc/ssh/sshd_config.d/101-authorized-keys.conf).
+    # Add the SAME dedicated public key you put in grand-central's clientKeys (main.jsonnet):
+    openssh.authorizedKeys.keys = [
+      # "ssh-ed25519 AAAA... grand-central <who>@<host>"   # generated per client; see plan
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKRpVN+BI0l+wj28mUVq3ldRBZUgbsa9CymdCtXF7Vs grand-central yuto.nishida@magnesium-hydroxide"
+    ];
   };
+
+  # Enable macOS Remote Login (sshd) so the final hop above can land. nix-darwin's module does
+  # the launchctl enable/bootstrap itself (it deliberately avoids `systemsetup -setremotelogin`,
+  # which needs Full Disk Access) -- see modules/services/openssh.nix.
+  services.openssh.enable = true;
 
   # Used for backwards compatibility, please read the changelog before changing.
   # $ darwin-rebuild changelog

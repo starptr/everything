@@ -34,6 +34,12 @@ local images = {
       fullyQualifiedRepository: "docker.io/yuto7/example-image",
       defaultDigest: { hash: std.trim(importstr "exports/whale/digests/example-image.txt") },
     },
+    // Minimal openssh "binary carrier" for the grand-central jump bastion (whale-built); all
+    // policy/config is mounted, so the pin just tracks the binaries. See whale/outputs.nix.
+    "grand-central": {
+      fullyQualifiedRepository: "docker.io/yuto7/grand-central",
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/grand-central.txt") },
+    },
     // Third-party images pinned by digest (the hash is enforced; tagHint is the readable version).
     gluetun: {
       fullyQualifiedRepository: "qmcgaw/gluetun",

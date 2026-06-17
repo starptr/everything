@@ -321,6 +321,7 @@
     config.services.nfs.server.mountdPort
     config.services.nfs.server.lockdPort
     30022 # mdata-sftp NodePort (SFTP over .local; see milky-way lib/sftp.libsonnet)
+    30023 # grand-central bastion NodePort (public SSH jump; router forwards WAN 30023 here; see milky-way lib/grand-central.libsonnet)
   ];
   networking.firewall.allowedUDPPorts = config.networking.firewall.allowedTCPPorts;
   # Or disable the firewall altogether.

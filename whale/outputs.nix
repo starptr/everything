@@ -101,6 +101,51 @@
     };
   };
 
+  # Minimal sshd "binary carrier" for the grand-central jump bastion. Bakes in NO policy:
+  # sshd_config and authorized_keys are mounted at runtime from ConfigMaps and the host-key
+  # identity from an iSCSI PVC (see milky-way/lib/grand-central.libsonnet), so the only thing
+  # this image provides is the openssh binaries + the two users/dirs sshd needs to start.
+  #   * `sshd` (uid 74) is openssh's compiled-in privilege-separation user; it AND the privsep
+  #     dir /var/empty (root-owned, 0755) must exist or sshd aborts at startup.
+  #   * `relay` is the single login user every client/target authenticates as; nologin shell
+  #     because it only ever does `-N` port forwarding (no shell is spawned for -R/-W).
+  # busybox supplies /bin/sh for the init container's host-key seeding loop (which also needs
+  # ssh-keygen from openssh -- same image is reused as the init image, mirroring sftp).
+  grand-central = image-nix-artifacts {
+    name = "grand-central";
+    buildLayeredImageArg = {
+      tag = "latest";
+      contents = [
+        imagePkgs.openssh
+        imagePkgs.busybox
+        imagePkgs.dumb-init
+      ];
+      extraCommands = ''
+        mkdir -p etc home/relay/.ssh var/empty var/log etc/grand-central
+        printf '%s\n' \
+          'root:x:0:0:root:/root:/bin/sh' \
+          'sshd:x:74:74:sshd privsep:/var/empty:/sbin/nologin' \
+          'relay:x:1000:1000:relay:/home/relay:/sbin/nologin' \
+          > etc/passwd
+        printf '%s\n' \
+          'root:x:0:' \
+          'sshd:x:74:' \
+          'relay:x:1000:' \
+          'nogroup:x:65534:' \
+          > etc/group
+        chmod 0755 var/empty
+        chmod 0700 home/relay/.ssh
+      '';
+      config = {
+        # dumb-init reaps zombies and forwards SIGTERM so k8s can stop the pod promptly.
+        # sshd -D foreground, -e log to stderr (-> pod logs), -f the mounted declarative config.
+        Entrypoint = [ "dumb-init" "--" ];
+        Cmd = [ "${imagePkgs.openssh}/bin/sshd" "-D" "-e" "-f" "/etc/grand-central/sshd_config" ];
+        ExposedPorts = { "22/tcp" = {}; };
+      };
+    };
+  };
+
   # `nix develop` target for a long-lived `skopeo login`. Uses the same skopeo (and
   # nixpkgs) as the push-scripts, so the auth.json written here is always compatible.
   mkAuthShell = pkgs: pkgs.mkShell {
@@ -117,10 +162,13 @@ in {
       whale-push-example = example-artifacts.push-script.x86_64-linux;
       mopidy-image = mopidy.image.x86_64-linux;
       mopidy-push = mopidy.push-script.x86_64-linux;
+      grand-central-image = grand-central.image.x86_64-linux;
+      grand-central-push = grand-central.push-script.x86_64-linux;
     };
     aarch64-darwin = {
       whale-push-example = example-artifacts.push-script.aarch64-darwin;
       mopidy-push = mopidy.push-script.aarch64-darwin;
+      grand-central-push = grand-central.push-script.aarch64-darwin;
     };
   };
 
