@@ -7,6 +7,13 @@ local images = import 'milky-way/lib/images.libsonnet';
 // gluetun's killswitch makes it impossible for qbittorrent to egress except through the tunnel --
 // the only thing reachable from outside is the WebUI, exposed via Tailscale L7 ingress.
 //
+// Inbound peering / seeding: with no inbound path to the BitTorrent listen port, qbittorrent can
+// only dial OUT to peers -- so as a seed it serves nobody (swarm leechers can't connect in). To be
+// connectable we use a VPN provider that supports NAT-PMP port forwarding (ProtonVPN; NordVPN does
+// NOT). gluetun requests a forwarded port and, on each (re)assignment, runs portForwardingUpCommand
+// to push that port into qbittorrent's listen_port via the WebUI API. The forwarded port is DYNAMIC,
+// so the seeded Session\Port below is just an initial value -- the live listen port follows gluetun.
+//
 // Storage: config on iSCSI (RWO) -- qbittorrent rewrites qBittorrent.conf at runtime, so it's
 // seeded once (only-if-empty) into the PVC. Downloads live on a SHARED volume (the external
 // `mdata` RWX-NFS PVC, mounted at /data) under downloads/qbittorrent/ -- other apps mount the same
@@ -14,12 +21,13 @@ local images = import 'milky-way/lib/images.libsonnet';
 // owned by qbittorrent here.
 {
   new(
-    wireguardPrivateKey,                // positional, required -> gluetun (NordVPN/WireGuard)
+    wireguardPrivateKey,                // positional, required -> gluetun (ProtonVPN/WireGuard)
     name='qbittorrent',
     namespace='default',
     image=images.qbittorrent.fullyQualifiedImageReferencePinned,
     webuiPort=8080,
     tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
+    vpnProvider='protonvpn',            // must support port forwarding for inbound peers (see header)
     serverCountries='United States',
     configStorageClassName='my-custom-zfs-generic-iscsi',     // RWO
     configStorageSize='5Gi',
@@ -37,16 +45,36 @@ local images = import 'milky-way/lib/images.libsonnet';
     local podCidr = '10.42.0.0/16',
     local svcCidr = '10.43.0.0/16',
 
+    // Commands gluetun runs when the forwarded port comes up / goes down: set qbittorrent's
+    // listen_port to gluetun's {{PORT}} via the WebUI API. They run inside the gluetun container,
+    // which shares qbittorrent's netns, so 127.0.0.1:webui reaches qbittorrent; and 127.0.0.0/8 is
+    // in AuthSubnetWhitelist below, so the API call needs no credentials. gluetun's image ships
+    // /bin/sh + wget. `sq` is a backslash-escaped double-quote: the JSON body must stay double-quoted
+    // for `sh -c` (the {..,..} would otherwise trigger brace expansion / word splitting).
+    local sq = '\\"',
+    local setPrefsUrl = 'http://127.0.0.1:%d/api/v2/app/setPreferences' % webuiPort,
+    local upBody = 'json={' + sq + 'listen_port' + sq + ':{{PORT}},'
+                   + sq + 'random_port' + sq + ':false,' + sq + 'upnp' + sq + ':false}',
+    local downBody = 'json={' + sq + 'listen_port' + sq + ':0}',
+    local pfUpCommand = "/bin/sh -c 'wget -O- -nv --retry-connrefused --post-data \""
+                        + upBody + "\" " + setPrefsUrl + "'",
+    local pfDownCommand = "/bin/sh -c 'wget -O- -nv --retry-connrefused --post-data \""
+                          + downBody + "\" " + setPrefsUrl + "'",
+
     // The VPN sidecar fragments, embedded into this pod below.
     vpn:: gluetun.new(
       wireguardPrivateKey=wireguardPrivateKey,
       name=name + '-gluetun',
       namespace=namespace,
+      vpnProvider=vpnProvider,
       vpnType='wireguard',
       serverCountries=serverCountries,
       controlPort=controlPort,
       firewallOutboundSubnets='%s,%s' % [podCidr, svcCidr],
       firewallInputPorts=[webuiPort, controlPort],
+      portForwarding=true,
+      portForwardingUpCommand=pfUpCommand,
+      portForwardingDownCommand=pfDownCommand,
     ),
 
     // Seed qBittorrent.conf. WebUI keys make the WebUI work behind the Tailscale proxy:
@@ -62,7 +90,8 @@ local images = import 'milky-way/lib/images.libsonnet';
       '',
       '[BitTorrent]',
       'Session\\DefaultSavePath=%s' % downloadsPath,
-      'Session\\Port=6881',
+      'Session\\Port=6881',   // initial only -- gluetun's portForwardingUpCommand overwrites this at runtime
+
       '',
       '[Preferences]',
       'WebUI\\Address=*',

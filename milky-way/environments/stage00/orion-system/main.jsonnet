@@ -13,6 +13,7 @@ local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingre
 local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3.libsonnet';
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
+local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
 local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
@@ -132,11 +133,14 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     },
   },
 
-  // Headless qbittorrent whose traffic is forced through a NordVPN/WireGuard tunnel by an embedded
-  // gluetun sidecar killswitch (lib/gluetun.libsonnet). WebUI via Tailscale L7 ingress. Downloads
-  // land in downloads/qbittorrent/ on the shared mdata volume (mounted at /data).
+  // Headless qbittorrent whose traffic is forced through a ProtonVPN/WireGuard tunnel by an embedded
+  // gluetun sidecar killswitch (lib/gluetun.libsonnet), with NAT-PMP port forwarding so it's
+  // connectable for inbound peers (ProtonVPN supports PF; NordVPN does not). WebUI via Tailscale L7
+  // ingress. Downloads land in downloads/qbittorrent/ on the shared mdata volume (mounted at /data).
+  // The WireGuard key is read straight from the sops-managed ProtonVPN .conf (only Interface.
+  // PrivateKey is used; gluetun selects its own PF-capable P2P server).
   qbittorrent: qbittorrent.new(
-    wireguardPrivateKey = secrets.vpn.wireguard[0].privateKey,
+    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/qbt-gluetun.conf'),
     tailscaleHostname = "qbittorrent",
     serverCountries = "United States",
     volumeClaimName = this.mdataPvc.metadata.name,

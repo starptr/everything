@@ -37,6 +37,15 @@ local images = import 'milky-way/lib/images.libsonnet';
     // the methanol cluster: pod 10.42.0.0/16, service 10.43.0.0/16). Re-check if networking changes.
     firewallOutboundSubnets='10.42.0.0/16,10.43.0.0/16',
     firewallInputPorts=[controlPort],   // host adds its app port (e.g. WebUI) too
+    // VPN-side port forwarding (NAT-PMP). Off by default; only some providers support it (NOT
+    // NordVPN -- ProtonVPN/PIA/etc do). When on, gluetun asks the VPN for an inbound-reachable port
+    // so a P2P app can ACCEPT incoming connections (be connectable/seed), and auto-opens that port
+    // on the VPN-interface firewall (no FIREWALL_VPN_INPUT_PORTS needed). The forwarded port is
+    // DYNAMIC and gluetun re-runs the up command on each (re)assignment, so the host wires the app's
+    // listen port to it via portForwardingUpCommand (gluetun substitutes {{PORT}}/{{VPN_INTERFACE}}).
+    portForwarding=false,
+    portForwardingUpCommand=null,
+    portForwardingDownCommand=null,
     image=images.gluetun.fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
@@ -93,7 +102,32 @@ local images = import 'milky-way/lib/images.libsonnet';
         { name: 'HTTP_CONTROL_SERVER_ADDRESS', value: ':%d' % controlPort },
         // Restart the tunnel if connectivity dies.
         { name: 'HEALTH_TARGET_ADDRESS', value: 'cloudflare.com:443' },
-      ],
+      ] + (
+        // VPN-side NAT-PMP port forwarding -- see the portForwarding param comment above.
+        if portForwarding then [
+          { name: 'VPN_PORT_FORWARDING', value: 'on' },
+          // Needed for WireGuard, where gluetun can't infer the provider's PF code from the tunnel.
+          { name: 'VPN_PORT_FORWARDING_PROVIDER', value: vpnProvider },
+          { name: 'VPN_PORT_FORWARDING_STATUS_FILE', value: '/tmp/gluetun/forwarded_port' },
+          // Only connect to servers that actually support P2P + port forwarding, and skip free
+          // servers (which don't offer PF on paid providers like ProtonVPN).
+          { name: 'PORT_FORWARD_ONLY', value: 'on' },
+          { name: 'FREE_ONLY', value: 'off' },
+        ] + (
+          // gluetun pipes the up command's stderr to its own logger at ERROR level, so a `wget -nv`
+          // up command emits one benign `ERROR [port forwarding] ... [0/0] -> "-" [1]` line at
+          // startup -- that's wget's normal success output (0-byte body to stdout), NOT a failure.
+          // The port is still set; don't chase it. (Use `wget -q` to silence it, at the cost of also
+          // hiding wget's real error output.)
+          if portForwardingUpCommand != null
+          then [{ name: 'VPN_PORT_FORWARDING_UP_COMMAND', value: portForwardingUpCommand }]
+          else []
+        ) + (
+          if portForwardingDownCommand != null
+          then [{ name: 'VPN_PORT_FORWARDING_DOWN_COMMAND', value: portForwardingDownCommand }]
+          else []
+        ) else []
+      ),
       envFrom: [{ secretRef: { name: this.secret.metadata.name } }],   // WG key or OVPN creds
       ports: [{ name: 'gluetun-ctrl', containerPort: controlPort }],
       securityContext: {
