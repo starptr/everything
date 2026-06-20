@@ -53,6 +53,17 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/qbittorrent",
       defaultDigest: { hash: "sha256:1784d5a65d08d01de308c7d87ff2c1dba328379e180eeca41cc6b96bdf6a0ffc", tagHint: "5.2.1" },
     },
+    // *arr media-management apps (LinuxServer.io). The hash is the multi-arch INDEX digest (k3s
+    // resolves the per-node arch), matching the qbittorrent pin above; tagHint is the readable
+    // LinuxServer version. Re-resolve with `docker buildx imagetools inspect <repo>:latest`.
+    sonarr: {
+      fullyQualifiedRepository: "lscr.io/linuxserver/sonarr",
+      defaultDigest: { hash: "sha256:02bc962946fef994e67a38152446df25c10a52f8583aefeeb6467f9dd44cab99", tagHint: "4.0.17.2952-ls314" },
+    },
+    prowlarr: {
+      fullyQualifiedRepository: "lscr.io/linuxserver/prowlarr",
+      defaultDigest: { hash: "sha256:7ab5769616c1929247c8e7944453253f0b777fac2724c3bc9976ae2ff4023257", tagHint: "2.4.0.5397-ls150" },
+    },
     // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
     // matches methanol -- so the digest below is that manifest, not a multi-arch index.
     "atmoz-sftp": {

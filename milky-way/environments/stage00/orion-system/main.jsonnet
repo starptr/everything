@@ -13,6 +13,8 @@ local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingre
 local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3.libsonnet';
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
+local sonarr = import 'milky-way/lib/sonarr.libsonnet';
+local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
 local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
@@ -147,6 +149,25 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     volumeClaimName = this.mdataPvc.metadata.name,
     volumeMountPath = "/data",
     downloadsSubdir = "downloads/qbittorrent",
+  ),
+
+  // Sonarr: monitors/grabs TV episodes, hands torrents to qbittorrent
+  // (qbittorrent.default.svc.cluster.local:8080), then imports completed downloads by hardlinking
+  // them out of /data/downloads/qbittorrent into a library tree (e.g. /data/library/tv) on the
+  // SHARED mdata volume -- same PVC, same /data mount path as qbittorrent, so hardlinks/atomic
+  // moves stay on one filesystem. WebUI via Tailscale L7 ingress; SQLite config on its own iSCSI
+  // RWO PVC. The download-client/indexer links are entered in the UI post-deploy (they need API
+  // keys each app generates on first boot).
+  sonarr: sonarr.new(
+    tailscaleHostname = "sonarr",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
+  ),
+
+  // Prowlarr: indexer manager. No media volume -- it pushes indexer configs to Sonarr
+  // (sonarr.default.svc.cluster.local:8989, and later Radarr) over ClusterIP DNS. WebUI via
+  // Tailscale L7 ingress; SQLite config on its own iSCSI RWO PVC.
+  prowlarr: prowlarr.new(
+    tailscaleHostname = "prowlarr",
   ),
 
   // Public-key-only SFTP front door onto the shared mdata volume (read-write), reached over the
