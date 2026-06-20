@@ -15,6 +15,8 @@ local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
+local buildarr = import 'milky-way/lib/buildarr.libsonnet';
+local utils = import 'milky-way/lib/utils.libsonnet';
 local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
 local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
@@ -159,6 +161,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   // RWO PVC. The download-client/indexer links are entered in the UI post-deploy (they need API
   // keys each app generates on first boot).
   sonarr: sonarr.new(
+    apiKey = secrets.sonarr.apiKey,
     tailscaleHostname = "sonarr",
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
   ),
@@ -167,8 +170,101 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   // (sonarr.default.svc.cluster.local:8989, and later Radarr) over ClusterIP DNS. WebUI via
   // Tailscale L7 ingress; SQLite config on its own iSCSI RWO PVC.
   prowlarr: prowlarr.new(
+    apiKey = secrets.prowlarr.apiKey,
     tailscaleHostname = "prowlarr",
   ),
+
+  // Buildarr: declaratively asserts the inter-app links the *arr apps store in SQLite (and which the
+  // SONARR__/PROWLARR__ env overrides can't reach) -- Sonarr's qBittorrent download client and
+  // Prowlarr's Sonarr application (which auto-syncs Prowlarr's indexers into Sonarr). Plumbing only:
+  // the trackers themselves stay manual in Prowlarr, so `delete_unmanaged: false` is set on every
+  // managed section AND as a plugin-global default -- Buildarr would otherwise be free to delete
+  // resources it doesn't manage. Buildarr has no single master switch for this (it's per-section), so
+  // the global blocks cover only the sections we manage; a future edit that manages a NEW section must
+  // add its own explicit `delete_unmanaged: false`. NEVER flip any of these to true.
+  //
+  // This desired-state config is owned HERE (the lib is just the daemon plumbing). Host/port for each
+  // app come from its Service (the source of truth): the FQDN via utils.domainOfService, and the
+  // webui port as ports[0] after asserting ports[0] really is the webui entry (qbittorrent's Service
+  // also exposes gluetun-ctrl). API keys come from sops.
+  local buildarrConfig =
+    local sonarrOrionSystemInstanceName = 'sonarr-orion-system';
+    local prowlarrOrionSystemInstanceName = 'prowlarr-orion-system';
+    local httpUrl(hostname, port) = 'http://%s:%d' % [hostname, port];
+    {
+      buildarr: {
+        // Buildarr rolls via the Deployment's checksum/config annotation, not in-place file watch.
+        watch_config: false,
+      },
+      sonarr: {
+        // GLOBAL default for all sonarr instances (current + future). MUST stay false -- never
+        // clobber download clients added by hand in Sonarr's UI.
+        settings: { download_clients: { delete_unmanaged: false } },
+        instances: {
+          [sonarrOrionSystemInstanceName]: {
+            hostname: utils.domainOfService(this.sonarr.service),
+            port: utils.assertAndReturn(this.sonarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+            protocol: 'http',
+            api_key: secrets.sonarr.apiKey,
+            settings: {
+              download_clients: {
+                delete_unmanaged: false,  // also explicit per-instance (belt & suspenders)
+                definitions: {
+                  qBittorrent: {
+                    type: 'qbittorrent',
+                    host: utils.domainOfService(this.qbittorrent.service),
+                    port: utils.assertAndReturn(this.qbittorrent.service.spec.ports[0], function(p) p.name == 'webui').port,
+                    // No username/password: qBittorrent's AuthSubnetWhitelist bypasses auth for
+                    // in-cluster callers (Sonarr is in the pod CIDR). See lib/qbittorrent.libsonnet.
+                    category: 'tv-sonarr',  // qBittorrent category Sonarr tags its grabs with
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      prowlarr: {
+        // GLOBAL default for all prowlarr instances (current + future). MUST stay false -- never
+        // clobber apps/indexers added by hand in Prowlarr's UI.
+        settings: { apps: { applications: { delete_unmanaged: false } } },
+        instances: {
+          [prowlarrOrionSystemInstanceName]: {
+            hostname: utils.domainOfService(this.prowlarr.service),
+            port: utils.assertAndReturn(this.prowlarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+            protocol: 'http',
+            api_key: secrets.prowlarr.apiKey,
+            settings: {
+              apps: {
+                applications: {
+                  delete_unmanaged: false,  // also explicit per-instance (belt & suspenders)
+                  definitions: {
+                    Sonarr: {
+                      type: 'sonarr',
+                      // Cross-link by name: Buildarr resolves the Sonarr instance above and fills in
+                      // its API key itself. The two URLs are still required explicitly (instance_name
+                      // only links the key): prowlarr_url is how Sonarr dials back to Prowlarr for the
+                      // indexer proxy; base_url is how Prowlarr reaches Sonarr to push the sync.
+                      instance_name: sonarrOrionSystemInstanceName,
+                      prowlarr_url: httpUrl(
+                        utils.domainOfService(this.prowlarr.service),
+                        utils.assertAndReturn(this.prowlarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+                      ),
+                      base_url: httpUrl(
+                        utils.domainOfService(this.sonarr.service),
+                        utils.assertAndReturn(this.sonarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+                      ),
+                      sync_level: 'full_sync',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  buildarrConnect: buildarr.new(config = buildarrConfig),
 
   // Public-key-only SFTP front door onto the shared mdata volume (read-write), reached over the
   // tailnet (mdata-sftp.tail4c9a.ts.net:22) and over the LAN via methanol's mDNS alias

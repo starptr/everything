@@ -14,10 +14,17 @@ local images = import 'milky-way/lib/images.libsonnet';
 // the SHARED `mdata` RWX-NFS PVC (the same one qbittorrent mounts), mounted here at the same path
 // so that downloads (<mediaMountPath>/downloads/qbittorrent) and the library tree
 // (<mediaMountPath>/library/tv) are one filesystem -- hardlinks and atomic moves require that.
+//
+// Config that we pin declaratively via servarr env overrides (SONARR__<SECTION>__<KEY>, double
+// underscore; they win over config.xml on every boot): the API key (from a Secret, so it's stable
+// and Prowlarr's link to Sonarr is reproducible -- not the random key Sonarr would otherwise mint
+// on first boot), the explicit port, and the update settings that keep Sonarr from EVER updating
+// itself (mechanism=Docker -> the in-app updater is disabled; updates happen by rolling the image).
 {
   new(
     tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
     mediaVolumeClaimName,               // required -> external shared RWX PVC (the `mdata` PVC in main.jsonnet)
+    apiKey,                             // required -> Sonarr API key (from sops; surfaced via the Secret below)
     name='sonarr',
     namespace='default',
     image=images.sonarr.fullyQualifiedImageReferencePinned,
@@ -28,6 +35,16 @@ local images = import 'milky-way/lib/images.libsonnet';
     mediaMountPath='/data',             // whole shared volume mounted here (matches qbittorrent's /data)
   ):: {
     local this = self,
+
+    // API key as an Opaque Secret (value from the sops-backed `apiKey` param). Mirrors the
+    // openclaw/gluetun stringData idiom; the env var below reads it via secretKeyRef.
+    secret: {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: name + '-secrets', namespace: namespace },
+      type: 'Opaque',
+      stringData: { apikey: apiKey },
+    },
 
     configPvc: {
       apiVersion: 'v1',
@@ -62,6 +79,16 @@ local images = import 'milky-way/lib/images.libsonnet';
                   { name: 'PUID', value: '1000' },
                   { name: 'PGID', value: '1000' },
                   { name: 'TZ', value: timezone },
+                  // Servarr config overrides (SONARR__<SECTION>__<KEY>). The SONARR__ prefix is the
+                  // application's, independent of the `name` param; these override config.xml each boot.
+                  { name: 'SONARR__SERVER__PORT', value: std.toString(port) },    // explicit; same source as containerPort/Service
+                  { name: 'SONARR__UPDATE__MECHANISM', value: 'Docker' },         // container-managed -> disables Sonarr's in-app updater
+                  { name: 'SONARR__UPDATE__AUTOMATICALLY', value: 'false' },      // never auto-apply updates
+                  // API key read from the Secret above -> stable across reboots / config resets.
+                  {
+                    name: 'SONARR__AUTH__APIKEY',
+                    valueFrom: { secretKeyRef: { name: this.secret.metadata.name, key: 'apikey' } },
+                  },
                 ],
                 ports: [{ name: 'webui', containerPort: port }],
                 volumeMounts: [

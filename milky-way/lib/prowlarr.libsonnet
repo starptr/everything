@@ -6,13 +6,19 @@ local images = import 'milky-way/lib/images.libsonnet';
 // no media files, so -- unlike Sonarr -- it mounts NO shared media volume; the only persistent
 // state is its own /config.
 //
-// No VPN sidecar and no config seed (Prowlarr writes config.xml itself on first boot). /config
-// holds a SQLite DB + config.xml rewritten at runtime; SQLite over NFS is unsafe, so config lives
-// on iSCSI (RWO), and an RWO PVC forces strategy: Recreate (old pod releases before new mounts).
-// WebUI exposed over the tailnet via Tailscale L7 ingress.
+// No VPN sidecar (and no media volume). /config holds a SQLite DB + config.xml rewritten at
+// runtime; SQLite over NFS is unsafe, so config lives on iSCSI (RWO), and an RWO PVC forces
+// strategy: Recreate (old pod releases before new mounts). WebUI exposed over the tailnet via
+// Tailscale L7 ingress.
+//
+// Config pinned declaratively via servarr env overrides (PROWLARR__<SECTION>__<KEY>, double
+// underscore; they win over config.xml every boot): the API key (from a Secret, so it's stable
+// rather than the random key Prowlarr would mint on first boot), the explicit port, and the update
+// settings that keep Prowlarr from EVER updating itself (mechanism=Docker disables the in-app updater).
 {
   new(
     tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
+    apiKey,                             // required -> Prowlarr API key (from sops; surfaced via the Secret below)
     name='prowlarr',
     namespace='default',
     image=images.prowlarr.fullyQualifiedImageReferencePinned,
@@ -22,6 +28,16 @@ local images = import 'milky-way/lib/images.libsonnet';
     configStorageSize='5Gi',
   ):: {
     local this = self,
+
+    // API key as an Opaque Secret (value from the sops-backed `apiKey` param). Mirrors the
+    // openclaw/gluetun stringData idiom; the env var below reads it via secretKeyRef.
+    secret: {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: name + '-secrets', namespace: namespace },
+      type: 'Opaque',
+      stringData: { apikey: apiKey },
+    },
 
     configPvc: {
       apiVersion: 'v1',
@@ -56,6 +72,22 @@ local images = import 'milky-way/lib/images.libsonnet';
                   { name: 'PUID', value: '1000' },
                   { name: 'PGID', value: '1000' },
                   { name: 'TZ', value: timezone },
+                  // Servarr config overrides (PROWLARR__<SECTION>__<KEY>). The PROWLARR__ prefix is the
+                  // application's, independent of the `name` param; these override config.xml each boot.
+                  { name: 'PROWLARR__SERVER__PORT', value: std.toString(port) },   // explicit; same source as containerPort/Service
+                  { name: 'PROWLARR__UPDATE__MECHANISM', value: 'Docker' },        // container-managed -> disables Prowlarr's in-app updater
+                  { name: 'PROWLARR__UPDATE__AUTOMATICALLY', value: 'false' },     // never auto-apply updates
+                  // Auth handled at the network edge (Tailscale ingress is the boundary, same model as
+                  // qbittorrent), so the app itself does no login -> 'External'. This is also what lets
+                  // Buildarr manage Prowlarr: its bundled prowlarr plugin only accepts basic/forms/
+                  // external and CRASHES reading the servarr default 'none' (Sonarr's newer plugin
+                  // tolerates 'none', so Sonarr needs no equivalent override).
+                  { name: 'PROWLARR__AUTH__METHOD', value: 'External' },
+                  // API key read from the Secret above -> stable across reboots / config resets.
+                  {
+                    name: 'PROWLARR__AUTH__APIKEY',
+                    valueFrom: { secretKeyRef: { name: this.secret.metadata.name, key: 'apikey' } },
+                  },
                 ],
                 ports: [{ name: 'webui', containerPort: port }],
                 volumeMounts: [

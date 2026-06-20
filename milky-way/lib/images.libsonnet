@@ -64,6 +64,15 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/prowlarr",
       defaultDigest: { hash: "sha256:7ab5769616c1929247c8e7944453253f0b777fac2724c3bc9976ae2ff4023257", tagHint: "2.4.0.5397-ls150" },
     },
+    // Buildarr: declaratively reconciles *arr state (used here only to wire Sonarr<->Prowlarr<->
+    // qBittorrent together). The image bundles the sonarr/radarr/prowlarr plugins. The hash is the
+    // multi-arch INDEX digest (same as the *arr/qbittorrent pins above; k3s resolves the per-node
+    // arch); tagHint is the readable release. Re-resolve with
+    // `docker buildx imagetools inspect callum027/buildarr:latest`.
+    buildarr: {
+      fullyQualifiedRepository: "callum027/buildarr",
+      defaultDigest: { hash: "sha256:57e2343fefe5d5701364b5e93b4985dbf08310d7b152f70556bdaba7e9475447", tagHint: "0.7.8" },
+    },
     // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
     // matches methanol -- so the digest below is that manifest, not a multi-arch index.
     "atmoz-sftp": {
