@@ -195,6 +195,13 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
       buildarr: {
         // Buildarr rolls via the Deployment's checksum/config annotation, not in-place file watch.
         watch_config: false,
+        // Reconcile hourly on the hour (in addition to the once-on-pod-start run), so UI/DB drift
+        // self-heals within the hour instead of waiting for buildarr's default single 03:00 run.
+        // `update_times` are fixed HH:MM clock times -- buildarr has no interval syntax -- so an
+        // hourly cadence is the 24 on-the-hour entries, generated rather than hand-listed.
+        // `update_days` defaults to all 7 days. For an immediate reconcile out-of-band, SIGHUP the
+        // daemon (PID 1): `kubectl --context methanol exec deploy/buildarr -- kill -HUP 1`.
+        update_times: ['%02d:00' % h for h in std.range(0, 23)],
       },
       sonarr: {
         // GLOBAL default for all sonarr instances (current + future). MUST stay false -- never
