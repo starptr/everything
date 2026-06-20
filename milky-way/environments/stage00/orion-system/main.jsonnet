@@ -142,6 +142,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   qbittorrent: qbittorrent.new(
     wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/qbt-gluetun.conf'),
     tailscaleHostname = "qbittorrent",
+    vpnProvider = "protonvpn",
     serverCountries = "United States",
     volumeClaimName = this.mdataPvc.metadata.name,
     volumeMountPath = "/data",

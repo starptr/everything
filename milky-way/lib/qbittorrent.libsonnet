@@ -27,8 +27,8 @@ local images = import 'milky-way/lib/images.libsonnet';
     image=images.qbittorrent.fullyQualifiedImageReferencePinned,
     webuiPort=8080,
     tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
-    vpnProvider='protonvpn',            // must support port forwarding for inbound peers (see header)
-    serverCountries='United States',
+    vpnProvider,                        // required: must support port forwarding for inbound peers (see header)
+    serverCountries,                    // required: SERVER_COUNTRIES, e.g. 'United States'
     configStorageClassName='my-custom-zfs-generic-iscsi',     // RWO
     configStorageSize='5Gi',
     volumeClaimName,                    // required -> external shared RWX PVC (defined in main.jsonnet)

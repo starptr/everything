@@ -27,9 +27,9 @@ local images = import 'milky-way/lib/images.libsonnet';
     openvpnPassword=null,
     name='gluetun',                     // container name + secret/configmap prefix
     namespace='default',
-    vpnProvider='nordvpn',
-    vpnType='wireguard',                // 'wireguard' (NordLynx) | 'openvpn'
-    serverCountries='United States',    // SERVER_COUNTRIES
+    vpnProvider,                        // required: must match the secret + support the features used (e.g. PF), e.g. 'protonvpn'
+    vpnType,                            // required: 'wireguard' | 'openvpn' -- must match the credentials below
+    serverCountries,                    // required: SERVER_COUNTRIES, e.g. 'United States'
     serverRegions=null,                 // optional SERVER_REGIONS
     tz='America/Los_Angeles',
     controlPort=8000,
