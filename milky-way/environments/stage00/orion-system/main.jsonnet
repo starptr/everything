@@ -139,7 +139,9 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     wireguardPrivateKey = secrets.vpn.wireguard[0].privateKey,
     tailscaleHostname = "qbittorrent",
     serverCountries = "United States",
-    mediaClaimName = this.mdataPvc.metadata.name,
+    volumeClaimName = this.mdataPvc.metadata.name,
+    volumeMountPath = "/data",
+    downloadsSubdir = "downloads/qbittorrent",
   ),
 
   // Public-key-only SFTP front door onto the shared mdata volume (read-write), reached over the

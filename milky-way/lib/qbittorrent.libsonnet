@@ -8,9 +8,9 @@ local images = import 'milky-way/lib/images.libsonnet';
 // the only thing reachable from outside is the WebUI, exposed via Tailscale L7 ingress.
 //
 // Storage: config on iSCSI (RWO) -- qbittorrent rewrites qBittorrent.conf at runtime, so it's
-// seeded once (only-if-empty) into the PVC. Downloads live on a SHARED media volume (the external
+// seeded once (only-if-empty) into the PVC. Downloads live on a SHARED volume (the external
 // `mdata` RWX-NFS PVC, mounted at /data) under downloads/qbittorrent/ -- other apps mount the same
-// volume and hardlink between subdirs (hardlinks require one filesystem), so the media tree is not
+// volume and hardlink between subdirs (hardlinks require one filesystem), so the directory tree is not
 // owned by qbittorrent here.
 {
   new(
@@ -23,14 +23,14 @@ local images = import 'milky-way/lib/images.libsonnet';
     serverCountries='United States',
     configStorageClassName='my-custom-zfs-generic-iscsi',     // RWO
     configStorageSize='5Gi',
-    mediaClaimName='mdata',             // external shared RWX media PVC (defined in main.jsonnet)
-    mediaMountPath='/data',             // whole media volume mounted here
-    downloadsSubdir='downloads/qbittorrent',  // qbittorrent's save dir within the media volume
+    volumeClaimName,                    // required -> external shared RWX PVC (defined in main.jsonnet)
+    volumeMountPath,                    // required -> whole volume mounted here
+    downloadsSubdir,                    // required -> qbittorrent's save dir within the volume
     initImage=images.busybox.fullyQualifiedImageReferenceTaggedForQbittorrent,
   ):: {
     local this = self,
     local controlPort = 8000,           // gluetun control server (publicip route)
-    local downloadsPath = mediaMountPath + '/' + downloadsSubdir,   // /data/downloads/qbittorrent
+    local downloadsPath = volumeMountPath + '/' + downloadsSubdir,   // /data/downloads/qbittorrent
 
     // Cluster CIDRs (k3s defaults; verified on methanol). Used for the killswitch allowlist AND the
     // qbittorrent reverse-proxy / auth-subnet whitelist below.
@@ -129,7 +129,7 @@ local images = import 'milky-way/lib/images.libsonnet';
                 name: 'init-config',
                 image: initImage,
                 // Seed the config (only-if-empty) AND ensure the save dir exists and is writable by
-                // the qbittorrent uid (1000) on the shared media volume. The NFS export root-squashes,
+                // the qbittorrent uid (1000) on the shared volume. The NFS export root-squashes,
                 // so chown(1000) from this root container is EPERM; instead chmod the leaf 0777 (the
                 // creating owner may chmod), matching the driver's 0777 volume-root convention. The
                 // parents stay 0755/traversable.
@@ -144,7 +144,7 @@ local images = import 'milky-way/lib/images.libsonnet';
                 volumeMounts: [
                   { name: 'config', mountPath: '/config' },
                   { name: 'config-seed', mountPath: '/seed', readOnly: true },
-                  { name: 'media', mountPath: mediaMountPath },
+                  { name: 'volume', mountPath: volumeMountPath },
                 ],
                 resources: {
                   requests: { memory: '16Mi', cpu: '25m' },
@@ -167,7 +167,7 @@ local images = import 'milky-way/lib/images.libsonnet';
                 ports: [{ name: 'webui', containerPort: webuiPort }],
                 volumeMounts: [
                   { name: 'config', mountPath: '/config' },
-                  { name: 'media', mountPath: mediaMountPath },
+                  { name: 'volume', mountPath: volumeMountPath },
                 ],
                 readinessProbe: {
                   httpGet: { path: '/', port: 'webui' },
@@ -182,7 +182,7 @@ local images = import 'milky-way/lib/images.libsonnet';
             ],
             volumes: this.vpn.volumes + [
               { name: 'config', persistentVolumeClaim: { claimName: this.configPvc.metadata.name } },
-              { name: 'media', persistentVolumeClaim: { claimName: mediaClaimName } },
+              { name: 'volume', persistentVolumeClaim: { claimName: volumeClaimName } },
               { name: 'config-seed', configMap: { name: this.configMapInitialSeed.metadata.name } },
             ],
           },
