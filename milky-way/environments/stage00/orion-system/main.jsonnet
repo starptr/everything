@@ -16,6 +16,7 @@ local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
+local autobrr = import 'milky-way/lib/autobrr.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
 local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
 local utils = import 'milky-way/lib/utils.libsonnet';
@@ -185,6 +186,18 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   jellyfin: jellyfin.new(
     tailscaleHostname = "jellyfin",
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
+  ),
+
+  // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against
+  // filters, and forwards each match to a download client -- typically Sonarr as an "arr" client
+  // (Sonarr then grabs via its own qBittorrent client under tv-sonarr, owning the category), or
+  // qBittorrent directly under a per-filter category. No media volume / no VPN sidecar: it hands
+  // releases to Sonarr / qBittorrent over ClusterIP, it isn't a torrent client itself. The download
+  // clients + indexers + filters + categories are runtime UI/DB state -- autobrr has no
+  // config-as-code for them, so they are NOT declared here (contrast buildarr above). SQLite config
+  // (incl. a self-generated sessionSecret) on its own iSCSI RWO PVC; WebUI via Tailscale L7 ingress.
+  autobrr: autobrr.new(
+    tailscaleHostname = "autobrr",
   ),
 
   // Buildarr: declaratively asserts the inter-app links the *arr apps store in SQLite (and which the

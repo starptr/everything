@@ -97,6 +97,15 @@ local images = {
       fullyQualifiedRepository: "ghcr.io/bbtufty/seadexarr",
       defaultDigest: { hash: "sha256:92d539222696bd312c372ee8c6915141025ea10c1daa1a5ebded2966236fdebf", tagHint: "main" },
     },
+    // autobrr: download-automation tool (monitors IRC announce / RSS, matches releases against
+    // filters, forwards each to a download client -- here qBittorrent under a per-filter category).
+    // Multi-arch INDEX digest (k3s resolves the per-node arch), same convention as the *arr/
+    // qbittorrent pins; tagHint is the readable release. Re-resolve with
+    // `docker buildx imagetools inspect ghcr.io/autobrr/autobrr:<tag>`.
+    autobrr: {
+      fullyQualifiedRepository: "ghcr.io/autobrr/autobrr",
+      defaultDigest: { hash: "sha256:944b1c438302ed10bef810a49f2eb7f334b5abf578db473bcb8d997db3978227", tagHint: "v1.80.0" },
+    },
     // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
     // matches methanol -- so the digest below is that manifest, not a multi-arch index.
     "atmoz-sftp": {
