@@ -15,6 +15,7 @@ local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
+local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
 local utils = import 'milky-way/lib/utils.libsonnet';
 local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
@@ -173,6 +174,16 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   prowlarr: prowlarr.new(
     apiKey = secrets.prowlarr.apiKey,
     tailscaleHostname = "prowlarr",
+  ),
+
+  // Jellyfin: media server for the library the *arr stack builds on the shared mdata volume.
+  // Reads /data/library/... (same PVC, same /data mount as sonarr/qbittorrent), so it serves the
+  // exact tree Sonarr hardlinks completed downloads into. SQLite config + metadata cache on its
+  // own iSCSI RWO PVC. WebUI via Tailscale L7 ingress; first-run setup is interactive (no API key
+  // to pin, so no Secret / buildarr wiring).
+  jellyfin: jellyfin.new(
+    tailscaleHostname = "jellyfin",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
   ),
 
   // Buildarr: declaratively asserts the inter-app links the *arr apps store in SQLite (and which the

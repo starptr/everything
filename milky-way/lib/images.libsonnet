@@ -64,6 +64,14 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/prowlarr",
       defaultDigest: { hash: "sha256:7ab5769616c1929247c8e7944453253f0b777fac2724c3bc9976ae2ff4023257", tagHint: "2.4.0.5397-ls150" },
     },
+    // Jellyfin media server (LinuxServer.io): plays the library the *arr stack builds on the
+    // shared mdata volume. Same multi-arch INDEX digest convention as the *arr/qbittorrent pins
+    // above (k3s resolves the per-node arch); tagHint is the readable LinuxServer version.
+    // Re-resolve with `docker buildx imagetools inspect lscr.io/linuxserver/jellyfin:latest`.
+    jellyfin: {
+      fullyQualifiedRepository: "lscr.io/linuxserver/jellyfin",
+      defaultDigest: { hash: "sha256:bb8ff21a879498dbdead9efe4d3de2070dbda2b9fb35b9a43501055f6e526384", tagHint: "10.11.11ubu2404-ls37" },
+    },
     // Buildarr: declaratively reconciles *arr state (used here only to wire Sonarr<->Prowlarr<->
     // qBittorrent together). The image bundles the sonarr/radarr/prowlarr plugins. The hash is the
     // multi-arch INDEX digest (same as the *arr/qbittorrent pins above; k3s resolves the per-node
