@@ -148,6 +148,25 @@ local images = import 'milky-way/lib/images.libsonnet';
             tolerations: [
               { key: 'ephemeral', operator: 'Exists', effect: 'NoSchedule' },
             ],
+            // DNS: drop the cluster search domains for this pod. The image is Alpine (musl); musl's
+            // getaddrinfo honors the k8s-injected `search` + `options ndots:5` in resolv.conf, so a
+            // tracker host like tracker.ipleak.net (2 dots < 5) gets the cluster search domains
+            // appended FIRST, the upstream returns authoritative NXDOMAIN for each, and musl fails
+            // instead of falling back to the absolute name (glibc would). qbittorrent only resolves
+            // PUBLIC hosts (trackers/peers/DHT) via gluetun's 127.0.0.1 resolver and NEVER an
+            // in-cluster name (the *arr apps dial INTO it; gluetun's port-forward command uses
+            // literal 127.0.0.1), so the cluster search domains are pure dead weight here and the
+            // sole cause of "Host not found (authoritative)" on every tracker. dnsPolicy:None drops
+            // them entirely -- no suffix is ever appended, so every tracker name resolves as-is.
+            // dnsPolicy:None REQUIRES a nameserver, so we declare gluetun's embedded resolver
+            // (127.0.0.1) -- which gluetun rewrites resolv.conf to anyway, so this just matches
+            // reality. gluetun's own startup is unaffected: it reaches the VPN via IPs from its
+            // embedded server list and runs its own resolver, not the pod's kubelet DNS.
+            dnsPolicy: 'None',
+            dnsConfig: {
+              nameservers: ['127.0.0.1'],
+              searches: [],
+            },
             // No pod-level sysctls: gluetun sets WireGuard's src_valid_mark itself inside its netns
             // (see lib/gluetun.libsonnet) -- a pod securityContext.sysctls entry would be rejected
             // with SysctlForbidden.
