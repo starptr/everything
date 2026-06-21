@@ -155,7 +155,8 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 
   // Sonarr: monitors/grabs TV episodes, hands torrents to qbittorrent
   // (qbittorrent.default.svc.cluster.local:8080), then imports completed downloads by hardlinking
-  // them out of /data/downloads/qbittorrent into a library tree (e.g. /data/library/tv) on the
+  // them out of /data/downloads/qbittorrent into a library tree (/data/library/Animations and
+  // '/data/library/TV Shows', set as Sonarr root folders via buildarrConfig below) on the
   // SHARED mdata volume -- same PVC, same /data mount path as qbittorrent, so hardlinks/atomic
   // moves stay on one filesystem. WebUI via Tailscale L7 ingress; SQLite config on its own iSCSI
   // RWO PVC. The download-client/indexer links are entered in the UI post-deploy (they need API
@@ -204,9 +205,12 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
         update_times: ['%02d:00' % h for h in std.range(0, 23)],
       },
       sonarr: {
-        // GLOBAL default for all sonarr instances (current + future). MUST stay false -- never
-        // clobber download clients added by hand in Sonarr's UI.
-        settings: { download_clients: { delete_unmanaged: false } },
+        // GLOBAL defaults for all sonarr instances (current + future). MUST stay false -- never
+        // clobber download clients (or root folders) added by hand in Sonarr's UI.
+        settings: {
+          download_clients: { delete_unmanaged: false },
+          media_management: { delete_unmanaged_root_folders: false },
+        },
         instances: {
           [sonarrOrionSystemInstanceName]: {
             hostname: utils.domainOfService(this.sonarr.service),
@@ -226,6 +230,27 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
                     category: 'tv-sonarr',  // qBittorrent category Sonarr tags its grabs with
                   },
                 },
+              },
+              media_management: {
+                delete_unmanaged_root_folders: false,  // also explicit per-instance (belt & suspenders)
+                // These root folders are paths INSIDE the Sonarr container -- the `mdata` PVC, which
+                // Sonarr mounts at /data (matching qbittorrent so hardlinks stay on one fs). Pin
+                // volumeMounts[1] as the media mount, then assert that mount is /data, so a future
+                // mediaMountPath change (or a reordered/renamed mount) fails at evaluation instead of
+                // silently leaving these root folders pointing where Sonarr no longer mounts (its API
+                // rejects a non-existent path). The paths below stay LITERAL on purpose -- they must
+                // not auto-follow an accidental mountPath change.
+                local mediaMount = utils.assertAndReturn(
+                  this.sonarr.deployment.spec.template.spec.containers[0].volumeMounts[1],
+                  function(m) m.name == 'media',
+                  'sonarr volumeMounts[1] must be the media mount for these buildarr root_folders',
+                ),
+                assert mediaMount.mountPath == '/data' :
+                  'sonarr media mount must be at /data for these buildarr root_folders to resolve',
+                root_folders: [
+                  '/data/library/Animations',
+                  '/data/library/TV Shows',
+                ],
               },
             },
           },

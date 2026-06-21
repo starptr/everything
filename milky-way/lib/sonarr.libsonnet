@@ -13,7 +13,8 @@ local images = import 'milky-way/lib/images.libsonnet';
 // pod must release the volume before a new one mounts it, hence strategy: Recreate. Media lives on
 // the SHARED `mdata` RWX-NFS PVC (the same one qbittorrent mounts), mounted here at the same path
 // so that downloads (<mediaMountPath>/downloads/qbittorrent) and the library tree
-// (<mediaMountPath>/library/tv) are one filesystem -- hardlinks and atomic moves require that.
+// (<mediaMountPath>/library/{Animations,TV Shows}, set as Sonarr root folders via buildarr) are
+// one filesystem -- hardlinks and atomic moves require that.
 //
 // Config that we pin declaratively via servarr env overrides (SONARR__<SECTION>__<KEY>, double
 // underscore; they win over config.xml on every boot): the API key (from a Secret, so it's stable
