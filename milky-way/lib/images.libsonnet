@@ -81,6 +81,22 @@ local images = {
       fullyQualifiedRepository: "callum027/buildarr",
       defaultDigest: { hash: "sha256:57e2343fefe5d5701364b5e93b4985dbf08310d7b152f70556bdaba7e9475447", tagHint: "0.7.8" },
     },
+    // SeaDexArr (bbtufty): scheduled daemon syncing Sonarr/Radarr anime picks from SeaDex into
+    // qBittorrent. SINGLE-ARCH amd64 manifest (matches methanol's x86_64) -- the digest is that one
+    // manifest, not a multi-arch index. Re-resolve with
+    // `docker buildx imagetools inspect ghcr.io/bbtufty/seadexarr:main`.
+    //
+    // Pinned to the `:main` build (2026-01-12), NOT the v0.9.0 release: v0.9.0 ships
+    // qbittorrent-api==2025.7.0, whose auth_log_in() requires the login body to be "Ok." and so
+    // CRASHES against our qBittorrent, which uses an AuthSubnetWhitelist that bypasses login for
+    // in-cluster callers and answers /api/v2/auth/login with `204 No Content` (empty body) instead.
+    // `:main` bumps to qbittorrent-api==2025.11.1, which counts an empty body as success -- so the
+    // whitelist bypass works and qBittorrent needs no password. Move to the next tagged release
+    // (>v0.9.0) once one ships with that bump.
+    seadexarr: {
+      fullyQualifiedRepository: "ghcr.io/bbtufty/seadexarr",
+      defaultDigest: { hash: "sha256:92d539222696bd312c372ee8c6915141025ea10c1daa1a5ebded2966236fdebf", tagHint: "main" },
+    },
     // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
     // matches methanol -- so the digest below is that manifest, not a multi-arch index.
     "atmoz-sftp": {

@@ -17,6 +17,7 @@ local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
+local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
 local utils = import 'milky-way/lib/utils.libsonnet';
 local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
@@ -321,6 +322,35 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
       },
     },
   buildarrConnect: buildarr.new(config = buildarrConfig),
+
+  // SeaDexArr: scheduled daemon (no web UI -> no Service/Ingress) that reads the Sonarr library, picks
+  // SeaDex's "best" release per anime, and adds its torrent straight into qBittorrent under the
+  // tv-sonarr category (so Sonarr imports it) tagged `from-seadexarr`. qBittorrent creds are omitted:
+  // its AuthSubnetWhitelist bypasses auth for in-cluster callers (same as buildarr/Sonarr). Radarr
+  // isn't deployed, so only Sonarr + qBittorrent are wired; the scheduled run tolerates the absent
+  // Radarr per-module. Host/port for each app come from its Service (the source of truth) the same way
+  // buildarrConfig does (utils.domainOfService + the webui port looked up by name); API key + Discord
+  // webhook come from sops. config.yml is authoritative -- the app reads it read-only and never rewrites it.
+  seadexarr: seadexarr.new(
+    config = {
+      sonarr_url: 'http://%s:%d' % [
+        utils.domainOfService(this.sonarr.service),
+        utils.associateObjectsByKey(this.sonarr.service.spec.ports, 'name')['webui'].port,
+      ],
+      sonarr_api_key: secrets.sonarr.apiKey,
+      qbit_info: {
+        host: 'http://%s:%d' % [
+          utils.domainOfService(this.qbittorrent.service),
+          utils.associateObjectsByKey(this.qbittorrent.service.spec.ports, 'name')['webui'].port,
+        ],
+        username: '',
+        password: '',
+      },
+      sonarr_torrent_category: 'tv-sonarr',   // matches Sonarr's qBittorrent download-client category (buildarr)
+      torrent_tags: 'from-seadexarr',         // qBittorrent tag on grabs, so SeaDexArr-added torrents are identifiable
+      discord_url: secrets.seadexarr.discordUrl,
+    },
+  ),
 
   // Public-key-only SFTP front door onto the shared mdata volume (read-write), reached over the
   // tailnet (mdata-sftp.tail4c9a.ts.net:22) and over the LAN via methanol's mDNS alias
