@@ -232,6 +232,21 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
                 },
               },
               media_management: {
+                // Episode naming / media-management rules, asserted declaratively so they self-heal
+                // on the hourly reconcile instead of being hand-set in the UI.
+                rename_episodes: true,
+                replace_illegal_characters: true,
+                // NOTE: Sonarr's "Colon Replacement: Smart Replace" is intentionally NOT here --
+                // buildarr-sonarr 0.6.4 (pinned callum027/buildarr:0.7.8) has no colon_replacement
+                // field. Set it by hand in Sonarr's UI (Settings > Media Management); Buildarr does
+                // not manage it, so the manual value isn't clobbered.
+                standard_episode_format: '{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{Preferred Words}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{MediaInfo AudioLanguages}{[MediaInfo VideoCodec]}{-Release Group}',
+                daily_episode_format: '{Series TitleYear} - S{season:00}E{episode:00} - {Air.Date} - {Episode CleanTitle} [{Preferred Words}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{Mediainfo AudioChannels]}{MediaInfo AudioLanguages}{[MediaInfo VideoCodec]}{-Release Group}',
+                anime_episode_format: '{Series TitleYear} - S{season:00}E{episode:00} - {absolute:000} - {Episode CleanTitle:117} [{Preferred Words}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}[{MediaInfo VideoBitDepth}bit]{[MediaInfo VideoCodec]}[{Mediainfo AudioCodec} {Mediainfo AudioChannels}]{MediaInfo AudioLanguages}{-Release Group}',
+                series_folder_format: '{Series TitleYear} [imdb-{ImdbId}]',
+                season_folder_format: 'Season {season:00}',
+                specials_folder_format: 'Specials',
+                multiepisode_style: 'scene',
                 delete_unmanaged_root_folders: false,  // also explicit per-instance (belt & suspenders)
                 // These root folders are paths INSIDE the Sonarr container -- the `mdata` PVC, which
                 // Sonarr mounts at /data (matching qbittorrent so hardlinks stay on one fs). Look up
