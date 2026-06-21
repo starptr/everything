@@ -214,7 +214,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
         instances: {
           [sonarrOrionSystemInstanceName]: {
             hostname: utils.domainOfService(this.sonarr.service),
-            port: utils.assertAndReturn(this.sonarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+            port: utils.associateObjectsByKey(this.sonarr.service.spec.ports, 'name')['webui'].port,
             protocol: 'http',
             api_key: secrets.sonarr.apiKey,
             settings: {
@@ -224,7 +224,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
                   qBittorrent: {
                     type: 'qbittorrent',
                     host: utils.domainOfService(this.qbittorrent.service),
-                    port: utils.assertAndReturn(this.qbittorrent.service.spec.ports[0], function(p) p.name == 'webui').port,
+                    port: utils.associateObjectsByKey(this.qbittorrent.service.spec.ports, 'name')['webui'].port,
                     // No username/password: qBittorrent's AuthSubnetWhitelist bypasses auth for
                     // in-cluster callers (Sonarr is in the pod CIDR). See lib/qbittorrent.libsonnet.
                     category: 'tv-sonarr',  // qBittorrent category Sonarr tags its grabs with
@@ -234,17 +234,15 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
               media_management: {
                 delete_unmanaged_root_folders: false,  // also explicit per-instance (belt & suspenders)
                 // These root folders are paths INSIDE the Sonarr container -- the `mdata` PVC, which
-                // Sonarr mounts at /data (matching qbittorrent so hardlinks stay on one fs). Pin
-                // volumeMounts[1] as the media mount, then assert that mount is /data, so a future
-                // mediaMountPath change (or a reordered/renamed mount) fails at evaluation instead of
+                // Sonarr mounts at /data (matching qbittorrent so hardlinks stay on one fs). Look up
+                // the media mount by name, then assert that mount is /data, so a future
+                // mediaMountPath change (or a renamed mount) fails at evaluation instead of
                 // silently leaving these root folders pointing where Sonarr no longer mounts (its API
                 // rejects a non-existent path). The paths below stay LITERAL on purpose -- they must
                 // not auto-follow an accidental mountPath change.
-                local mediaMount = utils.assertAndReturn(
-                  this.sonarr.deployment.spec.template.spec.containers[0].volumeMounts[1],
-                  function(m) m.name == 'media',
-                  'sonarr volumeMounts[1] must be the media mount for these buildarr root_folders',
-                ),
+                local mediaMount = utils.associateObjectsByKey(
+                  this.sonarr.deployment.spec.template.spec.containers[0].volumeMounts, 'name'
+                )['media'],
                 assert mediaMount.mountPath == '/data' :
                   'sonarr media mount must be at /data for these buildarr root_folders to resolve',
                 root_folders: [
@@ -263,7 +261,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
         instances: {
           [prowlarrOrionSystemInstanceName]: {
             hostname: utils.domainOfService(this.prowlarr.service),
-            port: utils.assertAndReturn(this.prowlarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+            port: utils.associateObjectsByKey(this.prowlarr.service.spec.ports, 'name')['webui'].port,
             protocol: 'http',
             api_key: secrets.prowlarr.apiKey,
             settings: {
@@ -280,11 +278,11 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
                       instance_name: sonarrOrionSystemInstanceName,
                       prowlarr_url: httpUrl(
                         utils.domainOfService(this.prowlarr.service),
-                        utils.assertAndReturn(this.prowlarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+                        utils.associateObjectsByKey(this.prowlarr.service.spec.ports, 'name')['webui'].port,
                       ),
                       base_url: httpUrl(
                         utils.domainOfService(this.sonarr.service),
-                        utils.assertAndReturn(this.sonarr.service.spec.ports[0], function(p) p.name == 'webui').port,
+                        utils.associateObjectsByKey(this.sonarr.service.spec.ports, 'name')['webui'].port,
                       ),
                       sync_level: 'full_sync',
                     },

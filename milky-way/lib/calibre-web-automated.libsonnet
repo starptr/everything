@@ -43,14 +43,12 @@ local defaultAppName = "calibre-web-auto";
                 ports: [
                   {
                     containerPort: // the port that the application listens on
-                      local calibreWebAutoContainer = utils.assertAndReturn(
-                        this.statefulset.spec.template.spec.containers[0],
-                        function(container) container.name == name, # Ensure this is the main calibre-web-auto container
-                      );
-                      local portEnvVarStr = utils.assertAndReturn(
-                        calibreWebAutoContainer.env[4],
-                        function(var) var.name == "CWA_PORT_OVERRIDE", # Ensure this is the CWA_PORT_OVERRIDE env var
-                      ).value;
+                      local calibreWebAutoContainer = utils.associateObjectsByKey(
+                        this.statefulset.spec.template.spec.containers, 'name'
+                      )[name]; # the main calibre-web-auto container, looked up by name
+                      local portEnvVarStr = utils.associateObjectsByKey(
+                        calibreWebAutoContainer.env, 'name'
+                      )["CWA_PORT_OVERRIDE"].value; # the CWA_PORT_OVERRIDE env var, looked up by name
                       std.parseInt(portEnvVarStr), # Parse the port number from the env var
                     name: "webui",
                   },
@@ -141,10 +139,9 @@ local defaultAppName = "calibre-web-auto";
           {
             port: 80,
             targetPort:
-              local calibreWebAutoContainer = utils.assertAndReturn(
-                this.statefulset.spec.template.spec.containers[0],
-                function(container) container.name == name,
-              );
+              local calibreWebAutoContainer = utils.associateObjectsByKey(
+                this.statefulset.spec.template.spec.containers, 'name'
+              )[name];
               utils.assertEqualAndReturn(calibreWebAutoContainer.ports[0].name, "webui"),
             name: "http",
           },
