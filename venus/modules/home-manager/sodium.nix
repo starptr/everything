@@ -42,6 +42,7 @@
       pkgs.audacity
       pkgs.kubectl
       pkgs.claude-code
+      pkgs.herdr
       pkgs.sox
       #pkgs.lute3
       #pkgs.moonlight-qt # Closes on start-up

@@ -20,6 +20,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    herdr = {
+      url = "github:ogulcancelik/herdr/v0.7.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     jellyfin-mpv-shim-darwin = {
       url = "path:./../../experimental/jellyfin-mpv-shim-darwin-compat";
       ##inputs.nixpkgs.follows = "nixpkgs"; # TODO: migrate to support new shim
@@ -107,6 +112,9 @@
             overlays = [
               (self: super: {
                 jellyfin-mpv-shim = inputs.jellyfin-mpv-shim-darwin.packages."aarch64-darwin".default;
+              })
+              (final: super: {
+                herdr = inputs.herdr.packages."aarch64-darwin".default;
               })
               #chaseln.overlays.chaseln
               inputs.soup.overlays.chaseln
