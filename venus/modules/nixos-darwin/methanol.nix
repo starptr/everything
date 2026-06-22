@@ -70,8 +70,94 @@
 
   services.zfs = {
     autoScrub.enable = true;       # Weekly integrity checks
-    autoSnapshot.enable = true;    # Automatic snapshots
+    autoSnapshot.enable = false;   # Replaced by services.sanoid below.
+                                   # (Was a no-op anyway: zfs-auto-snapshot only
+                                   # acts on datasets with com.sun:auto-snapshot=true,
+                                   # which nothing here sets.)
     trim.enable = true;            # If using SSDs
+  };
+
+  # Zero-cost (copy-on-write, in-pool) snapshots of the democratic-csi k8s
+  # volumes under rpool, for accidental-deletion / app-corruption rollback.
+  #
+  # Each PVC is a child of one of the two parents below (a zvol for iSCSI, a
+  # dataset for NFS), named pvc-<uuid>. democratic-csi stamps each child with
+  # ZFS user properties recording its origin (k8s:pvc-namespace, k8s:pvc-name,
+  # k8s:pvc-ns-name). Those properties are inherently preserved on every
+  # snapshot: a snapshot can't outlive its dataset, so for any snapshot that
+  # exists the live dataset + properties exist too, and
+  #   zfs get k8s:pvc-ns-name <dataset>@<snap>
+  # always identifies the originating PVC. No metadata sidecar needed.
+  #
+  # recursive + processChildrenOnly: sanoid re-enumerates children on every run,
+  # so dynamically-provisioned pvc-* volumes are auto-covered, and the empty
+  # parent containers are skipped.
+  #
+  # These snapshots are CRASH-CONSISTENT, not application-consistent (apps keep
+  # running during the snapshot). Each snapshot is tagged at creation time with a
+  # local backup:consistency=crash-consistent property by the post_snapshot_script
+  # below, so a restorer knows what they're getting. sanoid runs as a sandboxed
+  # DynamicUser, so the service is additionally granted `userprop` delegation
+  # (just below the block) to let that hook set the property.
+  services.sanoid = {
+    enable = true;
+
+    templates.k8s-pvc = {
+      autosnap = true;   # take snapshots
+      autoprune = true;  # prune per the retention counts below
+      hourly = 24;
+      daily = 14;
+      weekly = 4;
+      monthly = 3;
+      yearly = 0;
+
+      # Tag each freshly-created snapshot crash-consistent at creation time
+      # (local property, source=local — NOT an inherited default). sanoid runs
+      # this immediately after taking the snapshot(s) for a dataset: SANOID_TARGETS
+      # are the dataset(s) and SANOID_SNAPNAMES the new snapshot names. Iterating
+      # the cross product with `|| true` is robust whether sanoid invokes the hook
+      # per-child or batched. Requires the `userprop` delegation on the service
+      # below; absolute zfs path because the DynamicUser has a minimal PATH.
+      post_snapshot_script = "${pkgs.writeShellScript "sanoid-tag-crash-consistent" ''
+        set -eu
+        IFS=','
+        for tgt in $SANOID_TARGETS; do
+          for snap in $SANOID_SNAPNAMES; do
+            /run/booted-system/sw/bin/zfs set \
+              backup:consistency=crash-consistent "$tgt@$snap" || true
+          done
+        done
+      ''}";
+    };
+
+    datasets."rpool/k8s/democratic-csi/my-zfs-generic-iscsi" = {
+      useTemplate = [ "k8s-pvc" ];
+      recursive = true;
+      processChildrenOnly = true;
+    };
+    datasets."rpool/k8s/democratic-csi/my-zfs-nfs" = {
+      useTemplate = [ "k8s-pvc" ];
+      recursive = true;
+      processChildrenOnly = true;
+    };
+  };
+
+  # Grant the sanoid DynamicUser permission to set user properties on the two
+  # democratic-csi parents (inherited by the per-PVC children) so its
+  # post_snapshot_script can stamp backup:consistency on each snapshot. These
+  # lists concatenate with the module's own snapshot,mount,destroy allow/unallow
+  # (NixOS unitOption merge concatenates list-valued definitions). The `-+`
+  # prefix means ignore-failure (tolerates a not-yet-created iSCSI parent) and
+  # run as root. Revoked again when the service stops.
+  systemd.services.sanoid.serviceConfig = {
+    ExecStartPre = [
+      "-+/run/booted-system/sw/bin/zfs allow sanoid userprop rpool/k8s/democratic-csi/my-zfs-generic-iscsi"
+      "-+/run/booted-system/sw/bin/zfs allow sanoid userprop rpool/k8s/democratic-csi/my-zfs-nfs"
+    ];
+    ExecStopPost = [
+      "-+/run/booted-system/sw/bin/zfs unallow sanoid userprop rpool/k8s/democratic-csi/my-zfs-generic-iscsi"
+      "-+/run/booted-system/sw/bin/zfs unallow sanoid userprop rpool/k8s/democratic-csi/my-zfs-nfs"
+    ];
   };
 
   # Required: set a unique hostId for ZFS
