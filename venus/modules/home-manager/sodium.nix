@@ -158,6 +158,12 @@
         sopsFile = ./../../../secrets/k8s-config/gluetun-vpn-proxy.conf;
         path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/gluetun-vpn-proxy.conf";
       };
+      secrets."k8s-config/thelounge-gluetun.conf" = {
+        format = "binary";
+        mode = "0400";
+        sopsFile = ./../../../secrets/k8s-config/thelounge-gluetun.conf;
+        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/thelounge-gluetun.conf";
+      };
       # Private key the grand-central reverse-tunnel LaunchAgent authenticates with (its public
       # half is grand-central's tunnelKeys in milky-way main.jsonnet). Binary so the PEM round-
       # trips byte-for-byte; 0600 because ssh rejects a group/world-readable identity file.
