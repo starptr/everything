@@ -20,6 +20,11 @@ local images = import 'milky-way/lib/images.libsonnet';
 // route allowlist) so it lives in a ConfigMap; only the credentials live in the Secret (and the
 // Secret is consumed via envFrom, which can't handle a dotted "config.toml" key -- another reason
 // to keep them separate).
+//
+// Optionally (httpProxy=true) gluetun also serves its built-in HTTP forward proxy on httpProxyPort,
+// so a host can expose gluetun itself as a VPN-egress proxy for other workloads (no app container
+// needed -- see lib/vpn-proxy.libsonnet). The host must add httpProxyPort to firewallInputPorts (so
+// the killswitch lets callers reach it) and publish it on its Service.
 {
   new(
     wireguardPrivateKey=null,           // required when vpnType == 'wireguard'
@@ -46,6 +51,10 @@ local images = import 'milky-way/lib/images.libsonnet';
     portForwarding=false,
     portForwardingUpCommand=null,
     portForwardingDownCommand=null,
+    // Built-in HTTP forward proxy. Off by default; when on, gluetun listens on httpProxyPort and
+    // forwards through the tunnel. The host must include httpProxyPort in firewallInputPorts.
+    httpProxy=false,
+    httpProxyPort=8888,
     image=images.gluetun.fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
@@ -57,6 +66,7 @@ local images = import 'milky-way/lib/images.libsonnet';
            : 'gluetun: openvpnUser and openvpnPassword are required when vpnType == openvpn',
 
     controlPort:: controlPort,          // re-exported so the host can build probes / the Service
+    httpProxyPort:: httpProxyPort,      // re-exported (meaningful when httpProxy) so the host can build its Service
 
     // Control-server auth config: make ONLY GET /v1/publicip/ip public so probes + the leak-test
     // can read the VPN exit IP, while everything else stays locked (gluetun v3.39+ default).
@@ -127,9 +137,19 @@ local images = import 'milky-way/lib/images.libsonnet';
           then [{ name: 'VPN_PORT_FORWARDING_DOWN_COMMAND', value: portForwardingDownCommand }]
           else []
         ) else []
+      ) + (
+        // Built-in HTTP forward proxy. HTTPPROXY_LISTENING_ADDRESS defaults to :8888; set it
+        // explicitly so httpProxyPort stays the single source of truth for the listen port.
+        if httpProxy then [
+          { name: 'HTTPPROXY', value: 'on' },
+          { name: 'HTTPPROXY_LISTENING_ADDRESS', value: ':%d' % httpProxyPort },
+        ] else []
       ),
       envFrom: [{ secretRef: { name: this.secret.metadata.name } }],   // WG key or OVPN creds
-      ports: [{ name: 'gluetun-ctrl', containerPort: controlPort }],
+      // http-proxy is APPENDED after gluetun-ctrl: ports[0] must stay 'gluetun-ctrl' (the liveness
+      // probe below and host Services assert ports[0].name == 'gluetun-ctrl').
+      ports: [{ name: 'gluetun-ctrl', containerPort: controlPort }]
+             + (if httpProxy then [{ name: 'http-proxy', containerPort: httpProxyPort }] else []),
       securityContext: {
         capabilities: { add: ['NET_ADMIN'] },   // bring up wg/tun + program iptables
       },

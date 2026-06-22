@@ -13,6 +13,7 @@ local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingre
 local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3.libsonnet';
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
+local vpnProxy = import 'milky-way/lib/vpn-proxy.libsonnet';
 local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
@@ -154,6 +155,18 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     volumeClaimName = this.mdataPvc.metadata.name,
     volumeMountPath = "/data",
     downloadsSubdir = "downloads/qbittorrent",
+  ),
+
+  // vpn-proxy: a VPN-egress HTTP forward proxy. gluetun's built-in HTTP proxy (:8888) forwards every
+  // request through its own ProtonVPN/WireGuard killswitched tunnel -- gluetun is both the tunnel and
+  // the proxy, so the pod is gluetun-only (no app container). It runs on a SEPARATE WireGuard key from
+  // qbittorrent (the same key on two concurrent ProtonVPN sessions flaps). No web UI -- it's reached
+  // in-cluster only, at http://vpn-proxy.default.svc.cluster.local:8888. autobrr points its IRC proxy
+  // there (configured in autobrr's UI; that's runtime DB state, not config-as-code here).
+  vpnProxy: vpnProxy.new(
+    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/gluetun-vpn-proxy.conf'),
+    vpnProvider = "protonvpn",
+    serverCountries = "United States",
   ),
 
   // Sonarr: monitors/grabs TV episodes, hands torrents to qbittorrent
