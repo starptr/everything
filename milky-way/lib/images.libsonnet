@@ -72,6 +72,14 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/jellyfin",
       defaultDigest: { hash: "sha256:bb8ff21a879498dbdead9efe4d3de2070dbda2b9fb35b9a43501055f6e526384", tagHint: "10.11.11ubu2404-ls37" },
     },
+    // TheLounge web IRC client (LinuxServer.io). Multi-arch INDEX digest (k3s resolves the per-node
+    // arch), same convention as the *arr/qbittorrent/jellyfin pins; tagHint is the readable
+    // LinuxServer version. Re-resolve with
+    // `docker buildx imagetools inspect lscr.io/linuxserver/thelounge:latest`.
+    thelounge: {
+      fullyQualifiedRepository: "lscr.io/linuxserver/thelounge",
+      defaultDigest: { hash: "sha256:07f9dc09e4a781d4ee38a06378c183005b28b9872b98a8a31cfb4c315ba23fdc", tagHint: "v4.5.0-ls223" },
+    },
     // Buildarr: declaratively reconciles *arr state (used here only to wire Sonarr<->Prowlarr<->
     // qBittorrent together). The image bundles the sonarr/radarr/prowlarr plugins. The hash is the
     // multi-arch INDEX digest (same as the *arr/qbittorrent pins above; k3s resolves the per-node
@@ -142,6 +150,7 @@ local images = {
       fullyQualifiedRepository: "busybox",
       tagForOpenclaw: "1.37",
       tagForQbittorrent: "1.37",
+      tagForThelounge: "1.37",
       tagForKataMicrovmTest: "1.36",
       tagForExampleZfs: "1.36",
     },
@@ -153,6 +162,7 @@ local images = {
       [if std.objectHas(prev, "defaultTag") then "fullyQualifiedImageReferenceTagged"]: taggedRef(prev.fullyQualifiedRepository, prev.defaultTag),
       [if std.objectHas(prev, "tagForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForOpenclaw),
       [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForQbittorrent),
+      [if std.objectHas(prev, "tagForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForThelounge),
       [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForKataMicrovmTest),
       [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForExampleZfs),
       [if std.objectHas(prev, "digestForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorIngressTest),
@@ -167,6 +177,7 @@ local images = {
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTagged") then "fullyQualifiedImageReferenceTagged"]: prev.fullyQualifiedImageReferenceTagged,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: prev.fullyQualifiedImageReferenceTaggedForOpenclaw,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: prev.fullyQualifiedImageReferenceTaggedForQbittorrent,
+      [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: prev.fullyQualifiedImageReferenceTaggedForThelounge,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: prev.fullyQualifiedImageReferenceTaggedForKataMicrovmTest,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: prev.fullyQualifiedImageReferenceTaggedForExampleZfs,
       [if std.objectHas(prev, "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: prev.fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest,

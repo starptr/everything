@@ -14,6 +14,7 @@ local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local vpnProxy = import 'milky-way/lib/vpn-proxy.libsonnet';
+local thelounge = import 'milky-way/lib/thelounge.libsonnet';
 local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
@@ -165,6 +166,21 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
   // there (configured in autobrr's UI; that's runtime DB state, not config-as-code here).
   vpnProxy: vpnProxy.new(
     wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/gluetun-vpn-proxy.conf'),
+    vpnProvider = "protonvpn",
+    serverCountries = "United States",
+  ),
+
+  // TheLounge: self-hosted web IRC client in PRIVATE mode (config.js public:false -> named users log
+  // in, sessions persist while away). Its IRC traffic is forced through a ProtonVPN/WireGuard tunnel
+  // by an embedded gluetun sidecar killswitch (same pattern as qbittorrent) so the home IP is never
+  // exposed to IRC networks -- TheLounge has no app-level proxy setting for IRC, so the hiding is done
+  // at the network layer (it can't use the HTTP-CONNECT vpn-proxy above). SEPARATE WireGuard key from
+  // qbittorrent/vpn-proxy (the same key on concurrent ProtonVPN sessions flaps). WebUI via Tailscale
+  // L7 ingress. Create logins post-deploy:
+  //   kubectl --context methanol exec deploy/thelounge -- s6-setuidgid abc thelounge add <user>
+  thelounge: thelounge.new(
+    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/thelounge-gluetun.conf'),
+    tailscaleHostname = "thelounge",
     vpnProvider = "protonvpn",
     serverCountries = "United States",
   ),
