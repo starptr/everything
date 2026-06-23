@@ -1,5 +1,6 @@
 local utils = import 'milky-way/lib/utils.libsonnet';
 local images = import 'milky-way/lib/images.libsonnet';
+local kataRuntimeClass = import 'milky-way/lib/kata-runtime-class.libsonnet';
 
 // grand-central -- a single "one-stop-shop" sshd for jumping into my personal machines no
 // matter what NAT/firewall each sits behind. It is a pure relay: nobody gets a shell on it.
@@ -165,6 +166,11 @@ local images = import 'milky-way/lib/images.libsonnet';
             annotations: { 'checksum/config': std.md5(std.manifestJsonEx(configData, '')) },
           },
           spec: {
+            // Run this internet-facing SSH bastion inside a kata microVM (see
+            // lib/kata-runtime-class.libsonnet) so a container/sshd escape is confined to a
+            // throwaway guest kernel instead of pivoting into the methanol host node. The only
+            // persisted state is the host-key PVC; everything else is the read-only ConfigMap.
+            runtimeClassName: kataRuntimeClass.name,
             tolerations: [
               { key: 'ephemeral', operator: 'Exists', effect: 'NoSchedule' },
             ],
