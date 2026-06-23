@@ -38,6 +38,12 @@ local images = import 'milky-way/lib/images.libsonnet';
     serverRegions=null,                 // optional SERVER_REGIONS
     tz='America/Los_Angeles',
     controlPort=8000,
+    // Control-server routes exposed WITHOUT auth (gluetun v3.39+ locks the control server by
+    // default). The default exposes only GET /v1/publicip/ip (gluetun's own liveness probe + the
+    // leak-tests read the VPN exit IP from it). A host that needs more passes an extended list --
+    // e.g. kubo adds 'GET /v1/portforward' to read the NAT-PMP forwarded port. Keep the default as
+    // the single publicip route so existing callers render a byte-identical config.toml.
+    publicControlRoutes=['GET /v1/publicip/ip'],
     // Cluster CIDRs that must stay reachable through the killswitch (k3s defaults; verified against
     // the methanol cluster: pod 10.42.0.0/16, service 10.43.0.0/16). Re-check if networking changes.
     firewallOutboundSubnets='10.42.0.0/16,10.43.0.0/16',
@@ -68,12 +74,16 @@ local images = import 'milky-way/lib/images.libsonnet';
     controlPort:: controlPort,          // re-exported so the host can build probes / the Service
     httpProxyPort:: httpProxyPort,      // re-exported (meaningful when httpProxy) so the host can build its Service
 
-    // Control-server auth config: make ONLY GET /v1/publicip/ip public so probes + the leak-test
-    // can read the VPN exit IP, while everything else stays locked (gluetun v3.39+ default).
+    // Control-server auth config: expose `publicControlRoutes` WITHOUT auth, while everything else
+    // stays locked (gluetun v3.39+ default). Default = only GET /v1/publicip/ip so probes + the
+    // leak-tests can read the VPN exit IP; a host can extend it (e.g. kubo adds GET /v1/portforward
+    // to read the forwarded port). One unauth role holds every route -- the role name is just a
+    // label and doesn't restrict. With the default single route this renders byte-identically to
+    // the previous hardcoded config, so qbittorrent/thelounge/vpn-proxy are unchanged.
     local controlConfigToml = std.join('\n', [
       '[[roles]]',
       'name = "publicip"',
-      'routes = ["GET /v1/publicip/ip"]',
+      'routes = [' + std.join(', ', ['"%s"' % r for r in publicControlRoutes]) + ']',
       'auth = "none"',
       '',
     ]),

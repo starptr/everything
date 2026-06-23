@@ -114,6 +114,15 @@ local images = {
       fullyQualifiedRepository: "ghcr.io/autobrr/autobrr",
       defaultDigest: { hash: "sha256:944b1c438302ed10bef810a49f2eb7f334b5abf578db473bcb8d997db3978227", tagHint: "v1.80.0" },
     },
+    // Kubo (go-ipfs), the reference IPFS implementation -- run here as a VPN-fronted pinned-mirror
+    // node (lib/kubo.libsonnet). Multi-arch INDEX digest (k3s resolves the per-node arch; the index
+    // includes linux/amd64 for methanol), same convention as the *arr/qbittorrent pins; tagHint is
+    // the readable version. v0.42.0 has the Provide.* config section (Provide.Strategy); older kubo
+    // calls it Reprovider.Strategy. Re-resolve with `docker buildx imagetools inspect ipfs/kubo:latest`.
+    kubo: {
+      fullyQualifiedRepository: "ipfs/kubo",
+      defaultDigest: { hash: "sha256:8907cb0cc1ad5798f6bb1bb1341a800990c268e021cedfa317e8aa1a33864214", tagHint: "v0.42.0" },
+    },
     // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
     // matches methanol -- so the digest below is that manifest, not a multi-arch index.
     "atmoz-sftp": {

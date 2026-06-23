@@ -26,6 +26,8 @@ local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
 local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
+local kubo = import 'milky-way/lib/kubo.libsonnet';
+local kuboTest = import 'milky-way/lib/kubo-test.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 // Reusable public keys (SSH). Source of truth: magic/common/public_keys.json, reached via the
@@ -446,6 +448,27 @@ local pubkeys = import 'magic/common/public_keys.json';
   // Continuously asserts qbittorrent's egress is the VPN exit (not the home IP) and exercises a real
   // ipleak.net torrent magnet; crashloops on a detected leak.
   gluetunLeakTest: gluetunLeakTest.new(),
+
+  // kubo (IPFS) pinned-mirror node, VPN-fronted (gluetun/ProtonVPN with NAT-PMP port forwarding, so
+  // it's a reachable provider, not just outbound). Gateway.NoFetch + Provide.Strategy=pinned mean it
+  // only serves and announces allowlisted (pinned) content; the home IP is never exposed to the IPFS
+  // swarm. The RPC API is locked down with API.Authorizations and is ClusterIP-only (admin RPC must
+  // never be exposed). Its OWN ProtonVPN WireGuard session/key (a 4th concurrent tunnel; the same key
+  // on concurrent sessions flaps), read from the sops-managed .conf like qbittorrent.
+  kubo: kubo.new(
+    testRpcToken = secrets.kubo.rpcTokenForTest,
+    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/kubo-gluetun.conf'),
+    vpnProvider = "protonvpn",
+    serverCountries = "United States",
+  ),
+
+  // Scoped verifier: the ONLY authorized RPC client, granted the minimum API.Authorizations
+  // AllowedPaths needed to prove the node mirrors/serves only pinned content (and that its egress is
+  // the VPN). Crashloops on a confirmed violation. Host/ports are read from kubo's Service.
+  kuboTest: kuboTest.new(
+    rpcToken = secrets.kubo.rpcTokenForTest,
+    kuboService = this.kubo.service,
+  ),
 
   cilium: charts.cilium,
 
