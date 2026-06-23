@@ -1,6 +1,9 @@
 { config, pkgs, ... }:
 
 # This file is the equivalent of /etc/nixos/configuration.nix on darwin
+let
+  publicKeys = (import ../../../magic/common/constants.nix { lib = pkgs.lib; }).publicKeys;
+in
 {
   # List packages installed in system profile. To search by name, run:
   # $ nix-env -qaP | grep wget
@@ -120,7 +123,7 @@
     # Add the SAME dedicated public key you put in grand-central's clientKeys (main.jsonnet):
     openssh.authorizedKeys.keys = [
       # "ssh-ed25519 AAAA... grand-central <who>@<host>"   # generated per client; see plan
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKRpVN+BI0l+wj28mUVq3ldRBZUgbsa9CymdCtXF7Vs grand-central yuto.nishida@magnesium-hydroxide"
+      publicKeys.ssh.magnesiumHydroxideForGrandCentral
     ];
   };
 

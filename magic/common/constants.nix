@@ -30,4 +30,7 @@ in {
 
   # MUT: Add any constants here
   jupiter-env-path-rel-to-everythingRepo = ".env.jupiter";
+
+  # Reusable public keys (SSH). Single source of truth: ./public_keys.json.
+  publicKeys = builtins.fromJSON (builtins.readFile ./public_keys.json);
 })

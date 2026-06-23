@@ -89,8 +89,15 @@ milky-way/
 ├── charts.jsonnet          # Helm chart definitions with values
 ├── lib/                    # Reusable Jsonnet libraries
 ├── secrets/                # sops-nix symlinks (READ-ONLY)
-└── vendor/                 # Jsonnet dependencies (tanka-util, etc.)
+└── vendor/                 # Jsonnet library path (tanka-util, etc.)
+    ├── exports -> ../../exports   # repo-root exports/, importable as `exports/...`
+    └── magic   -> ../../magic     # repo-root magic/, importable as `magic/...`
 ```
+
+The `vendor/` symlinks put repo-root dirs on the jsonnet library path. In particular,
+`import 'magic/common/public_keys.json'` resolves through `vendor/magic` — that JSON is the
+single source of truth for reusable public keys (SSH); see `magic/CLAUDE.md`. Don't paste a
+public-key literal into a `.jsonnet`/`.libsonnet` file; reference `pubkeys.ssh.<name>` instead.
 
 ## Secrets Management
 

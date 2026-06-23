@@ -28,6 +28,9 @@ local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
+// Reusable public keys (SSH). Source of truth: magic/common/public_keys.json, reached via the
+// milky-way/vendor/magic -> ../../magic symlink (same mechanism as vendor/exports). See magic/CLAUDE.md.
+local pubkeys = import 'magic/common/public_keys.json';
 {
   local this = self,
   democraticCsiNamespace: {
@@ -405,8 +408,8 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     sftpUser = "mdata",
     nodePort = 30022,
     authorizedKeys = [
-      "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDLrT2/gQXhOz4E4xSphB8EXouild5qNOnZ6ZVXuTnf167z8xxSB10mxNey2gKDaIVig6I/tRFeYy6/N/QutbBlKI/+GNPjGCcVJI0hf7fTZGL4caTW8ggcXRz4LAsFp3JBf6Li0FVrGz5ojD0Etbl54BDn033q/tlVRhme5bXJ6s73yRg04kqdQsWVBRJwyzbUUmCQPrZd9i5Nh4QFVuhZljEyUWIStajE+c9v8OOiY1svv+XjKBjyWphP16HqgzvnEDf5+MQ5AUxE05IvJx43UY43CKTe3evzt4F/IqSdYwYGIQ55DaseRmf5zmHLU8MTTkksmOPQEzJL0nBzAmxyGV3PsMYPoIN+1/gJmxCO6ZaaCxYr9SFK/yoRW5e0PFX433xPhNsITBq7jUrVg6BQ/lr0ntRfvd7pRhFq8v02R3jWokL/99skxp1kjVF42bXEJXYPpHF3XAUhYscjOwmWj8dJgsIsSIKIjh7gRVYxQGrZQXOcJQjMytFgXy7fWHM= yuto@Yutos-MacBook-Pro.local",  // Yuto's Sodium
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPtVvX9uhSWD1DPBIRqgkNzFXqjdqvWB/WtDy4seaiJl",  // 1Password "ssh key - main"
+      pubkeys.ssh.yutoSodium,  // Yuto's Sodium
+      pubkeys.ssh.onePasswordMain,  // 1Password "ssh key - main"
     ],
   ),
 
@@ -425,7 +428,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
     authorizedKeys = [
       // Sodium -- a target pinned to its reverse-listener port 2222 (launchd agent in venus
       // sodium.nix; tunnel priv key in sops secrets/personal/grand-central-tunnel.json).
-      { key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBWjndergDSUeNxqTByOVeon92N6X52NaNydd4XUXR2A grand-central-tunnel-sodium", listenPorts: [2222] },
+      { key: pubkeys.ssh.sodiumForGrandCentral, listenPorts: [2222] },
       // magnesium-hydroxide -- a client (also in Sodium's inbound authorized_keys for the final
       // hop). Bare string: may reach any target, no edits here when targets are added.
       //
@@ -436,7 +439,7 @@ local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
       //   open vnc://localhost:5901
       // (If this client has a `Host sodium` ssh_config block, just: ssh -L 5901:127.0.0.1:5900 sodium)
       // High Performance screen sharing can't traverse grand-central -- it needs native UDP 5900-5902.
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKRpVN+BI0l+wj28mUVq3ldRBZUgbsa9CymdCtXF7Vs grand-central yuto.nishida@magnesium-hydroxide",
+      pubkeys.ssh.magnesiumHydroxideForGrandCentral,
     ],
   ),
 
