@@ -106,13 +106,18 @@ local images = {
       defaultDigest: { hash: "sha256:92d539222696bd312c372ee8c6915141025ea10c1daa1a5ebded2966236fdebf", tagHint: "main" },
     },
     // autobrr: download-automation tool (monitors IRC announce / RSS, matches releases against
-    // filters, forwards each to a download client -- here qBittorrent under a per-filter category).
-    // Multi-arch INDEX digest (k3s resolves the per-node arch), same convention as the *arr/
-    // qbittorrent pins; tagHint is the readable release. Re-resolve with
-    // `docker buildx imagetools inspect ghcr.io/autobrr/autobrr:<tag>`.
+    // filters, forwards each to a download client -- here qBittorrent / Sonarr under a per-filter
+    // category). WHALE-BUILT FORK of upstream v1.80.0 + a one-line RSS patch (see
+    // whale/patches/autobrr-rss-enclosure-type.patch, built in whale/outputs.nix from the
+    // nixpkgs-autobrr input). Why the fork: upstream's RSS enclosure-type check is an exact `==`, so
+    // it drops nekoBT's "application/x-bittorrent;x-scheme-handler/magnet" enclosures, never recovers
+    // the clean magnet, and forwards a base-URL-mangled magnet that Sonarr 404s on (only items that
+    // also carry a torznab `magneturl` attr grab). The patch makes it a prefix match. Digest from
+    // exports/whale/digests/autobrr.txt (written by `nix run ./flake-profiles/whale#autobrr-push`).
+    // DROP THIS FORK and return to ghcr.io/autobrr/autobrr once the fix lands in an upstream release.
     autobrr: {
-      fullyQualifiedRepository: "ghcr.io/autobrr/autobrr",
-      defaultDigest: { hash: "sha256:944b1c438302ed10bef810a49f2eb7f334b5abf578db473bcb8d997db3978227", tagHint: "v1.80.0" },
+      fullyQualifiedRepository: "docker.io/yuto7/autobrr",
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/autobrr.txt") },
     },
     // Kubo (go-ipfs), the reference IPFS implementation -- run here as a VPN-fronted pinned-mirror
     // node (lib/kubo.libsonnet). Multi-arch INDEX digest (k3s resolves the per-node arch; the index

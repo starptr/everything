@@ -7,6 +7,18 @@
   # Images always target the k8s nodes' arch, regardless of the host driving the build.
   imagePkgs = pkgsFor "x86_64-linux";
 
+  # Patched autobrr: v1.80.0 (the version we run) + a one-line RSS fix. The pinned `nixpkgs`
+  # above only has 1.64.0, so we pull autobrr from `nixpkgs-autobrr` (which ships 1.80.0) and
+  # apply ONLY a source patch -- the Go vendorHash and pnpm frontend deps come from nixpkgs
+  # unchanged, so there is no hash to chase. The patch makes the RSS enclosure-type check a
+  # prefix match so nekoBT's "application/x-bittorrent;x-scheme-handler/magnet" enclosures are
+  # accepted and the clean magnet is recovered (upstream uses exact `==` and drops them, which
+  # is why Sonarr 404s on the base-URL-mangled magnet autobrr otherwise forwards). See
+  # whale/patches/autobrr-rss-enclosure-type.patch and milky-way/lib/autobrr.libsonnet.
+  autobrrPatched = (import inputs.nixpkgs-autobrr { system = "x86_64-linux"; }).autobrr.overrideAttrs (old: {
+    patches = (old.patches or []) ++ [ ./patches/autobrr-rss-enclosure-type.patch ];
+  });
+
   # Creates an attrset with two system-keyed targets: the x86_64-linux image and a
   # per-host script to push it to the docker registry.
   # @param name: The name of the docker repository for the image.
@@ -146,6 +158,39 @@
     };
   };
 
+  # autobrr (download automation) -- whale-built so we can ship the patched 1.80.0 binary
+  # (autobrrPatched above). Mirrors the official image's runtime contract that
+  # milky-way/lib/autobrr.libsonnet depends on: `autobrr --config /config` on :7474, with
+  # HOME/XDG_* pointed at /config (autobrr writes config.toml + autobrr.db there; the iSCSI PVC
+  # is mounted at /config and the AUTOBRR__* env + uid/gid 1000 are set by the libsonnet).
+  # cacert is needed for HTTPS feed fetches; tzdata backs the TZ env; dumb-init is PID 1 so k8s
+  # SIGTERM stops the pod promptly (same pattern as the other whale images).
+  autobrr = image-nix-artifacts {
+    name = "autobrr";
+    buildLayeredImageArg = {
+      tag = "latest";
+      contents = [
+        autobrrPatched
+        imagePkgs.cacert
+        imagePkgs.tzdata
+        imagePkgs.dumb-init
+      ];
+      config = {
+        Entrypoint = [ "dumb-init" "--" "${autobrrPatched}/bin/autobrr" "--config" "/config" ];
+        Env = [
+          "HOME=/config"
+          "XDG_CONFIG_HOME=/config"
+          "XDG_DATA_HOME=/config"
+          "SSL_CERT_FILE=${imagePkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          "ZONEINFO=${imagePkgs.tzdata}/share/zoneinfo"
+        ];
+        WorkingDir = "/app";
+        ExposedPorts = { "7474/tcp" = {}; };
+        Volumes = { "/config" = {}; };
+      };
+    };
+  };
+
   # `nix develop` target for a long-lived `skopeo login`. Uses the same skopeo (and
   # nixpkgs) as the push-scripts, so the auth.json written here is always compatible.
   mkAuthShell = pkgs: pkgs.mkShell {
@@ -164,11 +209,14 @@ in {
       mopidy-push = mopidy.push-script.x86_64-linux;
       grand-central-image = grand-central.image.x86_64-linux;
       grand-central-push = grand-central.push-script.x86_64-linux;
+      autobrr-image = autobrr.image.x86_64-linux;
+      autobrr-push = autobrr.push-script.x86_64-linux;
     };
     aarch64-darwin = {
       whale-push-example = example-artifacts.push-script.aarch64-darwin;
       mopidy-push = mopidy.push-script.aarch64-darwin;
       grand-central-push = grand-central.push-script.aarch64-darwin;
+      autobrr-push = autobrr.push-script.aarch64-darwin;
     };
   };
 

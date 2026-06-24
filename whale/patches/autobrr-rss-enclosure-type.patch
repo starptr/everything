@@ -1,0 +1,19 @@
+autobrr RSS feed: accept enclosure types that carry parameters after
+"application/x-bittorrent" (e.g. "application/x-bittorrent;x-scheme-handler/magnet",
+which nekoBT emits). Upstream (v1.80.0 and main) compares with exact equality, so such
+enclosures are skipped and the clean magnet in the <enclosure> is never recovered into
+MagnetURI -- autobrr then forwards a base-URL-mangled magnet that the *arr clients 404 on.
+Matching by prefix lets the existing magnet-recovery (rss.go:163-166) run. See
+https://github.com/autobrr/autobrr/blob/v1.80.0/internal/feed/rss.go
+
+--- a/internal/feed/rss.go
++++ b/internal/feed/rss.go
+@@ -149,7 +149,7 @@
+ 			rls.Protocol = domain.ReleaseProtocolNzb
+ 			break
+ 		}
+-		if e.Type == "application/x-bittorrent" {
++		if strings.HasPrefix(e.Type, "application/x-bittorrent") {
+ 			if j.Feed.Settings != nil && j.Feed.Settings.DownloadType == domain.FeedDownloadTypeNzb {
+ 				continue
+ 			}
