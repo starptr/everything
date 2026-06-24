@@ -30,12 +30,21 @@ local images = import 'milky-way/lib/images.libsonnet';
 // Instead the wrapper lets init create the repo, then re-asserts our keys via `ipfs config` every
 // boot (declarative for the keys we manage; kubo owns identity/datastore/pinset on the PVC).
 //
-// RPC API is locked down with API.Authorizations (admin RPC must NEVER be open): the only caller is
-// the test service, granted a bearer token scoped to the minimum AllowedPaths needed to verify the
-// node (see testAllowedPaths). Storage: the repo (identity/datastore/pinset) is on iSCSI (RWO) --
-// the datastore does file locking, unsafe over NFS (same rationale as jellyfin's SQLite) -- so an
-// RWO PVC means the old pod must release it before a new one mounts, hence strategy: Recreate.
-// ClusterIP-only (no Ingress).
+// RPC API is locked down with API.Authorizations (admin RPC must NEVER be open): there are two bearer
+// grants -- the test service (scoped to the minimum AllowedPaths needed to verify the node, see
+// testAllowedPaths) and the WebUI (full /api/v0, see webuiAllowedPaths). Storage: the repo
+// (identity/datastore/pinset) is on iSCSI (RWO) -- the datastore does file locking, unsafe over NFS
+// (same rationale as jellyfin's SQLite) -- so an RWO PVC means the old pod must release it before a new
+// one mounts, hence strategy: Recreate.
+//
+// WebUI: kubo bundles a WebUI served at /webui on the API port (NOT gated by API.Authorizations; only
+// /api/v0 is). We expose it tailnet-only via an nginx SIDECAR + a Tailscale L7 ingress -- the sidecar
+// proxies the ingress to kubo over loopback (127.0.0.1, shared pod netns -- NOT through the VPN tunnel;
+// its inbound port is opened in gluetun's killswitch like the others) and INJECTS the webui bearer token
+// so the browser never holds it (and rewrites Origin to kubo's safelisted loopback, since kubo 403s
+// browser-UA requests whose Origin isn't safelisted -- see the sidecar config). The admin RPC itself
+// stays ClusterIP-only -- only the sidecar's webui port is exposed. Because Gateway.NoFetch=true, /webui
+// only renders if the bundled WebUI CID is local, so the wrapper pins it (webuiCid) on boot.
 {
   // The minimum RPC AllowedPaths the verifier needs (single source of truth -- baked into
   // API.Authorizations by the wrapper, and the intended contract for kubo-test). AllowedPaths are
@@ -59,6 +68,8 @@ local images = import 'milky-way/lib/images.libsonnet';
     wireguardPrivateKey,                // required -> gluetun (ProtonVPN/WireGuard), its OWN session/key
     vpnProvider,                        // required: must support NAT-PMP port forwarding, e.g. 'protonvpn'
     serverCountries,                    // required: SERVER_COUNTRIES, e.g. 'United States'
+    webuiRpcToken,                      // required -> API.Authorizations 'webui' bearer secret, injected by the sidecar
+    tailscaleHostname,                  // required, NO default: tailnet MagicDNS name (must be unique tailnet-wide)
     name='kubo',
     namespace='default',
     image=images.kubo.fullyQualifiedImageReferencePinned,
@@ -70,6 +81,11 @@ local images = import 'milky-way/lib/images.libsonnet';
     ipfsPath='/data/ipfs',
     testAuthName='test',                // API.Authorizations entry name for the verifier
     testAllowedPaths=self.defaultTestAllowedPaths,
+    webuiAuthName='webui',              // API.Authorizations entry name for the WebUI
+    webuiAllowedPaths=['/api/v0'],      // full RPC: everything the WebUI needs for normal operation
+    webuiProxyPort=8081,                // nginx sidecar listen port (fronts /webui + RPC, injects the token)
+    webuiCid='bafybeihxglpcfyarpm7apn7xpezbuoqgk3l5chyk7w4gvrjwk45rqohlmm',  // bundled WebUI (ipfs-webui v4.12.0) that kubo v0.42.0's /webui redirects to; pinned so NoFetch can serve it. Update on kubo bumps.
+    nginxImage=images.nginx.fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
 
@@ -81,6 +97,44 @@ local images = import 'milky-way/lib/images.libsonnet';
     // Compact JSON array of the grant, injected into the wrapper as an env var so API.Authorizations
     // is single-sourced from this jsonnet (no newlines, so it embeds cleanly into the shell --json arg).
     local allowedPathsJson = std.manifestJsonEx(testAllowedPaths, '', ''),
+    local webuiAllowedPathsJson = std.manifestJsonEx(webuiAllowedPaths, '', ''),
+
+    // The nginx WebUI-proxy sidecar config. It carries the bearer token, so it lives in a Secret (below),
+    // not a ConfigMap. Proxies everything to kubo over loopback (NOT the VPN), and injects the token so the
+    // browser never holds it. kubo enforces Origin-based RPC security for BROWSER requests (it flags a
+    // browser by a Mozilla User-Agent) and 403s unless the Origin is safelisted -- and it ALWAYS safelists
+    // its own loopback origin. So set Origin to http://127.0.0.1:<apiPort> (do NOT strip it: a browser
+    // request with no Origin still 403s) and drop Referer. The browser's real calls are same-origin, so it
+    // ignores the resulting Access-Control-Allow-Origin -- no kubo API.HTTPHeaders/CORS config is needed.
+    // Streaming/large-upload friendly.
+    //
+    // First-load shim (the `~ ^/(webui/?)?$` location): the bundled WebUI has no same-origin / ?api=
+    // default, so on a fresh browser it tries localhost:5001 (the user's OWN machine) and shows "Could
+    // not connect". So serve a tiny page at / and /webui that pre-seeds the WebUI's saved RPC address
+    // (localStorage 'ipfsApi', read back through asAPIOptions -> a plain origin URL is accepted) to THIS
+    // origin, then sends the browser to the app at /ipfs/<webuiCid>/. localStorage is per-origin, so the
+    // app reads it and calls /api/v0 here, where the proxy injects the token. Everything else (the app's
+    // own /ipfs/<cid>/ assets + /api/v0) falls through to the proxy below.
+    local nginxConf = (|||
+      server {
+        listen %(webuiProxyPort)s;
+        location ~ ^/(webui/?)?$ {
+          default_type text/html;
+          return 200 "<!doctype html><meta charset='utf-8'><title>IPFS WebUI</title><script>try{localStorage.setItem('ipfsApi',JSON.stringify(location.origin))}catch(e){}location.replace('/ipfs/%(webuiCid)s/')</script>";
+        }
+        location / {
+          proxy_pass http://127.0.0.1:%(apiPort)s;
+          proxy_set_header Authorization "Bearer %(token)s";
+          proxy_set_header Origin "http://127.0.0.1:%(apiPort)s";
+          proxy_set_header Referer "";
+          proxy_http_version 1.1;
+          proxy_buffering off;
+          proxy_request_buffering off;
+          client_max_body_size 0;
+          proxy_read_timeout 1h;
+        }
+      }
+    |||) % { webuiProxyPort: webuiProxyPort, apiPort: apiPort, token: webuiRpcToken, webuiCid: webuiCid },
 
     // The kubo container's command. Static policy is re-asserted every boot; the dynamic swarm
     // listen/announce addresses are wired from gluetun's forwarded port (see header for why a wrapper
@@ -105,8 +159,10 @@ local images = import 'milky-way/lib/images.libsonnet';
       # Bound the swarm so gluetun (which tracks every connection in its firewall/netns) doesn't OOM:
       # a pinned mirror that serves/announces pinned content needs no large peer set.
       ipfs config --json Swarm.ConnMgr '{"Type":"basic","LowWater":30,"HighWater":100,"GracePeriod":"20s"}'
+      # Two bearer grants in ONE call (the key is overwritten wholesale): the scoped test verifier and the
+      # full-/api/v0 WebUI (consumed by the nginx sidecar, which injects this token on the browser's behalf).
       ipfs config --json API.Authorizations \
-        "{\"$TEST_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_TEST_RPC_TOKEN\",\"AllowedPaths\":$ALLOWED_PATHS_JSON}}"
+        "{\"$TEST_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_TEST_RPC_TOKEN\",\"AllowedPaths\":$ALLOWED_PATHS_JSON},\"$WEBUI_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_WEBUI_RPC_TOKEN\",\"AllowedPaths\":$WEBUI_ALLOWED_PATHS_JSON}}"
 
       # --- dynamic: wait for gluetun's NAT-PMP forwarded port, then listen on + announce <vpn-exit>:PORT ---
       # gluetun's up-command writes the port to /pf/port. Wait for a non-empty, non-zero value: gluetun
@@ -132,6 +188,26 @@ local images = import 'milky-way/lib/images.libsonnet';
         "[\"/ip4/$EXIT_IP/tcp/$PORT\",\"/ip4/$EXIT_IP/udp/$PORT/quic-v1\"]"
       echo "$PORT" > /tmp/announced-port
 
+      # Pin the bundled WebUI so kubo's /webui works on this NoFetch node (which serves /webui only if the
+      # content is already local). Best-effort + backgrounded so it never blocks or crashes the daemon: it
+      # waits for the RPC to accept the webui token, then POSTs pin/add for the WebUI CID. busybox wget
+      # supports --header/--post-data; this process survives the `exec` below and keeps polling.
+      pin_webui() {
+        n=0
+        while [ "$n" -lt 60 ]; do
+          if wget -q -O /dev/null \
+               --header="Authorization: Bearer $KUBO_WEBUI_RPC_TOKEN" --post-data='' \
+               "http://127.0.0.1:%(apiPort)s/api/v0/pin/add?arg=$WEBUI_CID&progress=false"; then
+            echo "pinned webui $WEBUI_CID"
+            return 0
+          fi
+          n=$((n + 1))
+          sleep 5
+        done
+        echo "WARN: could not pin webui $WEBUI_CID; kubo /webui will error until it is pinned"
+      }
+      pin_webui &
+
       exec ipfs daemon
     |||) % { ipfsPath: ipfsPath, apiPort: apiPort, gatewayPort: gatewayPort, controlPort: controlPort },
 
@@ -155,7 +231,7 @@ local images = import 'milky-way/lib/images.libsonnet';
     |||) % { controlPort: controlPort },
 
     // The VPN sidecar fragments, embedded into this pod below. firewallInputPorts opens the gateway +
-    // API + control ports through the killswitch (cluster side); the forwarded SWARM port is auto-
+    // API + control + webui-proxy ports through the killswitch (cluster side); the forwarded SWARM port is auto-
     // opened on the VPN interface by gluetun (not here). The up-command publishes the forwarded port
     // to the shared /pf volume for the wrapper; publicControlRoutes exposes /v1/portforward so the
     // wrapper (and the verifier) can read it / the VPN exit IP.
@@ -168,7 +244,7 @@ local images = import 'milky-way/lib/images.libsonnet';
       serverCountries=serverCountries,
       controlPort=controlPort,
       firewallOutboundSubnets='%s,%s' % [podCidr, svcCidr],
-      firewallInputPorts=[gatewayPort, apiPort, controlPort],
+      firewallInputPorts=[gatewayPort, apiPort, controlPort, webuiProxyPort],
       portForwarding=true,
       portForwardingUpCommand="/bin/sh -c 'echo {{PORT}} > /pf/port'",
       publicControlRoutes=['GET /v1/publicip/ip', 'GET /v1/portforward'],
@@ -185,7 +261,17 @@ local images = import 'milky-way/lib/images.libsonnet';
       kind: 'Secret',
       metadata: { name: name + '-rpc-auth', namespace: namespace },
       type: 'Opaque',
-      stringData: { KUBO_TEST_RPC_TOKEN: testRpcToken },
+      stringData: { KUBO_TEST_RPC_TOKEN: testRpcToken, KUBO_WEBUI_RPC_TOKEN: webuiRpcToken },
+    },
+
+    // nginx WebUI-proxy config (carries the bearer token -> Secret, not ConfigMap), mounted over the
+    // stock /etc/nginx/conf.d so it's the only server block.
+    nginxConfigSecret: {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: name + '-webui-proxy', namespace: namespace },
+      type: 'Opaque',
+      stringData: { 'default.conf': nginxConf },
     },
 
     configMapWrapper: {
@@ -219,7 +305,7 @@ local images = import 'milky-way/lib/images.libsonnet';
             labels: {} + this.deployment.spec.selector.matchLabels,
             // The wrapper (ConfigMap mount) and token (Secret via envFrom) don't roll the Deployment
             // on their own; hashing them into the template makes a change to either roll the pod.
-            annotations: { 'checksum/config': std.md5(wrapperScript + testRpcToken) },
+            annotations: { 'checksum/config': std.md5(wrapperScript + testRpcToken + webuiRpcToken + nginxConf + webuiCid) },
           },
           spec: {
             // kubo runs as uid `ipfs`; fsGroup makes the iSCSI repo volume group-writable so it can
@@ -273,8 +359,11 @@ local images = import 'milky-way/lib/images.libsonnet';
                   { name: 'IPFS_PATH', value: ipfsPath },
                   { name: 'TEST_AUTH_NAME', value: testAuthName },
                   { name: 'ALLOWED_PATHS_JSON', value: allowedPathsJson },
+                  { name: 'WEBUI_AUTH_NAME', value: webuiAuthName },
+                  { name: 'WEBUI_ALLOWED_PATHS_JSON', value: webuiAllowedPathsJson },
+                  { name: 'WEBUI_CID', value: webuiCid },
                 ],
-                envFrom: [{ secretRef: { name: this.secret.metadata.name } }],  // KUBO_TEST_RPC_TOKEN
+                envFrom: [{ secretRef: { name: this.secret.metadata.name } }],  // KUBO_TEST_RPC_TOKEN + KUBO_WEBUI_RPC_TOKEN
                 ports: [
                   { name: 'api', containerPort: apiPort },
                   { name: 'gateway', containerPort: gatewayPort },
@@ -307,11 +396,31 @@ local images = import 'milky-way/lib/images.libsonnet';
                   limits: { memory: '2Gi', cpu: '2' },
                 },
               },
+              // WebUI-proxy sidecar: fronts kubo's /webui + RPC for the tailnet ingress, injecting the
+              // webui bearer token so the browser never holds it. Reaches kubo over loopback (shared
+              // netns), so its inbound port is opened in gluetun's firewallInputPorts above.
+              {
+                name: name + '-webui-proxy',
+                image: nginxImage,
+                ports: [{ name: 'webui', containerPort: webuiProxyPort }],
+                readinessProbe: {
+                  tcpSocket: { port: 'webui' },
+                  periodSeconds: 15,
+                },
+                volumeMounts: [
+                  { name: 'webui-proxy-config', mountPath: '/etc/nginx/conf.d', readOnly: true },
+                ],
+                resources: {
+                  requests: { memory: '16Mi', cpu: '10m' },
+                  limits: { memory: '64Mi', cpu: '200m' },
+                },
+              },
             ],
             volumes: this.vpn.volumes + [
               { name: 'repo', persistentVolumeClaim: { claimName: this.configPvc.metadata.name } },
               { name: 'wrapper', configMap: { name: this.configMapWrapper.metadata.name } },
               { name: 'pf', emptyDir: {} },
+              { name: 'webui-proxy-config', secret: { secretName: this.nginxConfigSecret.metadata.name } },
             ],
           },
         },
@@ -342,8 +451,45 @@ local images = import 'milky-way/lib/images.libsonnet';
             port: controlPort,
             targetPort: utils.assertEqualAndReturn(this.deployment.spec.template.spec.containers[0].ports[0].name, 'gluetun-ctrl'),
           },
+          {
+            // the nginx WebUI-proxy sidecar (containers[2]); the tailnet ingress targets this port.
+            name: 'webui',
+            port: webuiProxyPort,
+            targetPort: utils.assertEqualAndReturn(this.deployment.spec.template.spec.containers[2].ports[0].name, 'webui'),
+          },
         ],
         type: 'ClusterIP',
+      },
+    },
+
+    // Tailnet-only L7 ingress (no funnel) to kubo's built-in WebUI, fronted by the token-injecting nginx
+    // sidecar. The admin RPC stays ClusterIP-only -- only the sidecar's webui port is reachable here.
+    // Mirrors lib/qbittorrent.libsonnet's tailscale ingress. tailscaleHostname must be unique tailnet-wide.
+    ingress: {
+      apiVersion: 'networking.k8s.io/v1',
+      kind: 'Ingress',
+      metadata: {
+        name: name + '-webui',
+        namespace: namespace,
+        annotations: { 'tailscale.com/funnel': 'false' },
+      },
+      spec: {
+        ingressClassName: 'tailscale',
+        tls: [{ hosts: [tailscaleHostname] }],
+        rules: [{
+          http: {
+            paths: [{
+              path: '/',
+              pathType: 'Prefix',
+              backend: {
+                service: {
+                  name: this.service.metadata.name,
+                  port: { number: utils.assertEqualAndReturn(this.service.spec.ports[3].port, webuiProxyPort) },
+                },
+              },
+            }],
+          },
+        }],
       },
     },
   },

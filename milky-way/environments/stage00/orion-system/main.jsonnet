@@ -452,11 +452,15 @@ local pubkeys = import 'magic/common/public_keys.json';
   // kubo (IPFS) pinned-mirror node, VPN-fronted (gluetun/ProtonVPN with NAT-PMP port forwarding, so
   // it's a reachable provider, not just outbound). Gateway.NoFetch + Provide.Strategy=pinned mean it
   // only serves and announces allowlisted (pinned) content; the home IP is never exposed to the IPFS
-  // swarm. The RPC API is locked down with API.Authorizations and is ClusterIP-only (admin RPC must
-  // never be exposed). Its OWN ProtonVPN WireGuard session/key (a 4th concurrent tunnel; the same key
-  // on concurrent sessions flaps), read from the sops-managed .conf like qbittorrent.
+  // swarm. The admin RPC API is locked down with API.Authorizations and stays ClusterIP-only; kubo's
+  // built-in /webui is exposed tailnet-only (https://ipfs-webui.<tailnet>.ts.net) via a token-injecting
+  // nginx sidecar, using the dedicated full-/api/v0 webui token. Its OWN ProtonVPN WireGuard session/key
+  // (a 4th concurrent tunnel; the same key on concurrent sessions flaps), read from the sops-managed
+  // .conf like qbittorrent.
   kubo: kubo.new(
     testRpcToken = secrets.kubo.rpcTokenForTest,
+    webuiRpcToken = secrets.kubo.rpcTokenForIpfsWebui,
+    tailscaleHostname = "ipfs-webui",
     wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/kubo-gluetun.conf'),
     vpnProvider = "protonvpn",
     serverCountries = "United States",

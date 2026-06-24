@@ -128,6 +128,15 @@ local images = {
       fullyQualifiedRepository: "ipfs/kubo",
       defaultDigest: { hash: "sha256:8907cb0cc1ad5798f6bb1bb1341a800990c268e021cedfa317e8aa1a33864214", tagHint: "v0.42.0" },
     },
+    // Stock nginx, used as kubo's WebUI-proxy sidecar (lib/kubo.libsonnet): it fronts kubo's built-in
+    // /webui on a tailnet ingress and injects the bearer token so the browser never holds it. Multi-arch
+    // INDEX digest (k3s resolves the per-node arch; the index includes linux/amd64 for methanol), same
+    // convention as the *arr/qbittorrent/kubo pins; tagHint is the readable version. Re-resolve with
+    // `docker buildx imagetools inspect nginx:1.27-alpine`.
+    nginx: {
+      fullyQualifiedRepository: "nginx",
+      defaultDigest: { hash: "sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10", tagHint: "1.27-alpine" },
+    },
     // Minimal OpenSSH SFTP-only server. The :alpine tag is a single-arch (linux/amd64) manifest --
     // matches methanol -- so the digest below is that manifest, not a multi-arch index.
     "atmoz-sftp": {
