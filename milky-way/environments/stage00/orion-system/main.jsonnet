@@ -18,6 +18,7 @@ local thelounge = import 'milky-way/lib/thelounge.libsonnet';
 local sonarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
+local seanime = import 'milky-way/lib/seanime.libsonnet';
 local autobrr = import 'milky-way/lib/autobrr.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
 local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
@@ -220,6 +221,21 @@ local pubkeys = import 'magic/common/public_keys.json';
   jellyfin: jellyfin.new(
     tailscaleHostname = "jellyfin",
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
+  ),
+
+  // Seanime: self-hosted anime media server reading the shared mdata library READ-ONLY. Scans and
+  // streams /data/library/... (same PVC as jellyfin/sonarr) but never writes it -- it tracks watch
+  // progress in its own SQLite DB on a separate iSCSI RWO config PVC. First-run is interactive
+  // (AniList OAuth in the UI), so no Secret/buildarr. WebUI via Tailscale L7 ingress. Post-deploy,
+  // set the library folder to /data/library in the UI.
+  seanimeRo: seanime.new(
+    name = "seanime-ro",
+    tailscaleHostname = "seanime-ro",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
+    mediaReadOnly = true,
+    // Server password (sops) -> satisfies Seanime's privileged-settings CSRF guard over the tailnet
+    // L7 ingress (origin-trust alone can't); the UI prompts for it on load. See lib/seanime.libsonnet.
+    serverPassword = secrets.seanime.serverPassword,
   ),
 
   // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against

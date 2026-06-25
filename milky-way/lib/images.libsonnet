@@ -72,6 +72,17 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/jellyfin",
       defaultDigest: { hash: "sha256:bb8ff21a879498dbdead9efe4d3de2070dbda2b9fb35b9a43501055f6e526384", tagHint: "10.11.11ubu2404-ls37" },
     },
+    // Seanime: self-hosted anime/manga media server (web UI + AniList sync) -- run here as a
+    // READ-ONLY viewer of the shared mdata library (lib/seanime.libsonnet). No official upstream
+    // image; docker.io/ju1js/seanime is the minimal single-purpose community build (server on
+    // :43211, datadir /home/seanime/.config/Seanime, runs as UID 1000). Multi-arch INDEX digest
+    // (k3s resolves the per-node arch; the index includes linux/amd64 for methanol), same convention
+    // as the *arr/qbittorrent/jellyfin pins; tagHint is the bundled Seanime version. Re-resolve with
+    // `docker buildx imagetools inspect docker.io/ju1js/seanime:latest`.
+    seanime: {
+      fullyQualifiedRepository: "docker.io/ju1js/seanime",
+      defaultDigest: { hash: "sha256:566920283998e14fdbf5e74a2e89247b181e261d249640d770c2b84649cfc2f1", tagHint: "v3.8.7" },
+    },
     // TheLounge web IRC client (LinuxServer.io). Multi-arch INDEX digest (k3s resolves the per-node
     // arch), same convention as the *arr/qbittorrent/jellyfin pins; tagHint is the readable
     // LinuxServer version. Re-resolve with
@@ -174,6 +185,7 @@ local images = {
       tagForOpenclaw: "1.37",
       tagForQbittorrent: "1.37",
       tagForThelounge: "1.37",
+      tagForSeanime: "1.37",
       tagForKataMicrovmTest: "1.36",
       tagForExampleZfs: "1.36",
     },
@@ -186,6 +198,7 @@ local images = {
       [if std.objectHas(prev, "tagForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForOpenclaw),
       [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForQbittorrent),
       [if std.objectHas(prev, "tagForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForThelounge),
+      [if std.objectHas(prev, "tagForSeanime") then "fullyQualifiedImageReferenceTaggedForSeanime"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForSeanime),
       [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForKataMicrovmTest),
       [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForExampleZfs),
       [if std.objectHas(prev, "digestForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorIngressTest),
@@ -201,6 +214,7 @@ local images = {
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForOpenclaw") then "fullyQualifiedImageReferenceTaggedForOpenclaw"]: prev.fullyQualifiedImageReferenceTaggedForOpenclaw,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: prev.fullyQualifiedImageReferenceTaggedForQbittorrent,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: prev.fullyQualifiedImageReferenceTaggedForThelounge,
+      [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForSeanime") then "fullyQualifiedImageReferenceTaggedForSeanime"]: prev.fullyQualifiedImageReferenceTaggedForSeanime,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: prev.fullyQualifiedImageReferenceTaggedForKataMicrovmTest,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: prev.fullyQualifiedImageReferenceTaggedForExampleZfs,
       [if std.objectHas(prev, "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: prev.fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest,
