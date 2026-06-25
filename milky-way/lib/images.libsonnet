@@ -154,12 +154,14 @@ local images = {
       fullyQualifiedRepository: "docker.io/atmoz/sftp",
       defaultDigest: { hash: "sha256:a6cb3eb29202ca7f57e73bb7e527286e66e0e822fff65609207c7e0ef2d135a3", tagHint: "alpine" },
     },
-    // traefik/whoami is shared by the two tailscale-operator smoke tests at the same digest;
-    // one digestFor<Consumer> per consumer, following the per-consumer convention.
+    // traefik/whoami is shared by the tailscale-operator smoke tests and the Traefik+cert-manager
+    // wildcard-cert smoke test at the same digest; one digestFor<Consumer> per consumer, following
+    // the per-consumer convention.
     whoami: {
       fullyQualifiedRepository: "traefik/whoami",
       digestForTailscaleOperatorIngressTest: { hash: "sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab" },
       digestForTailscaleOperatorNetworkL3Test: { hash: "sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab" },
+      digestForTraefikAcmeTest: { hash: "sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab" },
     },
     // Third-party images that lack a digest pin: migrated off inline tag strings, one tag each.
     "calibre-web-automated": {
@@ -203,6 +205,7 @@ local images = {
       [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForExampleZfs),
       [if std.objectHas(prev, "digestForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorIngressTest),
       [if std.objectHas(prev, "digestForTailscaleOperatorNetworkL3Test") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorNetworkL3Test),
+      [if std.objectHas(prev, "digestForTraefikAcmeTest") then "fullyQualifiedImageReferencePinnedForTraefikAcmeTest"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTraefikAcmeTest),
     }
     for field in std.objectFields(this.raw)
   },
@@ -219,6 +222,7 @@ local images = {
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: prev.fullyQualifiedImageReferenceTaggedForExampleZfs,
       [if std.objectHas(prev, "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: prev.fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest,
       [if std.objectHas(prev, "fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test"]: prev.fullyQualifiedImageReferencePinnedForTailscaleOperatorNetworkL3Test,
+      [if std.objectHas(prev, "fullyQualifiedImageReferencePinnedForTraefikAcmeTest") then "fullyQualifiedImageReferencePinnedForTraefikAcmeTest"]: prev.fullyQualifiedImageReferencePinnedForTraefikAcmeTest,
     }
     for field in std.objectFields(this.embellished)
   },

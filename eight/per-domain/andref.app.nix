@@ -70,6 +70,24 @@
     value = "51.222.147.236";
   };
 
+  # Wildcard + apex for the Traefik / cert-manager Let's Encrypt DNS-01 smoke test
+  # (milky-way orion-system). Both CNAME to the home-IP DDNS target (same pattern as
+  # grand-central) so a wildcard cert can be obtained and served by Traefik on methanol.
+  # DNS-only (grey cloud); the /-ddns$/ rejectlist does not match these labels.
+  "test-traefik-acme" = {
+    octodns.cloudflare = { auto-ttl = true; };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
+
+  "*.test-traefik-acme" = {
+    octodns.cloudflare = { auto-ttl = true; };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
+
   old = {
     octodns.cloudflare = { auto-ttl = true; };
     ttl = 300;

@@ -9,6 +9,8 @@
   "spec": {
     "contextNames": ["methanol"],
 
-    "namespace": "default"
+    "namespace": "default",
+
+    "applyStrategy": "server"
   }
 }

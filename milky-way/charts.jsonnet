@@ -23,6 +23,20 @@ local helm = tanka.helm.new(std.thisFile);
       persistence: { enabled: true },
     },
   }),
+  // cert-manager issues the Let's Encrypt certs (ACME DNS-01 via Cloudflare). It owns issuance
+  // cluster-wide and stores each cert in a Secret that every Traefik pod reads -- unlike Traefik's
+  // file-based acme.json, this is safe once orion-system grows past a single node. crds.enabled
+  // renders the (large) CRDs into this manifest set; the env applies them server-side (see
+  // environments/stage00/orion-system/spec.json) so they don't hit the client-side annotation limit.
+  certManager: helm.template("cert-manager", "./charts/cert-manager", {
+    namespace: "cert-manager",
+    values: {
+      crds: { enabled: true },
+      // startupapicheck is a Helm post-install HOOK Job; Tanka has no hook lifecycle, so it would be
+      // applied as a plain Job that races the webhook. Skip it -- readiness is checked out-of-band.
+      startupapicheck: { enabled: false },
+    },
+  }),
   cilium: helm.template("cilium", "./charts/cilium", {
     namespace: "kube-system",
     values: {

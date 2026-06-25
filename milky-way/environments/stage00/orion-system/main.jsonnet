@@ -30,12 +30,24 @@ local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local kubo = import 'milky-way/lib/kubo.libsonnet';
 local kuboTest = import 'milky-way/lib/kubo-test.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
+local letsEncryptCloudflare = import 'milky-way/lib/letsencrypt-cloudflare.libsonnet';
+local testTraefikAcme = import 'milky-way/lib/test-traefik-acme-ingress.libsonnet';
 local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
 // Reusable public keys (SSH). Source of truth: magic/common/public_keys.json, reached via the
 // milky-way/vendor/magic -> ../../magic symlink (same mechanism as vendor/exports). See magic/CLAUDE.md.
 local pubkeys = import 'magic/common/public_keys.json';
 {
   local this = self,
+
+  // Shared name of the Let's Encrypt ClusterIssuer in use, so the issuers (defined in
+  // lib/letsencrypt-cloudflare) and anything requesting a cert from one (the test workload below)
+  // reference the same string and can't drift. Start on STAGING to validate the DNS-01 wildcard flow
+  // without burning prod rate limits; flip `activeLetsEncryptIssuerName` to the prod issuer once
+  // staging has verified end-to-end (cert-manager then re-issues into the same Secret from prod).
+  local letsEncryptStagingIssuerName = 'letsencrypt-staging',
+  local letsEncryptProdIssuerName = 'letsencrypt-prod',
+  local activeLetsEncryptIssuerName = letsEncryptProdIssuerName,
+
   democraticCsiNamespace: {
     apiVersion: "v1",
     kind: "Namespace",
@@ -43,8 +55,16 @@ local pubkeys = import 'magic/common/public_keys.json';
       name: "democratic-csi",
     },
   },
+  certManagerNamespace: {
+    apiVersion: "v1",
+    kind: "Namespace",
+    metadata: {
+      name: "cert-manager",
+    },
+  },
   zfsIscsiDriver: charts.zfs_iscsi,
   zfsNfsDriver: charts.zfs_nfs,
+  certManager: charts.certManager,
   "my-custom-zfs-iscsi-democratic-csi-driver-config": {
     apiVersion: "v1",
     kind: "Secret",
@@ -126,6 +146,22 @@ local pubkeys = import 'magic/common/public_keys.json';
   testTailscaleIngress: testTailscaleIngress.new(tailscaleHostname = "test-ts-ingress"),
 
   testTailscaleL3: testTailscaleL3.new(tailscaleHostname = "test-ts-l3"),
+
+  // Let's Encrypt ClusterIssuers (staging + prod) using the cert-manager Cloudflare DNS-01 solver.
+  // The CF token (scoped Zone:DNS:Edit + Zone:Read on andref.app) comes from sops.
+  letsEncryptCloudflare: letsEncryptCloudflare.new(
+    cloudflareDnsApiToken = secrets.certManager.cloudflare.dnsApiToken,
+    stagingIssuerName = letsEncryptStagingIssuerName,
+    prodIssuerName = letsEncryptProdIssuerName,
+  ),
+
+  // Smoke test for the Traefik + cert-manager wildcard cert path: a whoami served over HTTPS at both
+  // the apex (test-traefik-acme.andref.app) and a wildcard subdomain, with a single LE cert covering
+  // test-traefik-acme.andref.app + *.test-traefik-acme.andref.app.
+  testTraefikAcme: testTraefikAcme.new(
+    baseDomain = "test-traefik-acme.andref.app",
+    issuerName = activeLetsEncryptIssuerName,
+  ),
 
   openclaw: openclaw.new(
     gatewayToken = secrets.openclaw.OPENCLAW_GATEWAY_TOKEN,
