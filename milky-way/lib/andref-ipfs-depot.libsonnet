@@ -88,6 +88,9 @@ local images = import 'milky-way/lib/images.libsonnet';
                   periodSeconds: 30,
                 },
                 resources: {
+                  // Uploads stream straight through to kubo (never buffered), so memory stays flat
+                  // (tens of MB) regardless of file size -- 256Mi is ample headroom even for a
+                  // multi-GB upload.
                   requests: { memory: '32Mi', cpu: '10m' },
                   limits: { memory: '256Mi', cpu: '1' },
                 },

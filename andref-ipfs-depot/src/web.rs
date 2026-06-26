@@ -1,6 +1,7 @@
 //! The HTTP surface: serves the upload page + assets, accepts the upload, and on success posts
 //! the resulting link back to the originating Discord channel.
 
+use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Multipart, Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
@@ -13,9 +14,10 @@ use crate::assets;
 use crate::ipfs;
 use crate::state::AppState;
 
-/// Cap on a single upload. The endpoint is public (token-gated only) and the body is buffered in
-/// memory, so this bound is what stops it being a memory-exhaustion DoS.
-const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
+/// Sanity ceiling on a single upload. The body is streamed (not buffered), so this isn't a memory
+/// bound -- it's a guard against an absurd upload. It's also effectively bounded by kubo's repo PVC
+/// (10Gi); grow both together if needed.
+const MAX_UPLOAD_BYTES: usize = 8 * 1024 * 1024 * 1024;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -66,9 +68,9 @@ struct UploadResult {
 async fn upload(
     State(state): State<AppState>,
     Path(token): Path<String>,
-    mut multipart: Multipart,
+    multipart: Multipart,
 ) -> Result<Json<UploadResult>, (StatusCode, String)> {
-    // Consume the token BEFORE reading the body, so a replayed/expired link is rejected without
+    // Consume the token BEFORE touching the body, so a replayed/expired link is rejected without
     // streaming the file. This burns the token even on a later failure -- fine, the member just
     // re-runs `/upload`.
     let pending = state
@@ -76,23 +78,57 @@ async fn upload(
         .consume(&token)
         .ok_or((StatusCode::FORBIDDEN, "invalid or expired link".to_string()))?;
 
-    let field = multipart
-        .next_field()
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?
-        .ok_or((StatusCode::BAD_REQUEST, "no file field".to_string()))?;
-    let filename = field.file_name().unwrap_or("upload").to_string();
-    let bytes = field
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    // Stream the upload straight through to kubo so memory stays bounded regardless of file size (a
+    // GB-scale file must never be buffered in the pod). A task owns the multipart reader and forwards
+    // each chunk over a bounded channel -- which also applies backpressure to the browser when kubo
+    // is slow -- and reqwest pulls from it as the request body.
+    tracing::info!("upload: streaming to kubo (token consumed)");
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
+    tokio::spawn(async move {
+        let mut multipart = multipart;
+        let mut total: u64 = 0;
+        match multipart.next_field().await {
+            Ok(Some(mut field)) => loop {
+                match field.chunk().await {
+                    Ok(Some(chunk)) => {
+                        total += chunk.len() as u64;
+                        if tx.send(Ok(chunk)).await.is_err() {
+                            // reqwest stopped reading the body -> the kubo side closed/reset.
+                            tracing::warn!("upload: kubo stopped reading after {total} bytes");
+                            break;
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::info!("upload: read {total} bytes from client (body complete)");
+                        break;
+                    }
+                    Err(e) => {
+                        // The client->backend body broke (e.g. Traefik aborted the request).
+                        tracing::error!(
+                            "upload: error reading body from client after {total} bytes: {e}"
+                        );
+                        let _ = tx.send(Err(std::io::Error::other(e.to_string()))).await;
+                        break;
+                    }
+                }
+            },
+            Ok(None) => tracing::warn!("upload: multipart had no file field"),
+            Err(e) => {
+                tracing::error!("upload: multipart error: {e}");
+                let _ = tx.send(Err(std::io::Error::other(e.to_string()))).await;
+            }
+        }
+    });
+    let body = reqwest::Body::wrap_stream(futures_util::stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.map(|item| (item, rx))
+    }));
 
-    let cid = ipfs::add(&state, filename, bytes.to_vec())
-        .await
-        .map_err(|e| {
-            tracing::error!("kubo add failed: {e}");
-            (StatusCode::BAD_GATEWAY, "upload to IPFS failed".to_string())
-        })?;
+    let cid = ipfs::add(&state, body).await.map_err(|e| {
+        // {e:?} prints the full source chain (reset / timed out / incomplete body / ...).
+        tracing::error!("kubo add failed: {e:?}");
+        (StatusCode::BAD_GATEWAY, "upload to IPFS failed".to_string())
+    })?;
+    tracing::info!("upload: pinned {cid}");
     let url = ipfs::gateway_url(&state, &cid);
 
     // Announce the result in the channel the command was run in. A bare URL lets Discord unfurl /

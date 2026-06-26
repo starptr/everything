@@ -35,11 +35,13 @@ impl From<reqwest::Error> for IpfsError {
     }
 }
 
-/// Upload `bytes` to kubo, pinned, as a CIDv1 (base32 -- required so the CID is a DNS-safe
-/// subdomain label). Returns the resulting CID.
-pub async fn add(state: &AppState, filename: String, bytes: Vec<u8>) -> Result<String, IpfsError> {
-    let part = reqwest::multipart::Part::bytes(bytes)
-        .file_name(filename)
+/// Stream `body` to kubo, pinned, as a CIDv1 (base32 -- required so the CID is a DNS-safe
+/// subdomain label). The body is a streaming multipart part, so arbitrarily large files transfer
+/// with bounded memory. Returns the resulting CID. The part's filename is irrelevant to the result
+/// (the CID is content-addressed and the gateway URL is `<cid>.<domain>`), so a generic name is used.
+pub async fn add(state: &AppState, body: reqwest::Body) -> Result<String, IpfsError> {
+    let part = reqwest::multipart::Part::stream(body)
+        .file_name("file")
         .mime_str("application/octet-stream")?;
     let form = reqwest::multipart::Form::new().part("file", part);
 

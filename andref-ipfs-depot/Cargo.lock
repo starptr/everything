@@ -22,6 +22,7 @@ name = "andref-ipfs-depot"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
