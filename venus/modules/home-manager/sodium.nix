@@ -184,10 +184,13 @@
     # Keep an ssh connection to grand-central alive that reverse-forwards Sodium's own sshd onto
     # grand-central's loopback :2222, so any client can ProxyJump in (see milky-way
     # lib/grand-central.libsonnet). launchd KeepAlive respawns ssh whenever it drops; the inner
-    # ssh opts make it exit promptly on a dead link (ServerAlive*) or a refused bind
-    # (ExitOnForwardFailure) so the respawn re-binds rather than hanging on a half-open socket.
-    # accept-new pins grand-central's (persisted) host key on first connect into a dedicated
-    # known_hosts so this never touches my interactive ~/.ssh/known_hosts.
+    # ssh opts make it exit promptly on a dead link (ServerAlive* -> ~30s on a half-open link, the
+    # kind a laptop sleep/wake produces) or a refused bind (ExitOnForwardFailure) so the respawn
+    # re-binds rather than hanging on a half-open socket. ThrottleInterval=5 lets launchd retry
+    # every ~5s (vs the default 10s) so it recovers fast once grand-central frees :2222 -- whose
+    # reap is paced by grand-central's matching ClientAlive* (15x2). accept-new pins grand-central's
+    # (persisted) host key on first connect into a dedicated known_hosts so this never touches my
+    # interactive ~/.ssh/known_hosts.
     launchd.agents."grand-central-tunnel" = {
       enable = true;
       config = {
@@ -197,8 +200,8 @@
           "-R" "localhost:2222:localhost:22"
           "-i" config.sops.secrets."grand-central-tunnel".path
           "-p" "30023"
-          "-o" "ServerAliveInterval=30"
-          "-o" "ServerAliveCountMax=3"
+          "-o" "ServerAliveInterval=15"
+          "-o" "ServerAliveCountMax=2"
           "-o" "ExitOnForwardFailure=yes"
           "-o" "StrictHostKeyChecking=accept-new"
           "-o" "UserKnownHostsFile=${config.magic.absolutePathStrings.sodium.home}/.ssh/known_hosts_grand_central"
@@ -206,6 +209,7 @@
         ];
         KeepAlive = true;
         RunAtLoad = true;
+        ThrottleInterval = 5;
         ProcessType = "Background";
         StandardOutPath = "${config.magic.absolutePathStrings.sodium.home}/Library/Logs/grand-central-tunnel.log";
         StandardErrorPath = "${config.magic.absolutePathStrings.sodium.home}/Library/Logs/grand-central-tunnel.log";

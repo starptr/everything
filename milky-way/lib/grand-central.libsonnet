@@ -109,9 +109,13 @@ local kataRuntimeClass = import 'milky-way/lib/kata-runtime-class.libsonnet';
       PermitTTY no
 
       # Reap dead tunnels promptly so a reconnecting target can re-bind the loopback listen port
-      # instead of hitting "remote port forwarding failed" against a stale listener.
-      ClientAliveInterval 30
-      ClientAliveCountMax 3
+      # instead of hitting "remote port forwarding failed" against a stale listener. A laptop
+      # target (sodium) drops the tunnel half-open on every sleep/wake or wifi roam -- grand-central
+      # never sees a FIN/RST, so it only learns the connection is dead via these keepalives. At
+      # 15s x 2 the stale :2222 listener is freed within ~30s of a drop (was 30x3 = ~90s), which is
+      # the worst-case window a jumping client spends getting "connect failed: Connection refused".
+      ClientAliveInterval 15
+      ClientAliveCountMax 2
 
       # The k8s TCP readiness probe opens and drops a connection every periodSeconds without
       # authenticating. OpenSSH 9.8+ per-source penalties would rack up against the kubelet's
