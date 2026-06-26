@@ -45,6 +45,17 @@ local images = import 'milky-way/lib/images.libsonnet';
 // browser-UA requests whose Origin isn't safelisted -- see the sidecar config). The admin RPC itself
 // stays ClusterIP-only -- only the sidecar's webui port is exposed. Because Gateway.NoFetch=true, /webui
 // only renders if the bundled WebUI CID is local, so the wrapper pins it (webuiCid) on boot.
+//
+// PUBLIC GATEWAY: the HTTP gateway is ALSO exposed to the public internet as a SUBDOMAIN gateway at
+// gatewayBaseDomain (e.g. ipfs.andref.app) + its wildcard, via a cert-manager wildcard cert (Let's
+// Encrypt DNS-01) that Traefik serves in front of the gateway ClusterIP port. That hop is in-cluster
+// (Traefik -> Service -> gateway, NOT the VPN; the gateway port is already in the killswitch's
+// FIREWALL_INPUT_PORTS, same path as the verifier). Gateway.PublicGateways UseSubdomains gives each
+// content root its own browser origin at <cid>.ipfs.<gatewayPublicGatewayKey>. NoFetch still applies,
+// so the public gateway serves ONLY pinned content (a non-pinned CID -> 404, never a swarm fetch).
+// NOTE the asymmetry: this exposes the home IP for GATEWAY HTTP only (its DNS CNAMEs point at the
+// home-IP DDNS record), while the swarm/DHT still leaves only from the VPN exit -- so the home IP
+// stays off the IPFS swarm.
 {
   // The minimum RPC AllowedPaths the verifier needs (single source of truth -- baked into
   // API.Authorizations by the wrapper, and the intended contract for kubo-test). AllowedPaths are
@@ -70,6 +81,9 @@ local images = import 'milky-way/lib/images.libsonnet';
     serverCountries,                    // required: SERVER_COUNTRIES, e.g. 'United States'
     webuiRpcToken,                      // required -> API.Authorizations 'webui' bearer secret, injected by the sidecar
     tailscaleHostname,                  // required, NO default: tailnet MagicDNS name (must be unique tailnet-wide)
+    gatewayBaseDomain,                  // required, NO default: public gateway hostname; cert + Ingress SANs are this + '*.'+this (e.g. 'ipfs.andref.app')
+    gatewayPublicGatewayKey,            // required, NO default: Gateway.PublicGateways map key; kubo serves subdomain content at <cid>.ipfs.<key>, so 'andref.app' => <cid>.ipfs.andref.app
+    gatewayIssuerName,                  // required, NO default: cert-manager ClusterIssuer the wildcard gateway cert is issued from
     name='kubo',
     namespace='default',
     image=images.kubo.fullyQualifiedImageReferencePinned,
@@ -88,6 +102,14 @@ local images = import 'milky-way/lib/images.libsonnet';
     nginxImage=images.nginx.fullyQualifiedImageReferencePinned,
   ):: {
     local this = self,
+
+    // The wildcard gateway cert (*.<gatewayBaseDomain>) must cover the subdomain-gateway content,
+    // which kubo serves at <cid>.ipfs.<gatewayPublicGatewayKey>. That holds iff gatewayBaseDomain ==
+    // 'ipfs.' + gatewayPublicGatewayKey -- assert it so a mismatch fails at eval, not later as a
+    // browser cert error.
+    assert gatewayBaseDomain == 'ipfs.' + gatewayPublicGatewayKey :
+      'kubo: gatewayBaseDomain (%s) must equal "ipfs." + gatewayPublicGatewayKey (%s)'
+      % [gatewayBaseDomain, gatewayPublicGatewayKey],
 
     // Cluster CIDRs (k3s defaults; verified on methanol). Kept reachable through the killswitch so
     // the in-cluster verifier + kubelet probes can reach the gateway/API/ctrl and get return traffic.
@@ -155,6 +177,12 @@ local images = import 'milky-way/lib/images.libsonnet';
       ipfs config Addresses.Gateway /ip4/0.0.0.0/tcp/%(gatewayPort)s
       ipfs config --bool Gateway.NoFetch true                          # serve ONLY locally-present (pinned) content
       ipfs config Provide.Strategy pinned                              # announce ONLY pinned roots to the DHT
+      # Subdomain gateway: serve each content root from its OWN browser origin at <cid>.ipfs.<key>
+      # (origin isolation). NoFetch still applies, so only locally-pinned CIDs resolve. The key is the
+      # BARE zone (gatewayPublicGatewayKey), NOT the public hostname, because kubo serves at
+      # <cid>.ipfs.<key>; key=andref.app => <cid>.ipfs.andref.app, matching the *.ipfs.andref.app cert.
+      ipfs config --json Gateway.PublicGateways \
+        '{"%(gatewayPublicGatewayKey)s":{"UseSubdomains":true,"Paths":["/ipfs"]}}'
       ipfs config --bool Swarm.DisableNatPortMap true                  # gluetun owns NAT-PMP (VPN side), not kubo
       # Bound the swarm so gluetun (which tracks every connection in its firewall/netns) doesn't OOM:
       # a pinned mirror that serves/announces pinned content needs no large peer set.
@@ -209,7 +237,7 @@ local images = import 'milky-way/lib/images.libsonnet';
       pin_webui &
 
       exec ipfs daemon
-    |||) % { ipfsPath: ipfsPath, apiPort: apiPort, gatewayPort: gatewayPort, controlPort: controlPort },
+    |||) % { ipfsPath: ipfsPath, apiPort: apiPort, gatewayPort: gatewayPort, controlPort: controlPort, gatewayPublicGatewayKey: gatewayPublicGatewayKey },
 
     // Liveness: restart kubo if gluetun's forwarded port changed (kubo can't re-announce without a
     // restart). Conservative -- only restart on a CONFIRMED change; if either value is unavailable
@@ -490,6 +518,64 @@ local images = import 'milky-way/lib/images.libsonnet';
             }],
           },
         }],
+      },
+    },
+
+    // cert-manager obtains ONE wildcard cert covering the gateway apex + its '*.' wildcard into
+    // gatewayCertificate.spec.secretName, in the Ingress's namespace so Traefik can read it. DNS-01
+    // needs no inbound reachability to issue; cert-manager creates/cleans the _acme-challenge.<host>
+    // TXT in Cloudflare itself. Mirrors lib/test-traefik-acme-ingress.libsonnet.
+    gatewayCertificate: {
+      apiVersion: 'cert-manager.io/v1',
+      kind: 'Certificate',
+      metadata: { name: name + '-gateway-wildcard', namespace: namespace },
+      spec: {
+        secretName: name + '-gateway-wildcard-tls',
+        dnsNames: [gatewayBaseDomain, '*.' + gatewayBaseDomain],
+        issuerRef: { name: gatewayIssuerName, kind: 'ClusterIssuer' },
+      },
+    },
+
+    // Public subdomain-gateway ingress: Traefik terminates TLS with the wildcard cert above and proxies
+    // both gatewayBaseDomain (path-gateway landing) and '*.'+gatewayBaseDomain (the per-CID
+    // <cid>.ipfs.<key> origins) to kubo's ClusterIP gateway port. Traefik on the websecure entrypoint
+    // sets X-Forwarded-Proto/Host, so kubo emits correct https subdomain links. The in-cluster hop
+    // (Traefik -> Service -> gateway) bypasses the VPN: the gateway port is in gluetun's FIREWALL_INPUT_PORTS.
+    gatewayIngress: {
+      apiVersion: 'networking.k8s.io/v1',
+      kind: 'Ingress',
+      metadata: {
+        name: name + '-gateway',
+        namespace: namespace,
+        // HTTPS only -- this is a TLS gateway; bind the routers to the websecure entrypoint.
+        annotations: { 'traefik.ingress.kubernetes.io/router.entrypoints': 'websecure' },
+      },
+      spec: {
+        ingressClassName: 'traefik',
+        tls: [{
+          hosts: [gatewayBaseDomain, '*.' + gatewayBaseDomain],
+          secretName: utils.assertEqualAndReturn(this.gatewayCertificate.spec.secretName, name + '-gateway-wildcard-tls'),
+        }],
+        // Both the apex landing and the wildcard subdomains route to the same gateway port; kubo picks
+        // path vs subdomain behavior off the Host header (Gateway.PublicGateways, set in the wrapper).
+        rules: [
+          {
+            host: host,
+            http: {
+              paths: [{
+                path: '/',
+                pathType: 'Prefix',
+                backend: {
+                  service: {
+                    name: this.service.metadata.name,
+                    port: { number: utils.assertEqualAndReturn(this.service.spec.ports[1].port, gatewayPort) },
+                  },
+                },
+              }],
+            },
+          }
+          for host in [gatewayBaseDomain, '*.' + gatewayBaseDomain]
+        ],
       },
     },
   },

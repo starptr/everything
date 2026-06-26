@@ -508,7 +508,9 @@ local pubkeys = import 'magic/common/public_keys.json';
   // built-in /webui is exposed tailnet-only (https://ipfs-webui.<tailnet>.ts.net) via a token-injecting
   // nginx sidecar, using the dedicated full-/api/v0 webui token. Its OWN ProtonVPN WireGuard session/key
   // (a 4th concurrent tunnel; the same key on concurrent sessions flaps), read from the sops-managed
-  // .conf like qbittorrent.
+  // .conf like qbittorrent. The HTTP gateway is ALSO published PUBLICLY as a subdomain gateway at
+  // ipfs.andref.app / *.ipfs.andref.app (cert-manager wildcard cert, served by Traefik) -- this exposes
+  // the home IP for gateway HTTP only; the swarm/DHT still leaves only from the VPN exit.
   kubo: kubo.new(
     testRpcToken = secrets.kubo.rpcTokenForTest,
     webuiRpcToken = secrets.kubo.rpcTokenForIpfsWebui,
@@ -516,6 +518,13 @@ local pubkeys = import 'magic/common/public_keys.json';
     wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/kubo-gluetun.conf'),
     vpnProvider = "protonvpn",
     serverCountries = "United States",
+    // Public subdomain IPFS gateway: content served origin-isolated at https://<cid>.ipfs.andref.app,
+    // plus a path-gateway landing at ipfs.andref.app; TLS via the cert-manager wildcard cert. The
+    // PublicGateways KEY is the bare zone "andref.app" (kubo serves at <cid>.ipfs.<key>), so it must
+    // equal gatewayBaseDomain with its leading "ipfs." label stripped (asserted in lib/kubo.libsonnet).
+    gatewayBaseDomain = "ipfs.andref.app",
+    gatewayPublicGatewayKey = "andref.app",
+    gatewayIssuerName = activeLetsEncryptIssuerName,
   ),
 
   // Scoped verifier: the ONLY authorized RPC client, granted the minimum API.Authorizations

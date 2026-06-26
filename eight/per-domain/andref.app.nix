@@ -88,6 +88,24 @@
     value = "carless-drivers-ddns.andref.app.";
   };
 
+  # Public subdomain IPFS gateway (kubo, milky-way orion-system). CNAME to the home-IP DDNS
+  # target (same pattern as grand-central / test-traefik-acme) so Traefik on methanol serves it
+  # with a cert-manager wildcard cert. DNS-only (grey cloud); the /-ddns$/ rejectlist does not
+  # match these labels. Content is served origin-isolated at <cid>.ipfs.andref.app.
+  "ipfs" = {
+    octodns.cloudflare = { auto-ttl = true; };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
+
+  "*.ipfs" = {
+    octodns.cloudflare = { auto-ttl = true; };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
+
   old = {
     octodns.cloudflare = { auto-ttl = true; };
     ttl = 300;
