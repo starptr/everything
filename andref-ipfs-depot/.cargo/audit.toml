@@ -2,3 +2,18 @@
 [yanked]
 enabled = false      # Warn for yanked crates in Cargo.lock (default: true)
 update_index = false # Auto-update the crates.io index (default: true)
+
+[advisories]
+# All four are in rustls-webpki 0.102, pulled transitively only by serenity 0.12's websocket
+# stack (tungstenite 0.21 -> tokio-rustls 0.25 -> rustls 0.22 -> rustls-webpki 0.102). reqwest
+# (our actual upload path) already uses the patched rustls-webpki 0.103. The fixes exist only in
+# 0.103, which serenity 0.12's pinned rustls 0.22 cannot use -- so these are unfixable here until
+# serenity bumps rustls. They affect certificate/CRL validation on the gateway connection to
+# Discord's own endpoint, not the file-upload path. Drop these when serenity ships a rustls-0.23
+# release.
+ignore = [
+  "RUSTSEC-2026-0049",
+  "RUSTSEC-2026-0098",
+  "RUSTSEC-2026-0099",
+  "RUSTSEC-2026-0104",
+]

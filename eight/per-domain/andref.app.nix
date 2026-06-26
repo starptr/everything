@@ -106,6 +106,17 @@
     value = "carless-drivers-ddns.andref.app.";
   };
 
+  # Public web UI for the andref-ipfs-depot uploader (kubo, milky-way orion-system,
+  # lib/andref-ipfs-depot.libsonnet). CNAME to the home-IP DDNS target (same pattern as ipfs /
+  # test-traefik-acme) so Traefik on methanol serves it with a cert-manager cert. DNS-only (grey
+  # cloud); the /-ddns$/ rejectlist does not match this label.
+  "depot" = {
+    octodns.cloudflare = { auto-ttl = true; };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
+
   old = {
     octodns.cloudflare = { auto-ttl = true; };
     ttl = 300;

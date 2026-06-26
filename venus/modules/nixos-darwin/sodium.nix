@@ -99,6 +99,14 @@ in
       systems = [ "aarch64-linux" "x86_64-linux" ];
       config = {
         boot.binfmt.emulatedSystems = [ "x86_64-linux" ];
+        # The VM defaults to 1 vCPU / 3 GB, so a single x86_64 cargo build (e.g. whale's
+        # andref-ipfs-depot) grinds on one emulated core. Give it more so cargo parallelizes.
+        # Sized to leave the M1 (8 cores / 16 GB) headroom for macOS: ~4 cores + 6 GB are used
+        # ONLY while a build runs; the VM sits at ~0 when idle. Bump cautiously -- x86_64 steps run
+        # under TCG (pure emulation), so each vCPU can peg a host core during a build.
+        # mkForce: the nix-builder-vm profile already pins these (memorySize = 3072), so override.
+        virtualisation.cores = pkgs.lib.mkForce 4;
+        virtualisation.memorySize = pkgs.lib.mkForce (6 * 1024);  # MiB (was 3072)
       };
     };
   };

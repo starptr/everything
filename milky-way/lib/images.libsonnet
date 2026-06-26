@@ -130,6 +130,13 @@ local images = {
       fullyQualifiedRepository: "docker.io/yuto7/autobrr",
       defaultDigest: { hash: std.trim(importstr "exports/whale/digests/autobrr.txt") },
     },
+    // andref-ipfs-depot: our Discord-gated IPFS uploader (lib/andref-ipfs-depot.libsonnet), a
+    // whale-built Rust binary. Digest from exports/whale/digests/andref-ipfs-depot.txt (written by
+    // `nix run ./flake-profiles/whale#andref-ipfs-depot-push`).
+    "andref-ipfs-depot": {
+      fullyQualifiedRepository: "docker.io/yuto7/andref-ipfs-depot",
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/andref-ipfs-depot.txt") },
+    },
     // Kubo (go-ipfs), the reference IPFS implementation -- run here as a VPN-fronted pinned-mirror
     // node (lib/kubo.libsonnet). Multi-arch INDEX digest (k3s resolves the per-node arch; the index
     // includes linux/amd64 for methanol), same convention as the *arr/qbittorrent pins; tagHint is

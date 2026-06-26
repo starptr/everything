@@ -30,9 +30,10 @@ local images = import 'milky-way/lib/images.libsonnet';
 // Instead the wrapper lets init create the repo, then re-asserts our keys via `ipfs config` every
 // boot (declarative for the keys we manage; kubo owns identity/datastore/pinset on the PVC).
 //
-// RPC API is locked down with API.Authorizations (admin RPC must NEVER be open): there are two bearer
-// grants -- the test service (scoped to the minimum AllowedPaths needed to verify the node, see
-// testAllowedPaths) and the WebUI (full /api/v0, see webuiAllowedPaths). Storage: the repo
+// RPC API is locked down with API.Authorizations (admin RPC must NEVER be open): there are up to three
+// bearer grants -- the test service (scoped to the minimum AllowedPaths needed to verify the node, see
+// testAllowedPaths), the WebUI (full /api/v0, see webuiAllowedPaths), and an OPTIONAL depot uploader
+// (scoped to /api/v0/add, enabled by passing depotRpcToken; the andref-ipfs-depot app). Storage: the repo
 // (identity/datastore/pinset) is on iSCSI (RWO) -- the datastore does file locking, unsafe over NFS
 // (same rationale as jellyfin's SQLite) -- so an RWO PVC means the old pod must release it before a new
 // one mounts, hence strategy: Recreate.
@@ -97,6 +98,9 @@ local images = import 'milky-way/lib/images.libsonnet';
     testAllowedPaths=self.defaultTestAllowedPaths,
     webuiAuthName='webui',              // API.Authorizations entry name for the WebUI
     webuiAllowedPaths=['/api/v0'],      // full RPC: everything the WebUI needs for normal operation
+    depotRpcToken=null,                 // optional -> a THIRD API.Authorizations bearer grant for the andref-ipfs-depot uploader (lib/andref-ipfs-depot.libsonnet). null = no depot grant.
+    depotAuthName='depot',              // API.Authorizations entry name for the depot uploader
+    depotAllowedPaths=['/api/v0/add'],  // least privilege: `add` with pin=true both stores AND pins, so nothing else is needed
     webuiProxyPort=8081,                // nginx sidecar listen port (fronts /webui + RPC, injects the token)
     webuiCid='bafybeihxglpcfyarpm7apn7xpezbuoqgk3l5chyk7w4gvrjwk45rqohlmm',  // bundled WebUI (ipfs-webui v4.12.0) that kubo v0.42.0's /webui redirects to; pinned so NoFetch can serve it. Update on kubo bumps.
     nginxImage=images.nginx.fullyQualifiedImageReferencePinned,
@@ -120,6 +124,16 @@ local images = import 'milky-way/lib/images.libsonnet';
     // is single-sourced from this jsonnet (no newlines, so it embeds cleanly into the shell --json arg).
     local allowedPathsJson = std.manifestJsonEx(testAllowedPaths, '', ''),
     local webuiAllowedPathsJson = std.manifestJsonEx(webuiAllowedPaths, '', ''),
+    local depotAllowedPathsJson = std.manifestJsonEx(depotAllowedPaths, '', ''),
+
+    // Optional THIRD RPC grant (the andref-ipfs-depot uploader): a shell-JSON fragment appended to
+    // API.Authorizations, with the token referenced as the env var $KUBO_DEPOT_RPC_TOKEN (set from
+    // the Secret) so the literal stays out of this ConfigMap -- same treatment as test/webui. Empty
+    // (no extra entry) when depotRpcToken is null.
+    local depotAuthzEntry =
+      if depotRpcToken != null then
+        ',\\"$DEPOT_AUTH_NAME\\":{\\"AuthSecret\\":\\"bearer:$KUBO_DEPOT_RPC_TOKEN\\",\\"AllowedPaths\\":$DEPOT_ALLOWED_PATHS_JSON}'
+      else '',
 
     // The nginx WebUI-proxy sidecar config. It carries the bearer token, so it lives in a Secret (below),
     // not a ConfigMap. Proxies everything to kubo over loopback (NOT the VPN), and injects the token so the
@@ -187,10 +201,12 @@ local images = import 'milky-way/lib/images.libsonnet';
       # Bound the swarm so gluetun (which tracks every connection in its firewall/netns) doesn't OOM:
       # a pinned mirror that serves/announces pinned content needs no large peer set.
       ipfs config --json Swarm.ConnMgr '{"Type":"basic","LowWater":30,"HighWater":100,"GracePeriod":"20s"}'
-      # Two bearer grants in ONE call (the key is overwritten wholesale): the scoped test verifier and the
-      # full-/api/v0 WebUI (consumed by the nginx sidecar, which injects this token on the browser's behalf).
+      # Bearer grants in ONE call (the key is overwritten wholesale): the scoped test verifier, the
+      # full-/api/v0 WebUI (consumed by the nginx sidecar, which injects this token on the browser's
+      # behalf), and -- when a depot token is configured -- the scoped andref-ipfs-depot uploader
+      # (%(depotAuthzEntry)s expands to its entry, or to nothing).
       ipfs config --json API.Authorizations \
-        "{\"$TEST_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_TEST_RPC_TOKEN\",\"AllowedPaths\":$ALLOWED_PATHS_JSON},\"$WEBUI_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_WEBUI_RPC_TOKEN\",\"AllowedPaths\":$WEBUI_ALLOWED_PATHS_JSON}}"
+        "{\"$TEST_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_TEST_RPC_TOKEN\",\"AllowedPaths\":$ALLOWED_PATHS_JSON},\"$WEBUI_AUTH_NAME\":{\"AuthSecret\":\"bearer:$KUBO_WEBUI_RPC_TOKEN\",\"AllowedPaths\":$WEBUI_ALLOWED_PATHS_JSON}%(depotAuthzEntry)s}"
 
       # --- dynamic: wait for gluetun's NAT-PMP forwarded port, then listen on + announce <vpn-exit>:PORT ---
       # gluetun's up-command writes the port to /pf/port. Wait for a non-empty, non-zero value: gluetun
@@ -237,7 +253,7 @@ local images = import 'milky-way/lib/images.libsonnet';
       pin_webui &
 
       exec ipfs daemon
-    |||) % { ipfsPath: ipfsPath, apiPort: apiPort, gatewayPort: gatewayPort, controlPort: controlPort, gatewayPublicGatewayKey: gatewayPublicGatewayKey },
+    |||) % { ipfsPath: ipfsPath, apiPort: apiPort, gatewayPort: gatewayPort, controlPort: controlPort, gatewayPublicGatewayKey: gatewayPublicGatewayKey, depotAuthzEntry: depotAuthzEntry },
 
     // Liveness: restart kubo if gluetun's forwarded port changed (kubo can't re-announce without a
     // restart). Conservative -- only restart on a CONFIRMED change; if either value is unavailable
@@ -289,7 +305,10 @@ local images = import 'milky-way/lib/images.libsonnet';
       kind: 'Secret',
       metadata: { name: name + '-rpc-auth', namespace: namespace },
       type: 'Opaque',
-      stringData: { KUBO_TEST_RPC_TOKEN: testRpcToken, KUBO_WEBUI_RPC_TOKEN: webuiRpcToken },
+      stringData: {
+        KUBO_TEST_RPC_TOKEN: testRpcToken,
+        KUBO_WEBUI_RPC_TOKEN: webuiRpcToken,
+      } + (if depotRpcToken != null then { KUBO_DEPOT_RPC_TOKEN: depotRpcToken } else {}),
     },
 
     // nginx WebUI-proxy config (carries the bearer token -> Secret, not ConfigMap), mounted over the
@@ -333,7 +352,7 @@ local images = import 'milky-way/lib/images.libsonnet';
             labels: {} + this.deployment.spec.selector.matchLabels,
             // The wrapper (ConfigMap mount) and token (Secret via envFrom) don't roll the Deployment
             // on their own; hashing them into the template makes a change to either roll the pod.
-            annotations: { 'checksum/config': std.md5(wrapperScript + testRpcToken + webuiRpcToken + nginxConf + webuiCid) },
+            annotations: { 'checksum/config': std.md5(wrapperScript + testRpcToken + webuiRpcToken + nginxConf + webuiCid + (if depotRpcToken != null then depotRpcToken else '')) },
           },
           spec: {
             // kubo runs as uid `ipfs`; fsGroup makes the iSCSI repo volume group-writable so it can
@@ -390,6 +409,10 @@ local images = import 'milky-way/lib/images.libsonnet';
                   { name: 'WEBUI_AUTH_NAME', value: webuiAuthName },
                   { name: 'WEBUI_ALLOWED_PATHS_JSON', value: webuiAllowedPathsJson },
                   { name: 'WEBUI_CID', value: webuiCid },
+                  // Non-secret depot grant inputs (the token itself comes via the Secret/envFrom).
+                  // Unused by the wrapper when no depot token is configured (the entry is omitted).
+                  { name: 'DEPOT_AUTH_NAME', value: depotAuthName },
+                  { name: 'DEPOT_ALLOWED_PATHS_JSON', value: depotAllowedPathsJson },
                 ],
                 envFrom: [{ secretRef: { name: this.secret.metadata.name } }],  // KUBO_TEST_RPC_TOKEN + KUBO_WEBUI_RPC_TOKEN
                 ports: [

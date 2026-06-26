@@ -29,6 +29,7 @@ local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local kubo = import 'milky-way/lib/kubo.libsonnet';
 local kuboTest = import 'milky-way/lib/kubo-test.libsonnet';
+local andrefIpfsDepot = import 'milky-way/lib/andref-ipfs-depot.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local letsEncryptCloudflare = import 'milky-way/lib/letsencrypt-cloudflare.libsonnet';
 local testTraefikAcme = import 'milky-way/lib/test-traefik-acme-ingress.libsonnet';
@@ -514,6 +515,8 @@ local pubkeys = import 'magic/common/public_keys.json';
   kubo: kubo.new(
     testRpcToken = secrets.kubo.rpcTokenForTest,
     webuiRpcToken = secrets.kubo.rpcTokenForIpfsWebui,
+    // Third, least-privilege RPC grant (scoped to /api/v0/add) for the andref-ipfs-depot uploader.
+    depotRpcToken = secrets.kubo.rpcTokenForAndrefIpfsDepot,
     tailscaleHostname = "ipfs-webui",
     wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/kubo-gluetun.conf'),
     vpnProvider = "protonvpn",
@@ -533,6 +536,25 @@ local pubkeys = import 'magic/common/public_keys.json';
   kuboTest: kuboTest.new(
     rpcToken = secrets.kubo.rpcTokenForTest,
     kuboService = this.kubo.service,
+  ),
+
+  // andref-ipfs-depot: Discord-gated file uploader for the kubo pinned-mirror node
+  // (lib/andref-ipfs-depot.libsonnet). A guild member runs /upload, gets a single-use link, uploads
+  // a file via the public page, and the backend pins it to kubo (the scoped 'depot' RPC token above)
+  // and returns + posts back the subdomain-gateway link https://<cid>.ipfs.andref.app. The HTTP
+  // server is public (depot.andref.app, Traefik + cert-manager wildcard issuer); the bot is
+  // outbound-only. kubo's RPC is reached in-cluster via its Service (host + api port read from it).
+  andrefIpfsDepot: andrefIpfsDepot.new(
+    discordBotToken = secrets.discordBots.andrefIpfsDepot.token,
+    discordGuildId = secrets.discord.andref.guildId,
+    kuboRpcToken = secrets.kubo.rpcTokenForAndrefIpfsDepot,
+    kuboRpcBase = 'http://%s:%d' % [
+      utils.domainOfService(this.kubo.service),
+      utils.associateObjectsByKey(this.kubo.service.spec.ports, 'name')['api'].port,
+    ],
+    publicHostname = "depot.andref.app",
+    gatewayBaseDomain = "ipfs.andref.app",
+    issuerName = activeLetsEncryptIssuerName,
   ),
 
   cilium: charts.cilium,

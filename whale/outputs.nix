@@ -19,6 +19,11 @@
     patches = (old.patches or []) ++ [ ./patches/autobrr-rss-enclosure-type.patch ];
   });
 
+  # andref-ipfs-depot: our Rust binary (Discord-gated IPFS uploader), built by its own crane flake
+  # for x86_64-linux. The frontend assets are compiled into the binary (include_str!), so the image
+  # needs nothing but the binary + its runtime closure + TLS roots + an init.
+  andrefIpfsDepotBin = inputs.andref-ipfs-depot.packages.x86_64-linux.default;
+
   # Creates an attrset with two system-keyed targets: the x86_64-linux image and a
   # per-host script to push it to the docker registry.
   # @param name: The name of the docker repository for the image.
@@ -191,6 +196,30 @@
     };
   };
 
+  # andref-ipfs-depot (Discord-gated IPFS uploader). Wraps the crane-built Rust binary above in a
+  # minimal layered image: dumb-init is PID 1 so k8s SIGTERM stops the pod promptly; cacert +
+  # SSL_CERT_FILE give the serenity bot's HTTPS calls to Discord a CA bundle. Listens on :8080
+  # (matches lib/andref-ipfs-depot.libsonnet's containerPort + BIND_ADDR). See
+  # milky-way/lib/andref-ipfs-depot.libsonnet.
+  andref-ipfs-depot = image-nix-artifacts {
+    name = "andref-ipfs-depot";
+    buildLayeredImageArg = {
+      tag = "latest";
+      contents = [
+        andrefIpfsDepotBin
+        imagePkgs.cacert
+        imagePkgs.dumb-init
+      ];
+      config = {
+        Entrypoint = [ "dumb-init" "--" "${andrefIpfsDepotBin}/bin/andref-ipfs-depot" ];
+        Env = [
+          "SSL_CERT_FILE=${imagePkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        ];
+        ExposedPorts = { "8080/tcp" = {}; };
+      };
+    };
+  };
+
   # `nix develop` target for a long-lived `skopeo login`. Uses the same skopeo (and
   # nixpkgs) as the push-scripts, so the auth.json written here is always compatible.
   mkAuthShell = pkgs: pkgs.mkShell {
@@ -211,12 +240,15 @@ in {
       grand-central-push = grand-central.push-script.x86_64-linux;
       autobrr-image = autobrr.image.x86_64-linux;
       autobrr-push = autobrr.push-script.x86_64-linux;
+      andref-ipfs-depot-image = andref-ipfs-depot.image.x86_64-linux;
+      andref-ipfs-depot-push = andref-ipfs-depot.push-script.x86_64-linux;
     };
     aarch64-darwin = {
       whale-push-example = example-artifacts.push-script.aarch64-darwin;
       mopidy-push = mopidy.push-script.aarch64-darwin;
       grand-central-push = grand-central.push-script.aarch64-darwin;
       autobrr-push = autobrr.push-script.aarch64-darwin;
+      andref-ipfs-depot-push = andref-ipfs-depot.push-script.aarch64-darwin;
     };
   };
 

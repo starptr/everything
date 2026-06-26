@@ -1,2 +1,24 @@
+# cargo-deny runs as part of `nix flake check` (the `*-deny` crane check). The dependency tree
+# behind serenity + axum + reqwest(rustls) pulls in the usual permissive ecosystem licenses, so
+# allow that standard set. ring declares its license only via a LICENSE file (no SPDX `license`
+# field), so it needs a clarification (the hash is printed by cargo-deny if it ever drifts).
 [licenses]
-allow = ["MIT"]
+allow = [
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "OpenSSL",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
