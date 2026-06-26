@@ -88,13 +88,14 @@ in
     # builds -- e.g. whale's container images -- are offloaded to it instead of emulating x86 on the M1
     # via the linux-builder (QEMU TCG, ~5-8x slower). The image BUILDS on methanol; nix then copies the
     # result back here, and the whale push-script still runs LOCALLY with the local skopeo credentials
-    # (see whale/outputs.nix / whale/readme.md). Reached over the LAN as root (same host as deploy-rs);
-    # the host key is pinned so the daemon's non-interactive SSH doesn't fail verification. (Supersedes
-    # the commented x86_64.nix.yuto.sh example above.)
+    # (see whale/outputs.nix / whale/readme.md). Reached over the LAN as the dedicated, unprivileged
+    # `remote-builder` user (defined + added to trusted-users in methanol.nix; deploy-rs still uses
+    # root separately). The host key is pinned so the daemon's non-interactive SSH doesn't fail
+    # verification. (Supersedes the commented x86_64.nix.yuto.sh example above.)
     buildMachines = [
       {
         hostName = "10.0.0.211";
-        sshUser = "root";
+        sshUser = "remote-builder";
         sshKey = "/Users/yuto/.ssh/id_rsa";
         systems = [ "x86_64-linux" ];
         maxJobs = 8;

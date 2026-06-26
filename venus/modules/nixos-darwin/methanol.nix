@@ -30,6 +30,14 @@ in
 
   nix = {
     settings.experimental-features = [ "nix-command" "flakes" ];
+    # sodium offloads x86_64-linux builds here as the dedicated `remote-builder` user (see
+    # that user below and sodium.nix buildMachines). A non-root remote builder must be a
+    # trusted Nix user, otherwise offloaded builds fail (can't import/sign store paths or
+    # override settings) -- root used to work only because it is implicitly trusted.
+    settings.trusted-users = [
+      "root"
+      "remote-builder"
+    ];
   };
 
   # Use the systemd-boot EFI boot loader.
@@ -370,6 +378,20 @@ in
     ];
   };
   users.groups.democratic-csi = { };
+
+  # Dedicated, unprivileged user that sodium connects as to offload x86_64-linux Nix builds
+  # (replaces building as root; see sodium.nix buildMachines). No wheel/sudo -- a remote
+  # builder only needs to be a trusted Nix user (see nix.settings.trusted-users above).
+  users.users.remote-builder = {
+    isNormalUser = true;
+    createHome = true;
+    shell = pkgs.bash;
+    group = "remote-builder";
+    openssh.authorizedKeys.keys = [
+      publicKeys.ssh.yutoSodium # Yuto's Sodium (remote nix builder)
+    ];
+  };
+  users.groups.remote-builder = { };
 
   # programs.firefox.enable = true;
 
