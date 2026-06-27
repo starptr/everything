@@ -40,6 +40,7 @@
       #pkgs.check-gits 
       pkgs.rclone
       pkgs.audacity
+      pkgs.prismlauncher
       pkgs.kubectl
       pkgs.claude-code
       pkgs.herdr
