@@ -74,19 +74,43 @@ local images = import 'milky-way/lib/images.libsonnet';
     controlPort:: controlPort,          // re-exported so the host can build probes / the Service
     httpProxyPort:: httpProxyPort,      // re-exported (meaningful when httpProxy) so the host can build its Service
 
-    // Control-server auth config: expose `publicControlRoutes` WITHOUT auth, while everything else
-    // stays locked (gluetun v3.39+ default). Default = only GET /v1/publicip/ip so probes + the
-    // leak-tests can read the VPN exit IP; a host can extend it (e.g. kubo adds GET /v1/portforward
-    // to read the forwarded port). One unauth role holds every route -- the role name is just a
-    // label and doesn't restrict. With the default single route this renders byte-identically to
-    // the previous hardcoded config, so qbittorrent/thelounge/vpn-proxy are unchanged.
+    // Control-server auth config: expose the effective control routes WITHOUT auth, while everything
+    // else stays locked (gluetun v3.39+ default). Base = only GET /v1/publicip/ip so probes + the
+    // leak-tests can read the VPN exit IP; a host can extend it via publicControlRoutes. One unauth
+    // role holds every route -- the role name is just a label and doesn't restrict. With the default
+    // single route this renders byte-identically to the previous hardcoded config, so thelounge/
+    // vpn-proxy are unchanged.
+    //
+    // When portForwarding is on, GET /v1/portforward is auto-appended (order-preserving, only if not
+    // already present): the PF-health liveness probe below reads it, and a PF host must NOT have to
+    // remember to expose it -- a probe hitting the auth-gated route would read empty, false-fail, and
+    // restart-loop gluetun forever.
+    local pfRoute = 'GET /v1/portforward',
+    local effectiveControlRoutes =
+      publicControlRoutes
+      + (if portForwarding && !std.member(publicControlRoutes, pfRoute) then [pfRoute] else []),
     local controlConfigToml = std.join('\n', [
       '[[roles]]',
       'name = "publicip"',
-      'routes = [' + std.join(', ', ['"%s"' % r for r in publicControlRoutes]) + ']',
+      'routes = [' + std.join(', ', ['"%s"' % r for r in effectiveControlRoutes]) + ']',
       'auth = "none"',
       '',
     ]),
+
+    // PF-health liveness script (used when portForwarding): fail if the tunnel is down (no publicip)
+    // OR the forwarded port is 0/absent. gluetun's tunnel-only liveness can't see a lost NAT-PMP
+    // forward -- egress still works -- so without this a wedged/lost forward leaves the PF app
+    // announcing or seeding on a DEAD port indefinitely. initialDelay + failureThreshold (below, ~a
+    // few min) tolerate a single lease-renewal blip; a SUSTAINED loss restarts gluetun, which
+    // reconnects to a PORT_FORWARD_ONLY server and re-acquires a port (the postStart hook clears stale
+    // WG rules so the restart reconnects). Reads only unauth routes (publicip always; portforward
+    // auto-added above). gluetun's Alpine image ships /bin/sh + wget + grep + sed.
+    local pfHealthScript = (|||
+      ip="$(wget -q -O - http://127.0.0.1:%(controlPort)s/v1/publicip/ip 2>/dev/null | grep -o '"public_ip":"[^"]*"')"
+      [ -n "$ip" ] || { echo "tunnel down (no publicip)"; exit 1; }
+      pf="$(wget -q -O - http://127.0.0.1:%(controlPort)s/v1/portforward 2>/dev/null | sed -n 's/.*"port":\([0-9]*\).*/\1/p')"
+      [ -n "$pf" ] && [ "$pf" != "0" ] || { echo "port-forward lost (port=$pf); restarting gluetun to re-establish"; exit 1; }
+    |||) % { controlPort: controlPort },
 
     configMap: {
       apiVersion: 'v1',
@@ -163,13 +187,29 @@ local images = import 'milky-way/lib/images.libsonnet';
       securityContext: {
         capabilities: { add: ['NET_ADMIN'] },   // bring up wg/tun + program iptables
       },
+      // The pod netns survives a CONTAINER restart, so a restarted gluetun finds the WireGuard ip
+      // rules the dead instance added still present and dies with "adding IPv6 rule ... table 51820:
+      // file exists", backing off forever. Clear them on (re)start so a restart always reconnects --
+      // a no-op on first start (the rules don't exist yet). gluetun-wiki kubernetes.md#adding-ipv6-rule.
+      // This is what makes the PF-health liveness restart (below) actually recover, and protects every
+      // consumer (not just PF ones) if its tunnel-death liveness ever restarts gluetun.
+      lifecycle: {
+        postStart: { exec: { command: ['/bin/sh', '-c', '(ip rule del table 51820; ip -6 rule del table 51820) || true'] } },
+      },
       volumeMounts: [
         { name: name + '-tun', mountPath: '/dev/net/tun' },
         { name: name + '-control', mountPath: '/gluetun/auth/config.toml', subPath: 'config.toml', readOnly: true },
       ],
-      // publicip route is public (config.toml), so this probe works without auth and fails when the
-      // tunnel is down -> gluetun restarts and the shared-netns app loses connectivity until it heals.
-      livenessProbe: {
+      // Liveness. WITHOUT port forwarding: the unauth publicip route works without auth and fails when
+      // the tunnel is down -> gluetun restarts and the shared-netns app loses connectivity until it
+      // heals. WITH port forwarding: also fail on a lost forwarded port (pfHealthScript) so a wedged
+      // NAT-PMP forward self-heals instead of silently leaving the app announcing/seeding on a dead port.
+      livenessProbe: if portForwarding then {
+        exec: { command: ['/bin/sh', '-c', pfHealthScript] },
+        initialDelaySeconds: 90,   // WG connect + first PF assignment (~16s in practice; generous)
+        periodSeconds: 30,
+        failureThreshold: 6,       // ~3 min sustained loss tolerated, so a single renewal blip never churns
+      } else {
         httpGet: { path: '/v1/publicip/ip', port: utils.assertEqualAndReturn(this.container.ports[0].name, 'gluetun-ctrl') },
         initialDelaySeconds: 30,
         periodSeconds: 30,

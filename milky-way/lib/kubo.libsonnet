@@ -211,11 +211,19 @@ local images = import 'milky-way/lib/images.libsonnet';
       # --- dynamic: wait for gluetun's NAT-PMP forwarded port, then listen on + announce <vpn-exit>:PORT ---
       # gluetun's up-command writes the port to /pf/port. Wait for a non-empty, non-zero value: gluetun
       # reports 0 while no port is forwarded (tunnel/PF not up yet), and announcing port 0 is useless.
-      echo "waiting for gluetun port-forward (/pf/port)..."
+      # Read the CURRENT forwarded port from gluetun's control server (the authoritative LIVE value), not
+      # the /pf/port file: gluetun's up-command only WRITES /pf/port on a NEW successful assignment, so
+      # after a forward is lost (ProtonVPN NAT-PMP renewal refused) that file keeps the last, now-dead
+      # port. Sourcing /v1/portforward means a kubo restart during/after an outage never re-announces a
+      # stale dead port -- it blocks here until a real live forward exists (gluetun restarts to re-acquire
+      # one; see its PF-health liveness probe below). The control server comes up alongside the tunnel, so
+      # an empty read early just loops.
+      echo "waiting for gluetun port-forward (/v1/portforward)..."
       PORT=""
       while [ -z "$PORT" ] || [ "$PORT" = "0" ]; do
         sleep 2
-        PORT="$(cat /pf/port 2>/dev/null || true)"
+        PORT="$(wget -q -O - http://127.0.0.1:%(controlPort)s/v1/portforward 2>/dev/null \
+                | sed -n 's/.*"port":\([0-9]*\).*/\1/p')"
       done
       EXIT_IP=""
       while [ -z "$EXIT_IP" ]; do
@@ -274,11 +282,13 @@ local images = import 'milky-way/lib/images.libsonnet';
       exit 0
     |||) % { controlPort: controlPort },
 
-    // The VPN sidecar fragments, embedded into this pod below. firewallInputPorts opens the gateway +
-    // API + control + webui-proxy ports through the killswitch (cluster side); the forwarded SWARM port is auto-
-    // opened on the VPN interface by gluetun (not here). The up-command publishes the forwarded port
-    // to the shared /pf volume for the wrapper; publicControlRoutes exposes /v1/portforward so the
-    // wrapper (and the verifier) can read it / the VPN exit IP.
+    // The VPN sidecar fragments, embedded into this pod below. The gluetun PF-health liveness probe +
+    // postStart IPv6-rule cleanup (the self-heal for a lost ProtonVPN forward) now live in
+    // lib/gluetun.libsonnet, applied to every portForwarding=true consumer -- kubo no longer overrides
+    // them here. firewallInputPorts opens the gateway + API + control + webui-proxy ports through the
+    // killswitch (cluster side); the forwarded SWARM port is auto-opened on the VPN interface by gluetun
+    // (not here). gluetun auto-exposes GET /v1/portforward on its control server when portForwarding is
+    // on, so the wrapper (and the verifier) can read the live forwarded port / VPN exit IP.
     vpn:: gluetun.new(
       wireguardPrivateKey=wireguardPrivateKey,
       name=name + '-gluetun',
@@ -291,7 +301,6 @@ local images = import 'milky-way/lib/images.libsonnet';
       firewallInputPorts=[gatewayPort, apiPort, controlPort, webuiProxyPort],
       portForwarding=true,
       portForwardingUpCommand="/bin/sh -c 'echo {{PORT}} > /pf/port'",
-      publicControlRoutes=['GET /v1/publicip/ip', 'GET /v1/portforward'],
     ),
 
     // Re-emit the gluetun-owned manifests so Tanka applies them.
@@ -390,9 +399,12 @@ local images = import 'milky-way/lib/images.libsonnet';
               //     churn at the source.
               this.vpn.container + {
                 volumeMounts+: [{ name: 'pf', mountPath: '/pf' }],
-                lifecycle: {
-                  postStart: { exec: { command: ['/bin/sh', '-c', '(ip rule del table 51820; ip -6 rule del table 51820) || true'] } },
-                },
+                // The gluetun container-restart IPv6-rule cleanup (postStart) and the port-forward-health
+                // liveness probe now come from lib/gluetun.libsonnet (every portForwarding=true consumer
+                // gets them). Only kubo's extra gluetun memory/CPU headroom stays here -- kubo's DHT/swarm
+                // pushes far more connections/packets through gluetun than a torrent client, so the
+                // default 256Mi/500m OOMKills and CPU-throttles (paired with the wrapper's Swarm.ConnMgr
+                // cap that bounds the churn at the source).
                 resources+: {
                   requests+: { memory: '128Mi' },
                   limits+: { memory: '768Mi', cpu: '1' },
