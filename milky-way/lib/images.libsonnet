@@ -161,6 +161,19 @@ local images = {
       fullyQualifiedRepository: "docker.io/atmoz/sftp",
       defaultDigest: { hash: "sha256:a6cb3eb29202ca7f57e73bb7e527286e66e0e822fff65609207c7e0ef2d135a3", tagHint: "alpine" },
     },
+    // servercontainers/samba: standard configurable Samba server (env-driven smb.conf, first-class
+    // Apple/Time Machine fruit-VFS support) -- run here as guest SMB shares over the tailnet
+    // (lib/samba.libsonnet). The lean `smbd-only` flavor: smbd only, no avahi/wsdd/nmbd, since
+    // discovery is moot over the tailnet (clients mount it by its *.ts.net name). This image is a
+    // rolling `master` build (no upstream semver -- org.opencontainers.image.version is "master"),
+    // so the tagHint is just the floating tag the digest was resolved from; the digest is what's
+    // pinned (built 2026-01-05). Multi-arch INDEX digest (k3s resolves the per-node arch; the index
+    // includes linux/amd64 for methanol), same convention as the *arr/qbittorrent/jellyfin pins.
+    // Re-resolve with `docker buildx imagetools inspect ghcr.io/servercontainers/samba:smbd-only-latest`.
+    samba: {
+      fullyQualifiedRepository: "ghcr.io/servercontainers/samba",
+      defaultDigest: { hash: "sha256:cf0d36de0477093e5cb6fd19b98d7a911a523c0976c20e634bd42c2bcffe172c", tagHint: "smbd-only-latest" },
+    },
     // traefik/whoami is shared by the tailscale-operator smoke tests and the Traefik+cert-manager
     // wildcard-cert smoke test at the same digest; one digestFor<Consumer> per consumer, following
     // the per-consumer convention.

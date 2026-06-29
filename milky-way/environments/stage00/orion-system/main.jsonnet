@@ -25,6 +25,7 @@ local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
 local utils = import 'milky-way/lib/utils.libsonnet';
 local wgConf = import 'milky-way/lib/wireguard-conf.libsonnet';
 local sftp = import 'milky-way/lib/sftp.libsonnet';
+local samba = import 'milky-way/lib/samba.libsonnet';
 local grandCentral = import 'milky-way/lib/grand-central.libsonnet';
 local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local kubo = import 'milky-way/lib/kubo.libsonnet';
@@ -465,6 +466,30 @@ local pubkeys = import 'magic/common/public_keys.json';
     authorizedKeys = [
       pubkeys.ssh.yutoSodium,  // Yuto's Sodium
       pubkeys.ssh.onePasswordMain,  // 1Password "ssh key - main"
+    ],
+  ),
+
+  // SMB server dedicated to Apple-device backups (lib/samba.libsonnet), reached over the tailnet on
+  // its own dedicated RWX NFS PVC (smb-share-for-apple-devices-backups-data) -- kept off the shared
+  // media volume. Two shares, each a subdir of the one PVC:
+  //   - smb://apple-backups.tail4c9a.ts.net/timemachine  -> macOS Time Machine target (fruit VFS).
+  //     AUTHENTICATED (user `timemachine`, password from sops): Time Machine forces a private 0700
+  //     share root, which only a session that OWNS it can write -- a guest never can. macOS expects
+  //     to authenticate to network TM destinations anyway.
+  //   - smb://apple-backups.tail4c9a.ts.net/backups      -> GUEST plain share for other backups /
+  //     manual file drops, incl. the iOS/iPadOS Files app. NOTE iOS/iPadOS cannot back up to SMB
+  //     directly (iCloud or a Mac/PC only), so for those devices this is manual file storage.
+  smbShareForAppleDevicesBackups: samba.new(
+    name = "smb-share-for-apple-devices-backups",
+    tailscaleHostname = "apple-backups",   // free choice; must be tailnet-unique (cleaner mount URL than the long name)
+    storageSize = "1Ti",
+    users = {
+      // Time Machine user; password from sops (secrets.smb.appleDevicesBackupsTimemachinePassword).
+      timemachine: { uid: 1000, password: secrets.smb.appleDevicesBackupsTimemachinePassword },
+    },
+    shares = [
+      { name: "timemachine", user: "timemachine", timeMachine: true, timeMachineMaxSize: "1T" },  // cap so TM can't fill the pool; tune to taste
+      { name: "backups" },                                                                         // guest; other backups / iOS Files-app drops
     ],
   ),
 
