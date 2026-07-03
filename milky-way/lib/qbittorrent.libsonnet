@@ -34,6 +34,14 @@ local images = import 'milky-way/lib/images.libsonnet';
     volumeClaimName,                    // required -> external shared RWX PVC (defined in main.jsonnet)
     volumeMountPath,                    // required -> whole volume mounted here
     downloadsSubdir,                    // required -> qbittorrent's save dir within the volume
+    // Optional "run on torrent finished" -> Sonarr import hook. null disables it. When set, shape is
+    // { sonarrHost, sonarrPort, sonarrApiKey, category, importMode? }: on each COMPLETED torrent in `category`,
+    // qbittorrent asks Sonarr to do a PATH/file-level import of the content. This exists because
+    // Sonarr's queue-based Completed Download Handling resolves the series by parsing the torrent's
+    // TOP-LEVEL name, so SeaDex batches whose name lacks a season/episode token (e.g. "Frieren Beyond
+    // Journey's End (BD Remux ...)") never import even though the files inside are "... - S01E01 ...".
+    // A path scan parses each file instead, so it succeeds. See the hook script comment below.
+    onTorrentFinished=null,
     initImage=images.busybox.fullyQualifiedImageReferenceTaggedForQbittorrent,
   ):: {
     local this = self,
@@ -44,6 +52,12 @@ local images = import 'milky-way/lib/images.libsonnet';
     // qbittorrent reverse-proxy / auth-subnet whitelist below.
     local podCidr = '10.42.0.0/16',
     local svcCidr = '10.43.0.0/16',
+    // kube-dns ClusterIP (k3s puts it at .10 of the service CIDR; verified on methanol). The
+    // on-torrent-finished hook needs it because this pod's ONLY resolver is gluetun's 127.0.0.1
+    // (public DNS over the tunnel), which cannot resolve in-cluster Service names -- so the hook
+    // resolves Sonarr through kube-dns explicitly and dials the returned IP (gluetun's killswitch
+    // already allows svcCidr outbound).
+    local clusterDnsIp = '10.43.0.10',
 
     // Commands gluetun runs when the forwarded port comes up / goes down: set qbittorrent's
     // listen_port to gluetun's {{PORT}} via the WebUI API. They run inside the gluetun container,
@@ -109,9 +123,126 @@ local images = import 'milky-way/lib/images.libsonnet';
     ]),
     local configDataInitialSeed = { 'qBittorrent.conf': qbtConfInitialSeed },
 
+    // ---- Optional "run on torrent finished" -> Sonarr import hook (see the onTorrentFinished param) ----
+    local hookEnabled = onTorrentFinished != null,
+    local hookImportMode =
+      if hookEnabled && std.objectHas(onTorrentFinished, 'importMode')
+      then onTorrentFinished.importMode
+      else 'Copy',   // "Copy" = copy-or-HARDLINK (honors Sonarr's "use hardlinks"); never "Move" (breaks seeding)
+
+    // The program qbittorrent runs on completion. It substitutes its own tokens into the argv:
+    // %F = content path, %L = category (quoted so paths with spaces survive). We keep the actual
+    // logic in a mounted script (below) rather than an inline command so quoting stays sane.
+    local autorunProgram = '/bin/sh /scripts/on-complete.sh "%F" "%L"',
+    local autorunScript = |||
+      #!/bin/sh
+      # qbittorrent "run on torrent finished" hook. qbittorrent substitutes its parameters into the
+      # argv: $1 = %F (content path), $2 = %L (category). It fires once per COMPLETED torrent, so $1
+      # is always fully-downloaded content -- no partial-file risk.
+      #
+      # Why this exists: sonarr-for-sdxarr has no indexers -- SeaDexArr adds torrents straight to
+      # qbittorrent and Sonarr imports them via Completed Download Handling, which resolves the
+      # series by parsing the torrent's TOP-LEVEL name. SeaDex "best" batches whose name lacks a
+      # season/episode token (e.g. "Frieren Beyond Journey's End (BD Remux ...)") fail that parse and
+      # never import, even though the files inside are named "... - S01E01 ...". Sonarr's
+      # /manualimport endpoint parses each FILE (not the folder name), so it resolves the series
+      # per-file and imports what the queue/folder scan can't. (A DownloadedEpisodesScan command does
+      # NOT work here -- it parses the folder name too and gives up "Unknown Series".)
+      set -eu
+      content_path=${1:-}
+      category=${2:-}
+      # Only this Sonarr instance's category; ignore anything else (e.g. legacy tv-sonarr grabs).
+      [ "$category" = "$SONARR_IMPORT_CATEGORY" ] || exit 0
+      [ -n "$content_path" ] || exit 0
+      # This pod's only resolver is gluetun's 127.0.0.1 (public DNS over the tunnel), so it can't
+      # resolve the in-cluster Sonarr Service name. Resolve it via kube-dns explicitly, then dial the
+      # returned IP with --resolve (gluetun already allows svcCidr outbound; Host stays the name).
+      sonarr_ip=$(nslookup "$SONARR_HOST" "$CLUSTER_DNS_IP" 2>/dev/null | awk '/^Name:/{seen=1} seen&&/^Address/{print $NF; exit}')
+      [ -n "$sonarr_ip" ] || { echo "on-complete: could not resolve $SONARR_HOST via $CLUSTER_DNS_IP" >&2; exit 1; }
+      api="http://$SONARR_HOST:$SONARR_PORT"
+      # 1. Ask Sonarr to parse each file in the folder (it returns a per-file series/episode match +
+      #    a rejections list). filterExistingFiles is a cheap first pass; the real dedup is step 2.
+      candidates=$(curl -fsS -m 300 --resolve "$SONARR_HOST:$SONARR_PORT:$sonarr_ip" -G "$api/api/v3/manualimport" \
+        -H "X-Api-Key: $SONARR_API_KEY" \
+        --data-urlencode "folder=$content_path" \
+        --data-urlencode "filterExistingFiles=true")
+      # 2. Keep only files Sonarr matched to a series + episode(s), with no rejections, AND whose
+      #    episode(s) do NOT already have a file. That last guard is load-bearing: manual import
+      #    otherwise force-REPLACES existing files (its rejection list doesn't stop it), which would
+      #    both make the hook non-idempotent (re-fire re-imports everything) and, worse, clobber a
+      #    prior release under this instance's upgradeAllowed=false / first-grab-wins policy (e.g.
+      #    overwrite an already-imported DVD version with a later batch). It also drops extras
+      #    (NCED/NCOP/...) since those match no episode.
+      files=$(printf '%s' "$candidates" | jq -c '[.[] | select(.series != null and (.episodes | length > 0) and (.rejections | length == 0) and (any(.episodes[]; .hasFile) | not)) | {path, seriesId: .series.id, episodeIds: [.episodes[].id], quality, languages, releaseGroup, indexerFlags: (.indexerFlags // 0)}]')
+      count=$(printf '%s' "$files" | jq 'length')
+      [ "$count" -gt 0 ] || { echo "on-complete: no importable episodes in $content_path"; exit 0; }
+      # 3. Import them. importMode "Copy" honors Sonarr's "use hardlinks" setting -> one physical copy
+      #    on the shared mdata fs, source kept so the torrent keeps seeding.
+      printf '{"name":"ManualImport","importMode":"%s","files":%s}' "$SONARR_IMPORT_MODE" "$files" \
+        | curl -fsS -m 300 --resolve "$SONARR_HOST:$SONARR_PORT:$sonarr_ip" -X POST "$api/api/v3/command" \
+            -H "X-Api-Key: $SONARR_API_KEY" -H 'Content-Type: application/json' --data @-
+    |||,
+    local autorunScriptData = { 'on-complete.sh': autorunScript },
+
+    // Enforce the hook via the WebUI API on every start (idempotent). The seeded qBittorrent.conf is
+    // only-if-empty and the live PVC config already exists, so a seed change wouldn't take -- instead
+    // we set the pref at runtime, the same setPreferences path gluetun's port-forward command uses
+    // (127.0.0.1 is in AuthSubnetWhitelist + LocalHostAuth=false, so no creds). autorun_enabled +
+    // autorun_program are qbittorrent 5's "run on torrent finished" prefs. std.manifestJsonEx yields
+    // the JSON-escaped program string (\"%F\" \"%L\"). strReplace (not %-format) keeps the qbittorrent
+    // %F/%L tokens out of jsonnet's formatter.
+    local setPrefsLocalUrl = 'http://127.0.0.1:%d/api/v2/app/setPreferences' % webuiPort,
+    local setPrefsJson = '{"autorun_enabled":true,"autorun_program":' + std.manifestJsonEx(autorunProgram, '') + '}',
+    local hookPostStartCommand = std.strReplace(std.strReplace(|||
+      # Retry until the WebUI answers, then exit 0 unconditionally so a transient failure to set the
+      # pref never crashes the container.
+      i=0
+      while [ "$i" -lt 60 ]; do
+        curl -fsS -m 5 -X POST 'SET_PREFS_URL' --data-urlencode 'JSON_BODY' && exit 0
+        i=$((i + 1))
+        sleep 2
+      done
+      exit 0
+    |||, 'SET_PREFS_URL', setPrefsLocalUrl), 'JSON_BODY', 'json=' + setPrefsJson),
+
+    // Container/volume fragments spliced into the pod below only when the hook is enabled.
+    local hookEnv = if hookEnabled then [
+      { name: 'SONARR_HOST', value: onTorrentFinished.sonarrHost },
+      { name: 'SONARR_PORT', value: std.toString(onTorrentFinished.sonarrPort) },
+      { name: 'CLUSTER_DNS_IP', value: clusterDnsIp },
+      { name: 'SONARR_IMPORT_CATEGORY', value: onTorrentFinished.category },
+      { name: 'SONARR_IMPORT_MODE', value: hookImportMode },
+      // Keep the key out of the Deployment's plaintext env -- pull it from a Secret this lib renders.
+      { name: 'SONARR_API_KEY', valueFrom: { secretKeyRef: { name: name + '-sonarr-import', key: 'sonarr-api-key' } } },
+    ] else [],
+    local hookVolumeMounts = if hookEnabled then [{ name: 'autorun-scripts', mountPath: '/scripts', readOnly: true }] else [],
+    local hookVolumes = if hookEnabled then [{ name: 'autorun-scripts', configMap: { name: name + '-autorun' } }] else [],
+    local hookLifecycle = if hookEnabled then { lifecycle: { postStart: { exec: { command: ['/bin/sh', '-c', hookPostStartCommand] } } } } else {},
+    // Fold the hook data into the pod-template checksum so editing the script/program rolls the pod.
+    // When disabled this is byte-identical to the old input, so existing deployments don't churn.
+    local podTemplateChecksumInput =
+      std.manifestJsonEx(configDataInitialSeed, '')
+      + (if hookEnabled then '\n' + std.manifestJsonEx(autorunScriptData, '') + '\n' + autorunProgram else ''),
+
     // Re-emit the gluetun-owned manifests so Tanka applies them.
     vpnSecret: this.vpn.secret,
     vpnControlConfig: this.vpn.configMap,
+
+    // Hook resources (only when enabled): the script ConfigMap and the Sonarr-API-key Secret.
+    // NB: computed field KEYS are evaluated in the enclosing scope, so they can see the
+    // `onTorrentFinished` param but NOT the object-local `hookEnabled` -- gate on the param directly.
+    [if onTorrentFinished != null then 'autorunConfigMap']: {
+      apiVersion: 'v1',
+      kind: 'ConfigMap',
+      metadata: { name: name + '-autorun', namespace: namespace },
+      data: autorunScriptData,
+    },
+    [if onTorrentFinished != null then 'sonarrImportSecret']: {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: name + '-sonarr-import', namespace: namespace },
+      stringData: { 'sonarr-api-key': onTorrentFinished.sonarrApiKey },
+    },
 
     configMapInitialSeed: {
       apiVersion: 'v1',
@@ -142,7 +273,7 @@ local images = import 'milky-way/lib/images.libsonnet';
         template: {
           metadata: {
             labels: {} + this.deployment.spec.selector.matchLabels,
-            annotations: { 'checksum/config': std.md5(std.manifestJsonEx(configDataInitialSeed, '')) },
+            annotations: { 'checksum/config': std.md5(podTemplateChecksumInput) },
           },
           spec: {
             tolerations: [
@@ -211,12 +342,12 @@ local images = import 'milky-way/lib/images.libsonnet';
                   { name: 'PGID', value: '1000' },
                   { name: 'TZ', value: 'America/Los_Angeles' },
                   { name: 'WEBUI_PORT', value: std.toString(webuiPort) },
-                ],
+                ] + hookEnv,
                 ports: [{ name: 'webui', containerPort: webuiPort }],
                 volumeMounts: [
                   { name: 'config', mountPath: '/config' },
                   { name: 'volume', mountPath: volumeMountPath },
-                ],
+                ] + hookVolumeMounts,
                 readinessProbe: {
                   httpGet: { path: '/', port: 'webui' },
                   initialDelaySeconds: 20,
@@ -226,13 +357,13 @@ local images = import 'milky-way/lib/images.libsonnet';
                   requests: { memory: '256Mi', cpu: '100m' },
                   limits: { memory: '2Gi', cpu: '1' },
                 },
-              },
+              } + hookLifecycle,
             ],
             volumes: this.vpn.volumes + [
               { name: 'config', persistentVolumeClaim: { claimName: this.configPvc.metadata.name } },
               { name: 'volume', persistentVolumeClaim: { claimName: volumeClaimName } },
               { name: 'config-seed', configMap: { name: this.configMapInitialSeed.metadata.name } },
-            ],
+            ] + hookVolumes,
           },
         },
       },

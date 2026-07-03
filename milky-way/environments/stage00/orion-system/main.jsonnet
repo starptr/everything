@@ -200,6 +200,20 @@ local pubkeys = import 'magic/common/public_keys.json';
     volumeClaimName = this.mdataPvc.metadata.name,
     volumeMountPath = "/data",
     downloadsSubdir = "downloads/qbittorrent",
+    // On each COMPLETED torrent in the sonarr-for-sdxarr category, ask Sonarr to do a PATH/file-level
+    // import (DownloadedEpisodesScan). This is the recovery path for SeaDex "best" batches whose
+    // TOP-LEVEL torrent name lacks a season/episode token (e.g. "Frieren Beyond Journey's End (BD
+    // Remux ...)"): Sonarr's queue-based Completed Download Handling parses that name and fails
+    // ("Unable to parse"), so it never imports -- but the files inside are "... - S01E01 ...", so a
+    // path scan parses each file and imports fine. importMode defaults to "Copy" = HARDLINK on the
+    // shared mdata fs (no ~data duplication) with the source kept so the torrent keeps seeding.
+    // Same service/port/key/category source-of-truth as the buildarr + seadexarr blocks below.
+    onTorrentFinished = {
+      sonarrHost: utils.domainOfService(this.sonarrForSdxarr.service),
+      sonarrPort: utils.associateObjectsByKey(this.sonarrForSdxarr.service.spec.ports, 'name')['webui'].port,
+      sonarrApiKey: secrets.sonarrForSdxarr.apiKey,
+      category: 'sonarr-for-sdxarr',
+    },
   ),
 
   // vpn-proxy: a VPN-egress HTTP forward proxy. gluetun's built-in HTTP proxy (:8888) forwards every
@@ -233,9 +247,9 @@ local pubkeys = import 'magic/common/public_keys.json';
   // name -- its supported use-case is the seadexarr wiring below, NOT a general/global Sonarr).
   // Monitors/grabs TV episodes, hands torrents to qbittorrent
   // (qbittorrent.default.svc.cluster.local:8080), then imports completed downloads by hardlinking
-  // them out of /data/downloads/qbittorrent into a library tree ('/data/library/Animations (Seadexarr)'
-  // and '/data/library/TV Shows (Seadexarr)', set as Sonarr root folders via buildarrConfig below --
-  // the '(Seadexarr)' suffix marks them as this instance's SeaDexArr-managed roots) on the
+  // them out of /data/downloads/qbittorrent into a library tree ('/data/library/Animations (Seadexarr)',
+  // set as the Sonarr root folder via buildarrConfig below --
+  // the '(Seadexarr)' suffix marks it as this instance's SeaDexArr-managed root) on the
   // SHARED mdata volume -- same PVC, same /data mount path as qbittorrent, so hardlinks/atomic
   // moves stay on one filesystem. WebUI via Tailscale L7 ingress; SQLite config on its own iSCSI
   // RWO PVC. The download-client/indexer links are entered in the UI post-deploy (they need API
@@ -379,7 +393,6 @@ local pubkeys = import 'magic/common/public_keys.json';
                   'sonarr media mount must be at /data for these buildarr root_folders to resolve',
                 root_folders: [
                   '/data/library/Animations (Seadexarr)',
-                  '/data/library/TV Shows (Seadexarr)',
                 ],
               },
             },
