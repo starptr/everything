@@ -15,7 +15,7 @@ local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
 local vpnProxy = import 'milky-way/lib/vpn-proxy.libsonnet';
 local thelounge = import 'milky-way/lib/thelounge.libsonnet';
-local sonarr = import 'milky-way/lib/sonarr.libsonnet';
+local sonarrForSdxarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local seanime = import 'milky-way/lib/seanime.libsonnet';
@@ -229,22 +229,26 @@ local pubkeys = import 'magic/common/public_keys.json';
     serverCountries = "United States",
   ),
 
-  // Sonarr: monitors/grabs TV episodes, hands torrents to qbittorrent
+  // sonarr-for-sdxarr: the Sonarr instance dedicated to being reconciled by SeaDexArr (hence the
+  // name -- its supported use-case is the seadexarr wiring below, NOT a general/global Sonarr).
+  // Monitors/grabs TV episodes, hands torrents to qbittorrent
   // (qbittorrent.default.svc.cluster.local:8080), then imports completed downloads by hardlinking
-  // them out of /data/downloads/qbittorrent into a library tree (/data/library/Animations and
-  // '/data/library/TV Shows', set as Sonarr root folders via buildarrConfig below) on the
+  // them out of /data/downloads/qbittorrent into a library tree ('/data/library/Animations (Seadexarr)'
+  // and '/data/library/TV Shows (Seadexarr)', set as Sonarr root folders via buildarrConfig below --
+  // the '(Seadexarr)' suffix marks them as this instance's SeaDexArr-managed roots) on the
   // SHARED mdata volume -- same PVC, same /data mount path as qbittorrent, so hardlinks/atomic
   // moves stay on one filesystem. WebUI via Tailscale L7 ingress; SQLite config on its own iSCSI
   // RWO PVC. The download-client/indexer links are entered in the UI post-deploy (they need API
   // keys each app generates on first boot).
-  sonarr: sonarr.new(
-    apiKey = secrets.sonarr.apiKey,
-    tailscaleHostname = "sonarr",
+  sonarrForSdxarr: sonarrForSdxarr.new(
+    apiKey = secrets.sonarrForSdxarr.apiKey,
+    tailscaleHostname = "sonarr-for-sdxarr",
+    name = "sonarr-for-sdxarr",
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
   ),
 
   // Prowlarr: indexer manager. No media volume -- it pushes indexer configs to Sonarr
-  // (sonarr.default.svc.cluster.local:8989, and later Radarr) over ClusterIP DNS. WebUI via
+  // (sonarr-for-sdxarr.default.svc.cluster.local:8989, and later Radarr) over ClusterIP DNS. WebUI via
   // Tailscale L7 ingress; SQLite config on its own iSCSI RWO PVC.
   prowlarr: prowlarr.new(
     apiKey = secrets.prowlarr.apiKey,
@@ -278,7 +282,7 @@ local pubkeys = import 'magic/common/public_keys.json';
 
   // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against
   // filters, and forwards each match to a download client -- typically Sonarr as an "arr" client
-  // (Sonarr then grabs via its own qBittorrent client under tv-sonarr, owning the category), or
+  // (Sonarr then grabs via its own qBittorrent client under sonarr-for-sdxarr, owning the category), or
   // qBittorrent directly under a per-filter category. No media volume / no VPN sidecar: it hands
   // releases to Sonarr / qBittorrent over ClusterIP, it isn't a torrent client itself. The download
   // clients + indexers + filters + categories are runtime UI/DB state -- autobrr has no
@@ -302,7 +306,7 @@ local pubkeys = import 'magic/common/public_keys.json';
   // webui port as ports[0] after asserting ports[0] really is the webui entry (qbittorrent's Service
   // also exposes gluetun-ctrl). API keys come from sops.
   local buildarrConfig =
-    local sonarrOrionSystemInstanceName = 'sonarr-orion-system';
+    local sonarrForSdxarrInstanceName = 'sonarr-for-sdxarr';
     local prowlarrOrionSystemInstanceName = 'prowlarr-orion-system';
     local httpUrl(hostname, port) = 'http://%s:%d' % [hostname, port];
     {
@@ -325,11 +329,11 @@ local pubkeys = import 'magic/common/public_keys.json';
           media_management: { delete_unmanaged_root_folders: false },
         },
         instances: {
-          [sonarrOrionSystemInstanceName]: {
-            hostname: utils.domainOfService(this.sonarr.service),
-            port: utils.associateObjectsByKey(this.sonarr.service.spec.ports, 'name')['webui'].port,
+          [sonarrForSdxarrInstanceName]: {
+            hostname: utils.domainOfService(this.sonarrForSdxarr.service),
+            port: utils.associateObjectsByKey(this.sonarrForSdxarr.service.spec.ports, 'name')['webui'].port,
             protocol: 'http',
-            api_key: secrets.sonarr.apiKey,
+            api_key: secrets.sonarrForSdxarr.apiKey,
             settings: {
               download_clients: {
                 delete_unmanaged: false,  // also explicit per-instance (belt & suspenders)
@@ -340,7 +344,7 @@ local pubkeys = import 'magic/common/public_keys.json';
                     port: utils.associateObjectsByKey(this.qbittorrent.service.spec.ports, 'name')['webui'].port,
                     // No username/password: qBittorrent's AuthSubnetWhitelist bypasses auth for
                     // in-cluster callers (Sonarr is in the pod CIDR). See lib/qbittorrent.libsonnet.
-                    category: 'tv-sonarr',  // qBittorrent category Sonarr tags its grabs with
+                    category: 'sonarr-for-sdxarr',  // qBittorrent category Sonarr tags its grabs with
                   },
                 },
               },
@@ -369,13 +373,13 @@ local pubkeys = import 'magic/common/public_keys.json';
                 // rejects a non-existent path). The paths below stay LITERAL on purpose -- they must
                 // not auto-follow an accidental mountPath change.
                 local mediaMount = utils.associateObjectsByKey(
-                  this.sonarr.deployment.spec.template.spec.containers[0].volumeMounts, 'name'
+                  this.sonarrForSdxarr.deployment.spec.template.spec.containers[0].volumeMounts, 'name'
                 )['media'],
                 assert mediaMount.mountPath == '/data' :
                   'sonarr media mount must be at /data for these buildarr root_folders to resolve',
                 root_folders: [
-                  '/data/library/Animations',
-                  '/data/library/TV Shows',
+                  '/data/library/Animations (Seadexarr)',
+                  '/data/library/TV Shows (Seadexarr)',
                 ],
               },
             },
@@ -403,14 +407,14 @@ local pubkeys = import 'magic/common/public_keys.json';
                       // its API key itself. The two URLs are still required explicitly (instance_name
                       // only links the key): prowlarr_url is how Sonarr dials back to Prowlarr for the
                       // indexer proxy; base_url is how Prowlarr reaches Sonarr to push the sync.
-                      instance_name: sonarrOrionSystemInstanceName,
+                      instance_name: sonarrForSdxarrInstanceName,
                       prowlarr_url: httpUrl(
                         utils.domainOfService(this.prowlarr.service),
                         utils.associateObjectsByKey(this.prowlarr.service.spec.ports, 'name')['webui'].port,
                       ),
                       base_url: httpUrl(
-                        utils.domainOfService(this.sonarr.service),
-                        utils.associateObjectsByKey(this.sonarr.service.spec.ports, 'name')['webui'].port,
+                        utils.domainOfService(this.sonarrForSdxarr.service),
+                        utils.associateObjectsByKey(this.sonarrForSdxarr.service.spec.ports, 'name')['webui'].port,
                       ),
                       sync_level: 'full_sync',
                     },
@@ -426,7 +430,7 @@ local pubkeys = import 'magic/common/public_keys.json';
 
   // SeaDexArr: scheduled daemon (no web UI -> no Service/Ingress) that reads the Sonarr library, picks
   // SeaDex's "best" release per anime, and adds its torrent straight into qBittorrent under the
-  // tv-sonarr category (so Sonarr imports it) tagged `from-seadexarr`. qBittorrent creds are omitted:
+  // sonarr-for-sdxarr category (so Sonarr imports it) tagged `from-seadexarr`. qBittorrent creds are omitted:
   // its AuthSubnetWhitelist bypasses auth for in-cluster callers (same as buildarr/Sonarr). Radarr
   // isn't deployed, so only Sonarr + qBittorrent are wired; the scheduled run tolerates the absent
   // Radarr per-module. Host/port for each app come from its Service (the source of truth) the same way
@@ -435,10 +439,10 @@ local pubkeys = import 'magic/common/public_keys.json';
   seadexarr: seadexarr.new(
     config = {
       sonarr_url: 'http://%s:%d' % [
-        utils.domainOfService(this.sonarr.service),
-        utils.associateObjectsByKey(this.sonarr.service.spec.ports, 'name')['webui'].port,
+        utils.domainOfService(this.sonarrForSdxarr.service),
+        utils.associateObjectsByKey(this.sonarrForSdxarr.service.spec.ports, 'name')['webui'].port,
       ],
-      sonarr_api_key: secrets.sonarr.apiKey,
+      sonarr_api_key: secrets.sonarrForSdxarr.apiKey,
       qbit_info: {
         host: 'http://%s:%d' % [
           utils.domainOfService(this.qbittorrent.service),
@@ -447,7 +451,7 @@ local pubkeys = import 'magic/common/public_keys.json';
         username: '',
         password: '',
       },
-      sonarr_torrent_category: 'tv-sonarr',   // matches Sonarr's qBittorrent download-client category (buildarr)
+      sonarr_torrent_category: 'sonarr-for-sdxarr',   // matches Sonarr's qBittorrent download-client category (buildarr)
       torrent_tags: 'from-seadexarr',         // qBittorrent tag on grabs, so SeaDexArr-added torrents are identifiable
       discord_url: secrets.seadexarr.discordUrl,
     },
