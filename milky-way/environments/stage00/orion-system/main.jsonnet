@@ -455,6 +455,10 @@ local pubkeys = import 'magic/common/public_keys.json';
       torrent_tags: 'from-seadexarr',         // qBittorrent tag on grabs, so SeaDexArr-added torrents are identifiable
       discord_url: secrets.seadexarr.discordUrl,
     },
+    // Poll every 10 minutes. SCHEDULE_TIME is float HOURS (app does time.sleep(SCHEDULE_TIME*3600)),
+    // so 10/60. The sleep runs AFTER each full pass, so passes never overlap regardless of interval.
+    // Kept at 10m (not 1m) to avoid hammering the SeaDex/AniList APIs, which change on the order of days.
+    scheduleHours = 10.0 / 60,
   ),
 
   // Public-key-only SFTP front door onto the shared mdata volume (read-write), reached over the

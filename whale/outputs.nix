@@ -24,14 +24,73 @@
   # needs nothing but the binary + its runtime closure + TLS roots + an init.
   andrefIpfsDepotBin = inputs.andref-ipfs-depot.packages.x86_64-linux.default;
 
+  # SeaDexArr (bbtufty) -- whale-built FORK of the pinned upstream `:main` image. NOT built from source
+  # (it's a niche Python app not in nixpkgs): we pull the exact pinned digest -- which already carries the
+  # qbittorrent-api 2025.11.1 login fix (see milky-way/lib/images.libsonnet) -- and patch ONE file in
+  # place. Fix: add_torrent_to_qbit checks `result != "Ok."`, but qBittorrent 5.1+ returns a
+  # TorrentsAddedMetadata dict from torrents/add (never "Ok."), so it false-raises "Failed to add torrent"
+  # on every successful grab; the patch inspects failure_count instead. See
+  # whale/patches/seadexarr-qbit5-add-response.patch and milky-way/lib/seadexarr.libsonnet. DROP THIS FORK
+  # once upstream handles qBittorrent 5.x's add response. To bump the base, update imageDigest (+ re-hash).
+  seadexarrUpstreamImage = imagePkgs.dockerTools.pullImage {
+    imageName = "ghcr.io/bbtufty/seadexarr";
+    imageDigest = "sha256:92d539222696bd312c372ee8c6915141025ea10c1daa1a5ebded2966236fdebf";
+    finalImageName = "ghcr.io/bbtufty/seadexarr";
+    finalImageTag = "main";
+    os = "linux";
+    arch = "amd64";
+    # FOD hash of the pulled amd64 image tarball (from the first build's hash mismatch).
+    sha256 = "sha256-YLR3i6JRqkesqc+9pieeN/d/M7suU3dKf3IOwYf7WKE=";
+  };
+  # Deterministic, VM-free patch (runAsRoot's runInLinuxVM and enableFakechroot's proot both proved
+  # flaky on this builder): extract seadex_arr.py from the pulled image's layers with plain tar, apply
+  # the patch, then layer just that one file over fromImage. `patch -p1` from the extracted rootfs
+  # matches the patch's `a/app/...` paths.
+  seadexarrPatchedModule = imagePkgs.runCommand "seadexarr-seadex_arr-patched.py" {
+    nativeBuildInputs = [ imagePkgs.gnutar imagePkgs.jq imagePkgs.patch ];
+  } ''
+    mkdir extract && tar -xf ${seadexarrUpstreamImage} -C extract
+    mkdir root
+    for layer in $(jq -r '.[0].Layers[]' extract/manifest.json); do
+      tar -xf "extract/$layer" -C root
+    done
+    ( cd root && patch -p1 < ${./patches/seadexarr-qbit5-add-response.patch} )
+    cp root/app/seadexarr/modules/seadex_arr.py "$out"
+  '';
+  seadexarrPatchLayer = imagePkgs.runCommand "seadexarr-patch-layer" { } ''
+    install -Dm644 ${seadexarrPatchedModule} "$out/app/seadexarr/modules/seadex_arr.py"
+  '';
+  # fromImage = the pinned upstream image; the overlay layer shadows just seadex_arr.py. buildLayeredImage
+  # doesn't inherit fromImage's config, so restate the upstream runtime contract (Entrypoint/Env/WorkingDir,
+  # read from the pulled image's config json) that lib/seadexarr.libsonnet depends on.
+  seadexarrPatchedImage = imagePkgs.dockerTools.buildLayeredImage {
+    name = "seadexarr";
+    tag = "latest";
+    fromImage = seadexarrUpstreamImage;
+    contents = [ seadexarrPatchLayer ];
+    config = {
+      Entrypoint = [ "seadexarr" ];
+      Cmd = [ "python3" ];
+      Env = [
+        "PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        "CONFIG_DIR=/config"
+      ];
+      WorkingDir = "/app";
+    };
+  };
+
   # Creates an attrset with two system-keyed targets: the x86_64-linux image and a
   # per-host script to push it to the docker registry.
   # @param name: The name of the docker repository for the image.
   # @param buildLayeredImageArg: The arguments to pass to `dockerTools.buildLayeredImage`. The `name` property is optional, but can be specified here too.
-  image-nix-artifacts = { name, buildLayeredImageArg }: let
-      image = imagePkgs.dockerTools.buildLayeredImage ({
-        inherit name;
-      } // buildLayeredImageArg);
+  image-nix-artifacts = { name, buildLayeredImageArg ? null, image ? null }: let
+      # Build a layered image from `buildLayeredImageArg`, OR accept a prebuilt `image` (e.g. a
+      # `buildImage`/`fromImage` fork that patches an upstream image in place). The push-script,
+      # digest-file, and system-keyed outputs are identical either way.
+      builtImage = if image != null then image
+                   else imagePkgs.dockerTools.buildLayeredImage ({
+                     inherit name;
+                   } // buildLayeredImageArg);
       # The push-script is built from the host's pkgs so it runs natively (native
       # skopeo, native ~/.config/containers/auth.json), while still pushing the
       # x86_64-linux image (the docker-archive tarball is arch-agnostic).
@@ -62,7 +121,7 @@
           # docker.io lists; do NOT use `inspect --raw | .config.digest` (that is the
           # config-blob digest, which is not a pullable manifest reference).
           digestfile="$HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
-          skopeo --insecure-policy copy --digestfile "$digestfile" "docker-archive:${image}" "$dest"
+          skopeo --insecure-policy copy --digestfile "$digestfile" "docker-archive:${builtImage}" "$dest"
           echo "Done!"
 
           digest=$(cat "$digestfile")
@@ -72,7 +131,7 @@
       };
     in {
       image = {
-        x86_64-linux = image;
+        x86_64-linux = builtImage;
       };
       push-script = {
         x86_64-linux = mkPushScript (pkgsFor "x86_64-linux");
@@ -196,6 +255,13 @@
     };
   };
 
+  # SeaDexArr fork -- see the seadexarrPatchedImage derivation comment above. Uses the prebuilt-`image`
+  # path of image-nix-artifacts (buildImage/fromImage), not buildLayeredImageArg.
+  seadexarr = image-nix-artifacts {
+    name = "seadexarr";
+    image = seadexarrPatchedImage;
+  };
+
   # andref-ipfs-depot (Discord-gated IPFS uploader). Wraps the crane-built Rust binary above in a
   # minimal layered image: dumb-init is PID 1 so k8s SIGTERM stops the pod promptly; cacert +
   # SSL_CERT_FILE give the serenity bot's HTTPS calls to Discord a CA bundle. Listens on :8080
@@ -240,6 +306,8 @@ in {
       grand-central-push = grand-central.push-script.x86_64-linux;
       autobrr-image = autobrr.image.x86_64-linux;
       autobrr-push = autobrr.push-script.x86_64-linux;
+      seadexarr-image = seadexarr.image.x86_64-linux;
+      seadexarr-push = seadexarr.push-script.x86_64-linux;
       andref-ipfs-depot-image = andref-ipfs-depot.image.x86_64-linux;
       andref-ipfs-depot-push = andref-ipfs-depot.push-script.x86_64-linux;
     };
@@ -248,6 +316,7 @@ in {
       mopidy-push = mopidy.push-script.aarch64-darwin;
       grand-central-push = grand-central.push-script.aarch64-darwin;
       autobrr-push = autobrr.push-script.aarch64-darwin;
+      seadexarr-push = seadexarr.push-script.aarch64-darwin;
       andref-ipfs-depot-push = andref-ipfs-depot.push-script.aarch64-darwin;
     };
   };

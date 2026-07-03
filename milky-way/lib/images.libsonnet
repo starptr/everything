@@ -101,20 +101,25 @@ local images = {
       defaultDigest: { hash: "sha256:57e2343fefe5d5701364b5e93b4985dbf08310d7b152f70556bdaba7e9475447", tagHint: "0.7.8" },
     },
     // SeaDexArr (bbtufty): scheduled daemon syncing Sonarr/Radarr anime picks from SeaDex into
-    // qBittorrent. SINGLE-ARCH amd64 manifest (matches methanol's x86_64) -- the digest is that one
-    // manifest, not a multi-arch index. Re-resolve with
-    // `docker buildx imagetools inspect ghcr.io/bbtufty/seadexarr:main`.
+    // qBittorrent. WHALE-BUILT FORK of the pinned upstream `:main` image + a one-line patch to
+    // add_torrent_to_qbit (see whale/patches/seadexarr-qbit5-add-response.patch; built in
+    // whale/outputs.nix by pulling the pinned digest and overlaying the patched seadex_arr.py). Why the
+    // fork: SeaDexArr checks `result != "Ok."` after qBittorrent's torrents/add, but qBittorrent 5.1+
+    // returns a TorrentsAddedMetadata JSON dict (never "Ok."), so every successful grab false-raises
+    // "Failed to add torrent"; the patch inspects failure_count instead. Unfixed upstream (even on main),
+    // so no bump helps.
     //
-    // Pinned to the `:main` build (2026-01-12), NOT the v0.9.0 release: v0.9.0 ships
-    // qbittorrent-api==2025.7.0, whose auth_log_in() requires the login body to be "Ok." and so
-    // CRASHES against our qBittorrent, which uses an AuthSubnetWhitelist that bypasses login for
-    // in-cluster callers and answers /api/v2/auth/login with `204 No Content` (empty body) instead.
-    // `:main` bumps to qbittorrent-api==2025.11.1, which counts an empty body as success -- so the
-    // whitelist bypass works and qBittorrent needs no password. Move to the next tagged release
-    // (>v0.9.0) once one ships with that bump.
+    // The base is the upstream `:main` build (single-arch amd64, matches methanol's x86_64), NOT the
+    // v0.9.0 release: v0.9.0 ships qbittorrent-api==2025.7.0, whose auth_log_in() requires the login body
+    // to be "Ok." and CRASHES against our qBittorrent (its AuthSubnetWhitelist bypasses login and answers
+    // /api/v2/auth/login with `204 No Content`). `:main` has qbittorrent-api==2025.11.1, which counts an
+    // empty body as success. To bump the base, update seadexarrUpstreamImage.imageDigest in outputs.nix
+    // (+ re-hash). Digest from exports/whale/digests/seadexarr.txt (written by
+    // `nix run ./flake-profiles/whale#seadexarr-push`). DROP THIS FORK and return to
+    // ghcr.io/bbtufty/seadexarr once upstream handles qBittorrent 5.x's torrents/add response.
     seadexarr: {
-      fullyQualifiedRepository: "ghcr.io/bbtufty/seadexarr",
-      defaultDigest: { hash: "sha256:92d539222696bd312c372ee8c6915141025ea10c1daa1a5ebded2966236fdebf", tagHint: "main" },
+      fullyQualifiedRepository: "docker.io/yuto7/seadexarr",
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/seadexarr.txt") },
     },
     // autobrr: download-automation tool (monitors IRC announce / RSS, matches releases against
     // filters, forwards each to a download client -- here qBittorrent / Sonarr under a per-filter

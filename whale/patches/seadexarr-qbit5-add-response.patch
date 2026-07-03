@@ -1,0 +1,14 @@
+--- a/app/seadexarr/modules/seadex_arr.py
++++ b/app/seadexarr/modules/seadex_arr.py
+@@ -1452,7 +1452,10 @@
+             category=self.torrent_category,
+             tags=self.torrent_tags,
+         )
+-        if result != "Ok.":
++        # qbittorrent-api returns "Ok."/"Fails." (qB <=5.0) or a TorrentsAddedMetadata dict (qB 5.1+,
++        # our build). Reject only an explicit failure: the legacy "Fails." string, or a nonzero
++        # failure_count. (The library already raises on 415/not-found/permission/409-already-added.)
++        if result == "Fails." or (not isinstance(result, str) and result.get("failure_count", 0) > 0):
+             raise Exception("Failed to add torrent")
+ 
+         return "torrent_added"
