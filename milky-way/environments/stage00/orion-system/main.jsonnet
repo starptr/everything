@@ -416,7 +416,19 @@ local pubkeys = import 'magic/common/public_keys.json';
                         utils.domainOfService(this.sonarrForSdxarr.service),
                         utils.associateObjectsByKey(this.sonarrForSdxarr.service.spec.ports, 'name')['webui'].port,
                       ),
-                      sync_level: 'full_sync',
+                      // DISABLED on purpose: sonarr-for-sdxarr is a SeaDex-only instance. If Prowlarr
+                      // pushed indexers here, Sonarr's RSS/auto-search would grab non-SeaDex releases on
+                      // its own, competing with SeaDexArr -- and since every quality profile has
+                      // upgradeAllowed=false, whichever release lands first wins forever, so a weekly
+                      // Nyaa grab would permanently block SeaDexArr's curated BD release from ever
+                      // importing. The app entry is KEPT (not deleted) so Buildarr still owns the
+                      // Prowlarr<->Sonarr link; only the indexer sync is turned off. (All of Sonarr's
+                      // other settings -- naming, root folders, download client -- come from the
+                      // `sonarr:` instance block above, not from here.) NOTE: Buildarr's Prowlarr
+                      // reconcile is currently broken (an empty-apikey indexer trips pydantic), so this
+                      // was ALSO applied at runtime via the Prowlarr API. Flip back to 'full_sync' only
+                      // if this instance should ever search indexers on its own.
+                      sync_level: 'disabled',
                     },
                   },
                 },
