@@ -76,6 +76,22 @@ direnv allow
 - **Overlays**: Custom package overlays for extending nixpkgs
 - **Cachix**: Binary cache setup for faster builds
 
+## Comment Guidelines
+
+**Global requirement**: At least 95% of comments should be at most 2–3 lines.
+Default to terse comments and minimize verbosity — omit "bad" comments entirely.
+
+Longer comments are acceptable only for:
+- **Top-level module/file comments** that are the source-of-truth documentation
+  for that module/file.
+- **Class/interface comments.** In Jsonnet — which has no classes — the `new()`
+  function is implicitly the class, so its comment may also be longer.
+
+Avoid "bad" comments. Example: do **not** explain a `new()` constructor by
+coupling the explanation to a specific instantiation of it — the specifics of
+any one instantiation do not apply to all usages of the constructor. Document
+what the constructor does in general, not how one call site happens to use it.
+
 ## Important Files
 
 - `flake-profiles/outputs.nix`: Main flake outputs combining all projects
