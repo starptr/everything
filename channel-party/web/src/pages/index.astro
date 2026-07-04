@@ -1,0 +1,23 @@
+---
+// The type-agnostic app shell (nav / channel tree / layout). Entirely type-agnostic: it never
+// knows about concrete channel or item kinds. Opening a channel loads that type's island. §9.
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>channel-party</title>
+  </head>
+  <body>
+    <header>
+      <h1>channel-party</h1>
+      <p>Headless, extensibility-first chat. The shell is type-agnostic; open a channel to load
+        its island.</p>
+    </header>
+    <nav>
+      <!-- A real nav would list channels from the API; scaffold links to a demo channel page. -->
+      <a href="/channels/demo">Open demo channel</a>
+    </nav>
+  </body>
+</html>

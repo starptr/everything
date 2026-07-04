@@ -1,0 +1,58 @@
+# channel-party workspace. See DESIGN.md §10 for the component layout: a fixed core
+# (cp-model interface, cp-core mechanisms, cp-frontend server, cp-bin composition root)
+# plus open-ended vertical-slice type crates under kinds/.
+[workspace]
+resolver = "2"
+members = [
+  "crates/cp-model",
+  "crates/cp-core",
+  "crates/cp-frontend",
+  "crates/cp-bin",
+  "kinds/basic",
+  "kinds/space",
+  "kinds/discord-compatible",
+  "kinds/canvas",
+]
+
+# Names this virtual workspace for crane (which otherwise warns it can't find a package `name` in
+# the root Cargo.toml when building the fmt/taplo/deny checks).
+[workspace.metadata.crane]
+name = "channel-party"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+# Internal crates
+cp-model = { path = "crates/cp-model" }
+cp-core = { path = "crates/cp-core" }
+cp-frontend = { path = "crates/cp-frontend" }
+cp-basic = { path = "kinds/basic" }
+cp-space = { path = "kinds/space" }
+cp-discord = { path = "kinds/discord-compatible" }
+cp-canvas = { path = "kinds/canvas" }
+
+# External crates
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "sqlite",
+] }
+thiserror = "2"
+tokio = { version = "1", features = [
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "signal",
+  "sync",
+] }
+tower-http = { version = "0.6", features = ["fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+ulid = { version = "1", features = ["serde"] }

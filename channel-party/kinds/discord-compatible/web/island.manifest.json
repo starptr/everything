@@ -1,0 +1,6 @@
+{
+  "discord-compatible/guild": "./island.ts",
+  "discord-compatible/section": "./island.ts",
+  "discord-compatible/channel": "./island.ts",
+  "discord-compatible/forum": "./island.ts"
+}

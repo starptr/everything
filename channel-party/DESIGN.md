@@ -1,7 +1,9 @@
 # channel-party — Design
 
-Status: draft / pre-implementation
-Last updated: 2026-07-03
+Status: scaffolded — `cp-model` interface complete; core mechanisms and kind logic stubbed
+Last updated: 2026-07-04
+
+See `TODO.md` for the deferred implementation work, each item tagged with its design-readiness.
 
 A Discord-inspired chat platform whose defining property is **extensibility**: the
 number of channel kinds and message kinds is expected to grow without bound, while
@@ -12,6 +14,19 @@ channel-party is **agnostic to how a user experiences the app**. The core is
 headless; a web frontend is merely the first consumer. Everything below is designed
 so that adding a new kind of channel or message touches **zero lines of core or
 frontend-shell code** — it adds a self-contained *vertical slice* instead.
+
+> **Implementation status (scaffolded 2026-07-04).** The §10 structure exists and
+> `nix flake check` is green. `cp-model` is implemented in full; `cp-core`,
+> `cp-frontend`, `cp-bin`, and the four kinds are warning-clean stubs that compile,
+> boot, and serve (the API returns `501` until the store lands). Deferred work — and how
+> much of it still needs a design pass — lives in **`TODO.md`** (keep it in sync).
+>
+> Deltas from the illustrative code below: `StoreCtx` and `RuntimeCtx` are **traits**
+> (passed as `&dyn`) implemented by `cp-core`, so kind crates depend only on `cp-model`;
+> `ItemKind` is a plain (non-async) trait; `Migration`/`Migrations` live in `cp-model`;
+> kinds register via constructor fns (`cp_basic::channel()`, `cp_discord::channels()`, …)
+> and the crates are named `cp-basic`/`cp-space`/`cp-discord`/`cp-canvas`; the frontend is
+> built with **npm/`buildNpmPackage`**, not pnpm (§11).
 
 ---
 
@@ -419,18 +434,18 @@ place — the composition root:
 
 ```rust
 let registry = Registry::builder()
-    .item(basic::BasicItem).channel(basic::BasicChannel)
-    .channel(space::Space)
-    .channels(discord::channels()).items(discord::items())
-    .runtime(discord::Sync)             // WriteScope::Primary  — ingests messages/users/reactions
-    .runtime(discord::SemanticIndex)    // WriteScope::Derived  — embeddings, off the change stream
-    .channel(canvas::Canvas).item(canvas::CanvasTextBox)
-    .runtime(canvas::SpatialIndex)      // WriteScope::Derived
-    .migrations(discord::MIGRATIONS).migrations(canvas::MIGRATIONS)
+    .item(cp_basic::item()).channel(cp_basic::channel())
+    .channel(cp_space::channel())
+    .channels(cp_discord::channels()).items(cp_discord::items())
+    .runtime(cp_discord::sync())            // WriteScope::Primary  — ingests messages/users/reactions
+    .runtime(cp_discord::semantic_index())  // WriteScope::Derived  — embeddings, off the change stream
+    .channel(cp_canvas::channel()).item(cp_canvas::text_box())
+    .runtime(cp_canvas::spatial_index())    // WriteScope::Derived
+    .migrations(cp_discord::MIGRATIONS).migrations(cp_canvas::MIGRATIONS)
     .build();
 
-let core = cp_core::Core::open(db, registry.clone()).await?;   // runs migrations, drives backfills
-core.spawn_runtime();                                          // supervises every RuntimeComponent
+let core = cp_core::Core::open(db, registry.clone()).await?;   // runs migrations (backfills stubbed)
+core.spawn_runtime();                                          // supervises every RuntimeComponent (stubbed)
 cp_frontend::serve(core, registry, addr).await?;
 ```
 
@@ -446,9 +461,13 @@ clarity, testability, and control over ordering.
 - **sqlx in offline mode.** Compile-time query checking uses a committed `.sqlx`
   query cache (`SQLX_OFFLINE=1`), so builds are hermetic with no live DB — required
   under Nix. Type-owned migrations (§6) must be reflected in the offline cache.
-- **Astro frontend** built as a separate derivation (`buildNpmPackage` / pnpm). The
-  island registry is generated from `kinds/*/web` at build time. Final package
-  combines the server binary with the static Astro output.
+- **Astro frontend** built as a separate derivation with **`buildNpmPackage`** (npm).
+  pnpm was the first choice, but its `fetchPnpmDeps` fixed-output derivation is SIGKILLed
+  on exit inside the Nix builder here, so npm is used; `sharp` (Astro's optional image
+  dep) is excluded via the passthrough image service + `--ignore-scripts`. The island
+  registry is generated from `kinds/*/web` at build time; `npmDepsHash` in `flake.nix`
+  must be refreshed whenever `web/package-lock.json` changes. The final package wraps the
+  server binary to serve the static Astro output via `CP_WEB_DIR`.
 - **Devshell**: rust toolchain + node/pnpm + `sqlx-cli`.
 
 ---
@@ -500,6 +519,9 @@ Adding a type touches none of these mechanisms — only the slice.
 ---
 
 ## 14. Open questions / deferred decisions
+
+These are unresolved **design** questions, distinct from the implementation backlog in
+`TODO.md` (which flags which items still need a design pass before coding):
 
 - **Permissions model.** Beyond "only native users are principals," the shape of
   per-channel authorization is unspecified. Likely another capability, but deferred.

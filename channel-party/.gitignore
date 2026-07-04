@@ -1,0 +1,11 @@
+/target
+result*
+
+# Frontend
+node_modules
+dist
+.astro
+
+# Build-time generated island registry + copied kind islands (see web/scripts/gen-registry.mjs)
+/web/src/generated/*
+!/web/src/generated/.gitkeep

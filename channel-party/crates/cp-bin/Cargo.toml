@@ -1,0 +1,22 @@
+[package]
+name = "cp-bin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "channel-party"
+path = "src/main.rs"
+
+[dependencies]
+cp-core.workspace = true
+cp-frontend.workspace = true
+
+cp-basic.workspace = true
+cp-canvas.workspace = true
+cp-discord.workspace = true
+cp-space.workspace = true
+
+anyhow.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
