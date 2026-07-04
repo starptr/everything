@@ -19,6 +19,7 @@ local sonarrForSdxarr = import 'milky-way/lib/sonarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local seanime = import 'milky-way/lib/seanime.libsonnet';
+local shoko = import 'milky-way/lib/shoko.libsonnet';
 local autobrr = import 'milky-way/lib/autobrr.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
 local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
@@ -214,6 +215,12 @@ local pubkeys = import 'magic/common/public_keys.json';
       sonarrApiKey: secrets.sonarrForSdxarr.apiKey,
       category: 'sonarr-for-sdxarr',
     },
+    // On each COMPLETED torrent in the `shoko-manual` category, hardlink the content into Shoko's
+    // drop-source folder (/data/downloads/shoko-drop, on the same mdata fs as the downloads, so the
+    // link costs no extra disk and the torrent keeps seeding). Shoko then rename-and-move-organizes
+    // it into its library -- see the `shoko` field + lib/shoko.libsonnet. This is the manual-download
+    // counterpart to the SeaDex/Sonarr path above: Shoko can't hardlink itself, so qbittorrent does.
+    hardlinkOnFinished = { category: 'shoko-manual', destDir: '/data/downloads/shoko-drop' },
   ),
 
   // vpn-proxy: a VPN-egress HTTP forward proxy. gluetun's built-in HTTP proxy (:8888) forwards every
@@ -292,6 +299,22 @@ local pubkeys = import 'magic/common/public_keys.json';
     // Server password (sops) -> satisfies Seanime's privileged-settings CSRF guard over the tailnet
     // L7 ingress (origin-trust alone can't); the UI prompts for it on load. See lib/seanime.libsonnet.
     serverPassword = secrets.seanime.serverPassword,
+  ),
+
+  // Shoko: AniDB-hash-based anime organizer for anime downloaded MANUALLY (distinct from the
+  // automated SeaDex -> Sonarr path). Workflow: add a torrent in qbittorrent under the `shoko-manual`
+  // category -> qbittorrent's on-complete hook hardlinks it into /data/downloads/shoko-drop (Shoko's
+  // Drop Source) -> Shoko hashes/identifies it against AniDB and rename-and-move-organizes it into
+  // /data/library/Anime (Shoko) (its Drop Destination), all on the one shared mdata volume so the
+  // move preserves the inode (torrent keeps seeding, one physical copy). Shoko can't hardlink itself,
+  // so the hardlink is done by qbittorrent's `hardlinkOnFinished` hook above. Like jellyfin, its
+  // config (AniDB creds, import folders, WebAOM renamer, local users) is set in an interactive
+  // first-run -- so no config-as-code / Secret / buildarr. WebUI via Tailscale L7 ingress; SQLite +
+  // metadata cache on its own iSCSI RWO PVC. Jellyfin views this library via the Shokofin plugin
+  // (configured in Jellyfin's UI); read-only Seanime picks it up automatically (it scans /data/library).
+  shoko: shoko.new(
+    tailscaleHostname = "shoko",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
   ),
 
   // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against

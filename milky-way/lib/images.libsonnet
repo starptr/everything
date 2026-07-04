@@ -83,6 +83,16 @@ local images = {
       fullyQualifiedRepository: "docker.io/ju1js/seanime",
       defaultDigest: { hash: "sha256:566920283998e14fdbf5e74a2e89247b181e261d249640d770c2b84649cfc2f1", tagHint: "v3.8.7" },
     },
+    // Shoko Server: AniDB-hash-based anime cataloguer/organizer (lib/shoko.libsonnet) -- run here to
+    // organize manually-downloaded anime into the shared mdata library. Official upstream image
+    // (root entrypoint + gosu-drop to PUID/PGID, like the LinuxServer apps). Multi-arch INDEX digest
+    // (k3s resolves the per-node arch; the index includes linux/amd64 for methanol), same convention
+    // as the *arr/qbittorrent/jellyfin pins; tagHint is the readable release. Re-resolve with
+    // `docker buildx imagetools inspect ghcr.io/shokoanime/server:latest`.
+    shoko: {
+      fullyQualifiedRepository: "ghcr.io/shokoanime/server",
+      defaultDigest: { hash: "sha256:b841f8249c9edfba102e4072e2b2a3eae4179e5dd553f29e11b9898a44f1e836", tagHint: "v5.3.3" },
+    },
     // TheLounge web IRC client (LinuxServer.io). Multi-arch INDEX digest (k3s resolves the per-node
     // arch), same convention as the *arr/qbittorrent/jellyfin pins; tagHint is the readable
     // LinuxServer version. Re-resolve with
@@ -213,6 +223,7 @@ local images = {
       tagForQbittorrent: "1.37",
       tagForThelounge: "1.37",
       tagForSeanime: "1.37",
+      tagForShoko: "1.37",
       tagForKataMicrovmTest: "1.36",
       tagForExampleZfs: "1.36",
     },
@@ -226,6 +237,7 @@ local images = {
       [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForQbittorrent),
       [if std.objectHas(prev, "tagForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForThelounge),
       [if std.objectHas(prev, "tagForSeanime") then "fullyQualifiedImageReferenceTaggedForSeanime"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForSeanime),
+      [if std.objectHas(prev, "tagForShoko") then "fullyQualifiedImageReferenceTaggedForShoko"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForShoko),
       [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForKataMicrovmTest),
       [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForExampleZfs),
       [if std.objectHas(prev, "digestForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: pinnedRef(prev.fullyQualifiedRepository, prev.digestForTailscaleOperatorIngressTest),
@@ -243,6 +255,7 @@ local images = {
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: prev.fullyQualifiedImageReferenceTaggedForQbittorrent,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: prev.fullyQualifiedImageReferenceTaggedForThelounge,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForSeanime") then "fullyQualifiedImageReferenceTaggedForSeanime"]: prev.fullyQualifiedImageReferenceTaggedForSeanime,
+      [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForShoko") then "fullyQualifiedImageReferenceTaggedForShoko"]: prev.fullyQualifiedImageReferenceTaggedForShoko,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: prev.fullyQualifiedImageReferenceTaggedForKataMicrovmTest,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: prev.fullyQualifiedImageReferenceTaggedForExampleZfs,
       [if std.objectHas(prev, "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest") then "fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest"]: prev.fullyQualifiedImageReferencePinnedForTailscaleOperatorIngressTest,
