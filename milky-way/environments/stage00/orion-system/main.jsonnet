@@ -13,6 +13,7 @@ local testTailscaleIngress = import 'milky-way/lib/test-tailscale-operator-ingre
 local testTailscaleL3 = import 'milky-way/lib/test-tailscale-operator-network-L3.libsonnet';
 local openclaw = import 'milky-way/lib/openclaw.libsonnet';
 local qbittorrent = import 'milky-way/lib/qbittorrent.libsonnet';
+local qui = import 'milky-way/lib/qui.libsonnet';
 local vpnProxy = import 'milky-way/lib/vpn-proxy.libsonnet';
 local thelounge = import 'milky-way/lib/thelounge.libsonnet';
 local sonarrForSdxarr = import 'milky-way/lib/sonarr.libsonnet';
@@ -327,6 +328,18 @@ local pubkeys = import 'magic/common/public_keys.json';
   // (incl. a self-generated sessionSecret) on its own iSCSI RWO PVC; WebUI via Tailscale L7 ingress.
   autobrr: autobrr.new(
     tailscaleHostname = "autobrr",
+  ),
+
+  // qui (by autobrr): a modern multi-instance WebUI for qBittorrent, exposed over Tailscale L7 like the
+  // rest of the media-stack UIs. It manages the gluetun-fronted `qbittorrent` above -- but that
+  // qBittorrent connection is RUNTIME state added in qui's UI post-deploy (reached in-cluster with no
+  // creds via qBittorrent's AuthSubnetWhitelist), NOT config-as-code here. Mounts the shared mdata
+  // volume read-write at /data (matching qbittorrent's mount) so qui's Local Filesystem features
+  // (orphan scan / hardlink / reflink / automations) can operate on the same paths. SQLite config on
+  // its own iSCSI RWO PVC; session secret self-generated + persisted there (see lib/qui.libsonnet).
+  qui: qui.new(
+    tailscaleHostname = "qui",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
   ),
 
   // Buildarr: declaratively asserts the inter-app links the *arr apps store in SQLite (and which the

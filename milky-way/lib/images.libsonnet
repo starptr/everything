@@ -145,6 +145,14 @@ local images = {
       fullyQualifiedRepository: "docker.io/yuto7/autobrr",
       defaultDigest: { hash: std.trim(importstr "exports/whale/digests/autobrr.txt") },
     },
+    // qui: autobrr's multi-instance qBittorrent WebUI (lib/qui.libsonnet). Multi-arch INDEX digest
+    // (k3s resolves the per-node arch; the index includes linux/amd64 for methanol), same convention
+    // as the *arr/qbittorrent pins; tagHint is the readable release. Re-resolve with
+    // `docker buildx imagetools inspect ghcr.io/autobrr/qui:latest`.
+    qui: {
+      fullyQualifiedRepository: "ghcr.io/autobrr/qui",
+      defaultDigest: { hash: "sha256:5d4f98d973129edc3ac04a2b74e3e791c86c5c92ef4d5dae64622be000578e80", tagHint: "v1.22.0" },
+    },
     // andref-ipfs-depot: our Discord-gated IPFS uploader (lib/andref-ipfs-depot.libsonnet), a
     // whale-built Rust binary. Digest from exports/whale/digests/andref-ipfs-depot.txt (written by
     // `nix run ./flake-profiles/whale#andref-ipfs-depot-push`).
@@ -223,6 +231,7 @@ local images = {
       tagForQbittorrent: "1.37",
       tagForThelounge: "1.37",
       tagForSeanime: "1.37",
+      tagForQui: "1.37",
       tagForShoko: "1.37",
       tagForKataMicrovmTest: "1.36",
       tagForExampleZfs: "1.36",
@@ -237,6 +246,7 @@ local images = {
       [if std.objectHas(prev, "tagForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForQbittorrent),
       [if std.objectHas(prev, "tagForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForThelounge),
       [if std.objectHas(prev, "tagForSeanime") then "fullyQualifiedImageReferenceTaggedForSeanime"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForSeanime),
+      [if std.objectHas(prev, "tagForQui") then "fullyQualifiedImageReferenceTaggedForQui"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForQui),
       [if std.objectHas(prev, "tagForShoko") then "fullyQualifiedImageReferenceTaggedForShoko"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForShoko),
       [if std.objectHas(prev, "tagForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForKataMicrovmTest),
       [if std.objectHas(prev, "tagForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: taggedRef(prev.fullyQualifiedRepository, prev.tagForExampleZfs),
@@ -255,6 +265,7 @@ local images = {
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForQbittorrent") then "fullyQualifiedImageReferenceTaggedForQbittorrent"]: prev.fullyQualifiedImageReferenceTaggedForQbittorrent,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForThelounge") then "fullyQualifiedImageReferenceTaggedForThelounge"]: prev.fullyQualifiedImageReferenceTaggedForThelounge,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForSeanime") then "fullyQualifiedImageReferenceTaggedForSeanime"]: prev.fullyQualifiedImageReferenceTaggedForSeanime,
+      [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForQui") then "fullyQualifiedImageReferenceTaggedForQui"]: prev.fullyQualifiedImageReferenceTaggedForQui,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForShoko") then "fullyQualifiedImageReferenceTaggedForShoko"]: prev.fullyQualifiedImageReferenceTaggedForShoko,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForKataMicrovmTest") then "fullyQualifiedImageReferenceTaggedForKataMicrovmTest"]: prev.fullyQualifiedImageReferenceTaggedForKataMicrovmTest,
       [if std.objectHas(prev, "fullyQualifiedImageReferenceTaggedForExampleZfs") then "fullyQualifiedImageReferenceTaggedForExampleZfs"]: prev.fullyQualifiedImageReferenceTaggedForExampleZfs,
