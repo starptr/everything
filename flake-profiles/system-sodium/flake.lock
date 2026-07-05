@@ -472,7 +472,9 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "jellyfin-mpv-shim": "jellyfin-mpv-shim",
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
         "pystray": "pystray"
       },
       "locked": {
@@ -581,16 +583,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1729880355,
-        "narHash": "sha256-RP+OQ6koQQLX5nw0NmcDrzvGL8HDLnyXt/jHhL1jwjM=",
-        "owner": "nixos",
+        "lastModified": 1773817167,
+        "narHash": "sha256-9JwhM7vzGEYvUrFo3zwKDngq3ltosDoLnVIrE7UP6TU=",
+        "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "18536bf04cd71abd345f9579158841376fdd0c5a",
+        "rev": "942d8388bdfa40a7c735ef8eee703db6a32f28e3",
         "type": "github"
       },
       "original": {
-        "owner": "nixos",
-        "ref": "nixos-unstable",
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -612,22 +614,6 @@
       "original": {
         "owner": "bandithedoge",
         "repo": "nixpkgs-firefox-darwin",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1773817167,
-        "narHash": "sha256-9JwhM7vzGEYvUrFo3zwKDngq3ltosDoLnVIrE7UP6TU=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "942d8388bdfa40a7c735ef8eee703db6a32f28e3",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
-        "repo": "nixpkgs",
         "type": "github"
       }
     },
@@ -655,7 +641,7 @@
         "home-manager": "home-manager",
         "jellyfin-mpv-shim-darwin": "jellyfin-mpv-shim-darwin",
         "nix-darwin": "nix-darwin",
-        "nixpkgs": "nixpkgs_2",
+        "nixpkgs": "nixpkgs",
         "nixpkgs-firefox-darwin": "nixpkgs-firefox-darwin",
         "sops-nix": "sops-nix",
         "soup": "soup",

@@ -29,8 +29,7 @@
       pkgs.terminal-notifier
       pkgs.comma
       pkgs.lsd
-      # Causes apple_sdk_11_0 error - uses soup overlay with outdated nixpkgs
-      #pkgs.jellyfin-mpv-shim
+      pkgs.jellyfin-mpv-shim
       pkgs.devenv
       pkgs.chaseln
       #pkgs.cinny-desktop

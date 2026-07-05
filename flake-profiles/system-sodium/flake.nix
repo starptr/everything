@@ -27,7 +27,7 @@
 
     jellyfin-mpv-shim-darwin = {
       url = "path:./../../experimental/jellyfin-mpv-shim-darwin-compat";
-      ##inputs.nixpkgs.follows = "nixpkgs"; # TODO: migrate to support new shim
+      inputs.nixpkgs.follows = "nixpkgs"; # Follow modern nixpkgs (drops the stale apple_sdk_11_0 pin)
     };
 
     systems.url = "github:nix-systems/default"; # For soup

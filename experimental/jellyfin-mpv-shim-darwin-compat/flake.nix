@@ -39,6 +39,7 @@
           in
           pkgs.python312Packages.buildPythonPackage {
             inherit pname version;
+            format = "setuptools"; # nixpkgs made this mandatory; setup.py-based build
             src = pystray;
             postPatch = ''
               substituteInPlace setup.py \
@@ -56,6 +57,7 @@
           in
           pkgs.python312Packages.buildPythonApplication {
             inherit pname version;
+            format = "setuptools"; # nixpkgs made this mandatory; setup.py-based build
             src = pkgs.fetchPypi {
               inherit pname version;
               hash = "sha256-EANaNmvD8hcdGB2aoGemKvA9syS1VvIqGsP1jk0b+lE=";
@@ -70,12 +72,12 @@
             ];
             postPatch = ''
               substituteInPlace jellyfin_mpv_shim/conf.py \
-                --replace "check_updates: bool = True" "check_updates: bool = False" \
-                --replace "notify_updates: bool = True" "notify_updates: bool = False"
+                --replace-warn "check_updates: bool = True" "check_updates: bool = False" \
+                --replace-warn "notify_updates: bool = True" "notify_updates: bool = False"
               # python-mpv renamed to mpv with 1.0.4
               substituteInPlace setup.py \
-                --replace "python-mpv" "mpv" \
-                --replace "mpv-jsonipc" "python_mpv_jsonipc"
+                --replace-warn "python-mpv" "mpv" \
+                --replace-warn "mpv-jsonipc" "python_mpv_jsonipc"
             '';
             doCheck = false;
             pythonImportsCheck = [ "jellyfin_mpv_shim" ];
