@@ -55,6 +55,7 @@
           webm = {
             output_directory = "~/Downloads";
             output_template = "%T";
+            target_filesize = 25000; # kB (~25 MB); 0 = constant quality instead
           };
         };
       };
