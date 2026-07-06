@@ -129,6 +129,10 @@
               (final: super: {
                 lute3 = inputs.soup.legacyPackages."aarch64-darwin".lute3;
               })
+              # HACK: skip broken tests until PR #502783 bumps resticprofile to 0.33.0
+              (final: super: {
+                resticprofile = super.resticprofile.overrideAttrs (o: { doCheck = false; });
+              })
             ];
             config = import ./../../venus/app-configs/nixpkgs-config.nix; # Configures pkgs for evaluating this darwinConfiguration ("buildtime" config)
           };
