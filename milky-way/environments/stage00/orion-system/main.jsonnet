@@ -21,6 +21,7 @@ local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local seanime = import 'milky-way/lib/seanime.libsonnet';
 local shoko = import 'milky-way/lib/shoko.libsonnet';
+local suwayomi = import 'milky-way/lib/suwayomi.libsonnet';
 local autobrr = import 'milky-way/lib/autobrr.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
 local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
@@ -316,6 +317,25 @@ local pubkeys = import 'magic/common/public_keys.json';
   shoko: shoko.new(
     tailscaleHostname = "shoko",
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
+  ),
+
+  // Suwayomi: self-hosted manga reader/server -- the manga counterpart to the anime stack. Installs
+  // Mihon/Tachiyomi extensions and downloads chapters, storing its bulk media on the shared mdata
+  // volume: downloaded manga in downloads/suwayomi and the local-source library in
+  // 'library/Manga (Suwayomi)' (both overlaid onto the fixed datadir paths via subPath mounts --
+  // Suwayomi refuses to reconfigure its downloads path, so a mounted volume is the intended relocation
+  // mechanism). Only its SQLite/H2 DB + extensions + thumbnail cache stay on an iSCSI RWO config PVC.
+  // Runs non-root as UID 1000 (root init chowns the config PVC; a second root init pre-creates the two
+  // mdata subdirs). WebUI via Tailscale L7 ingress; first-run (extensions/sources/library) is
+  // interactive, so no Secret / config-as-code. See lib/suwayomi.libsonnet.
+  suwayomi: suwayomi.new(
+    tailscaleHostname = "suwayomi",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
+    // HTTP Basic auth (defense-in-depth on top of the tailnet-only ingress). Credentials are
+    // sops-backed and injected via a Secret/secretKeyRef, so they never appear in the Deployment.
+    authMode = "basic_auth",
+    authUsername = secrets.suwayomi.username,
+    authPassword = secrets.suwayomi.password,
   ),
 
   // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against
