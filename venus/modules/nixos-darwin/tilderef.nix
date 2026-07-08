@@ -135,6 +135,7 @@
       enable = true;
       settings = {
         PasswordAuthentication = true;
+        KbdInteractiveAuthentication = true; # PAM forced-change password dialog over SSH
         UsePAM = true;
       };
       hostKeys = builtins.attrValues hostKeys-by-name;
