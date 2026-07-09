@@ -36,22 +36,37 @@ cp-canvas = { path = "kinds/canvas" }
 
 # External crates
 anyhow = "1"
+argon2 = "0.5"
 async-trait = "0.1"
 axum = "0.8"
+axum-extra = { version = "0.10", features = ["cookie"] }
+# Matches the rand_core the argon2/password-hash stack uses; `getrandom` exposes `OsRng` for salts +
+# session tokens.
+rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
 serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = [
   "runtime-tokio",
   "sqlite",
 ] }
 thiserror = "2"
+# Discord REST client for the discord-compatible slice (#10). Default features use rustls, matching the
+# rest of the workspace. `twilight-model` carries the Discord types; tests mock it via twilight's proxy.
+twilight-http = "0.16"
+twilight-model = "0.16"
+wiremock = "0.6"
 tokio = { version = "1", features = [
+  "io-std",
+  "io-util",
   "macros",
   "net",
   "rt-multi-thread",
   "signal",
   "sync",
+  "time",
 ] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 tower-http = { version = "0.6", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

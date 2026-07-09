@@ -8,3 +8,15 @@ license.workspace = true
 cp-model.workspace = true
 
 async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+twilight-http.workspace = true
+twilight-model.workspace = true
+
+[dev-dependencies]
+cp-core.workspace = true
+serde_json.workspace = true
+tempfile = "3"
+tokio.workspace = true
+wiremock.workspace = true

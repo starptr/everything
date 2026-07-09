@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::envelope::{Channel, Item};
-use crate::ids::{ChannelId, TypeId};
+use crate::ids::{ChannelId, TypeId, UserId};
 use crate::Result;
 
 /// Which super-type a query targets. §2/§5.
@@ -90,4 +90,15 @@ pub trait StoreCtx: Send + Sync {
         filter: Filter,
         page: Page,
     ) -> Result<NodePage>;
+
+    /// Membership-substrate read: is `user` a member of `channel`? The read companion to `WriteCtx`'s
+    /// `add_member` / `remove_member`, so a `Permission` policy (e.g. "members may post") can consult
+    /// it. §8/§18.
+    async fn is_member(&self, channel: ChannelId, user: UserId) -> Result<bool>;
+
+    /// The §6 escape hatch: a handle to the kind's *own* namespaced tables, for a `contents` strategy
+    /// the closed primitives above can't express (e.g. `canvas`'s viewport bbox over its R-tree). Pure
+    /// primitive-consumers never call it; using it to read core's `channels`/`items` is a design
+    /// violation — the primitives are the supported read path. See `design/runtime.md`.
+    fn type_owned_db(&self) -> &sqlx::SqlitePool;
 }

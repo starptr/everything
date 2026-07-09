@@ -32,7 +32,8 @@ pub struct Item {
 
 /// The one native principal. Not a super-type because it is not extensible: there is exactly one
 /// native user representation, and it is the only thing that authenticates, owns, or holds
-/// permissions. Auth material and `created_at` live here; elided in the scaffold. §2.
+/// permissions. Auth material (`password_hash`) and `created_at` live on the `users` *table*, not this
+/// struct — deliberately, so a `User` sent to a client never carries the hash (§2/§17, `cp-core::auth`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: UserId,

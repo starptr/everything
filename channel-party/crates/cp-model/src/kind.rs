@@ -9,6 +9,7 @@ use crate::debug::DebugCommand;
 use crate::envelope::{Channel, Item, Json};
 use crate::ids::{TypeId, UserId};
 use crate::store::StoreCtx;
+use crate::write::WriteCtx;
 use crate::Result;
 
 /// A kind-declared projection of searchable / sortable fields, applied transactionally on write
@@ -48,6 +49,12 @@ pub trait ChannelKind: Send + Sync {
         None
     }
 
+    /// Authorization capability. `None` = deny-by-default: the channel is not writable over HTTP
+    /// until its kind grants an action. Opt-in like `membership`. §18.
+    fn permission(&self) -> Option<&dyn Permission> {
+        None
+    }
+
     /// Extra HTTP routes, mounted under `/ext/<type>` (e.g. a webhook receiver). §4/§9.
     fn routes(&self) -> Option<axum::Router> {
         None
@@ -78,16 +85,53 @@ pub trait ItemKind: Send + Sync {
         None
     }
 
+    /// Stamp server-known authorship into a new item's payload before it is persisted. The write
+    /// endpoint calls this with the authenticated principal; a client-supplied `author` is overwritten
+    /// — provenance is not client-trusted (§2). Default: unchanged (a kind with no notion of an author,
+    /// e.g. a canvas box). §18.
+    fn with_author(&self, payload: Json, _author: UserId) -> Json {
+        payload
+    }
+
     fn debug_summary(&self, _item: &Item) -> Option<String> {
         None
     }
 }
 
-/// Optional channel capability backing `add-user-to-channel`. What "add a user" means is the kind's
-/// choice: a basic channel writes a membership edge; a Discord channel may reject or proxy. §8.
+/// Optional channel capability backing `add-user-to-channel`. It receives a [`WriteCtx`] because it
+/// mutates: what "add a user" means is the kind's choice — a basic channel calls
+/// `cx.add_member(...)` on the generic substrate; a Discord channel may reject or proxy an outbound
+/// invite. §8.
 #[async_trait]
 pub trait Membership: Send + Sync {
-    async fn add_user(&self, cx: &dyn StoreCtx, ch: &Channel, user: UserId) -> Result<()>;
-    async fn remove_user(&self, cx: &dyn StoreCtx, ch: &Channel, user: UserId) -> Result<()>;
-    async fn members(&self, cx: &dyn StoreCtx, ch: &Channel) -> Result<Vec<UserId>>;
+    async fn add_user(&self, cx: &dyn WriteCtx, ch: &Channel, user: UserId) -> Result<()>;
+    async fn remove_user(&self, cx: &dyn WriteCtx, ch: &Channel, user: UserId) -> Result<()>;
+    async fn members(&self, cx: &dyn WriteCtx, ch: &Channel) -> Result<Vec<UserId>>;
+}
+
+/// A permission-checked action on a channel. A small, fixed, core-owned vocabulary (like
+/// [`SuperType`](crate::store::SuperType)), distinct from the open-ended kind set. §18.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    /// Read a channel's contents. Defined for completeness; reads are not gated yet (§18 enforces writes).
+    View,
+    /// Create an item (post a message) in the channel.
+    Post,
+    /// Administer the channel: membership, structure, configuration.
+    Manage,
+}
+
+/// Optional per-channel authorization (§18). Its absence (`ChannelKind::permission() -> None`) means
+/// deny-by-default — the channel declines to authorize anyone. The policy is the kind's own: it may
+/// consult the generic `channel_members` substrate ([`StoreCtx::is_member`]) or its own tables. It
+/// takes a read `cx`, never [`WriteCtx`] — deciding never mutates.
+#[async_trait]
+pub trait Permission: Send + Sync {
+    async fn authorize(
+        &self,
+        cx: &dyn StoreCtx,
+        ch: &Channel,
+        user: UserId,
+        action: Action,
+    ) -> Result<bool>;
 }

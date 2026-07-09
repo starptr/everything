@@ -9,6 +9,8 @@ out before code — leaning toward *more* design/prompting, not less.
 - **`DESIGN.md`** — the architecture source of truth. Update it whenever an item here
   changes the design (especially §3 data model, §4 traits, §5 contents, §6 indexing,
   §7 runtime, §9 HTTP surface). This file and `DESIGN.md` should never disagree.
+- **`design/*.md`** — per-topic design notes drafted for review before implementing a 🔴/🟡
+  item; once ratified, each folds into `DESIGN.md` and is referenced from its TODO entry.
 - **`crates/cp-bin/src/main.rs`** — the *only* composition root. Every new kind, runtime
   component, and migration set is registered here; nothing auto-registers.
 - **`flake.nix`** — `npmDepsHash` must be refreshed when `web/package-lock.json` changes
@@ -30,6 +32,7 @@ out before code — leaning toward *more* design/prompting, not less.
 - 🟡 **Iron out** — the architecture is clear but specific decisions are unspecified; do a
   short design pass *before/with* the implementation.
 - 🔴 **Design first** — genuinely underspecified; needs a design discussion before any code.
+- ✅ **Done** — implemented + verified; kept here for the dependency graph and cross-references.
 
 **Nothing here is a one-shot.** Even 🟢 items warrant focused, iterative claude-code
 prompting, an end-to-end check (`nix flake check` + a boot smoke test), and a write-back to
@@ -39,43 +42,61 @@ prompting, an end-to-end check (`nix flake check` + a boot smoke test), and a wr
 
 ## Core (`cp-core`)
 
-### 1. Mutation / write API — 🔴 Design first
-DESIGN leans on "core's mutation API" (§3, §8) as the single write path
-(validate → commit → `index()` → emit event), but never specifies its shape. Almost
-everything else depends on it (debug writes, ingestion, the generic API, the event bus).
-Decide: the method surface (create/update/delete, upsert-by-`external_key`), transaction
-boundaries, how `validate` + inline `index()` + event emission compose in one transaction,
-and how `WriteScope` yields a restricted handle. **Nothing exists yet.**
+### 1. Mutation / write API — ✅ Done (`design/write-path.md`, ratified 2026-07-09)
+`WriteCtx` (create / upsert-by-`external_key` / update / reparent / delete + the
+`channel_members` substrate) is implemented in `cp-core::Store`: validate → transactional
+persist + inline `index()` → change event on commit; `upsert_item` returns a stable id.
+Covered by `crates/cp-core/tests/write_path.rs`; folded into `DESIGN.md` §3/§8. **Deferred to
+#4:** `WriteScope` confinement + the `RuntimeCtx` write handle (not pre-committed here).
 
-### 2. Store primitives — 🟡 Iron out
-`children` / `descendants` / `seek_time` / `search` are `todo!()` in
-`crates/cp-core/src/store.rs`. §5 gives intent; the encodings are open: cursor format
-(ULID-derived?), `descendants` traversal (recursive CTE vs application-side), how `search`
-scopes to a subtree, filter→SQL. Iron out cursor + FTS-join design, then implement.
+### 2. Store primitives — ✅ Done (`design/read-path.md` + `design/index-search.md`)
+`children` / `descendants` / `seek_time` / `search` are all implemented in `cp-core::Store`, covered by
+`crates/cp-core/tests/{read_path,search}.rs`: a ULID-keyset `Cursor` (results resume strictly beyond a
+bare-ULID boundary in the `Order` direction), `children` a `UNION ALL` keyset query over the two
+super-type tables (`LIMIT n+1` → next cursor), `descendants` a recursive CTE over channel containment
+(root = depth 0, optional cap), `seek_time` a pure ULID time-floor computation. `search` is FTS-backed
+(#3). Folded into `DESIGN.md` §5.
 
-### 3. Index substrates — 🟡 Iron out
-FTS5 (trigram), sort-key expression indexes, and the 2D/R-tree — §6 gives intent, not
-schema. Decide how each substrate keys back to envelopes and how `search`/bbox join them,
-then write `index()` transactionally (`crates/cp-core/src/index.rs` is a stub). Coupled to
-#1 and #2.
+### 3. Index substrates — ✅ Done: FTS5 (sort-key/R-tree deferred to #11) (`design/index-search.md`, ratified 2026-07-10)
+The **FTS5** substrate (`search_index`, trigram) is live: `index::upsert`/`delete` write it
+transactionally by envelope, and `StoreCtx::search` MATCHes it, joins back to channels/items (so
+orphaned index rows are invisible), scopes to the `scope` subtree via the same CTE as `descendants`,
+and pages by an **offset** cursor (distinct from #2's id-keyset — search ranks by bm25, not id).
+Covered by `crates/cp-core/tests/search.rs` + the `space` slice. **Deferred (no consumer yet):** the
+`sort_key` expression index and the `coord` **R-tree** — `IndexEntry` carries both but `index::upsert`
+ignores them until `canvas` (#11) needs them (RTREE confirmed available in the build, so #11 is
+derisked). FTS5 availability was verified empirically before committing the schema.
 
-### 4. RuntimeComponent supervisor + `RuntimeCtx` — 🔴 Design first
-`spawn_runtime` only logs (`crates/cp-core/src/runtime.rs`). Needs real task spawning +
-restart/backoff supervision, the concrete `RuntimeCtx` (store handle restricted by
-`writes()`, change-stream subscription filtered by `interests`, scheduler, shutdown), and
-`version()`-triggered reset semantics (§7). The restricted-handle mechanism and reset
-behavior are unspecified — design first.
+### 4. RuntimeComponent supervisor + `RuntimeCtx` — ✅ Done (`design/runtime.md`, ratified 2026-07-10)
+`spawn_runtime` supervises one task per component (JoinSet + `CancellationToken`-style watch shutdown,
+restart with capped exponential backoff), returning a `RuntimeHandle` the caller holds. The real
+`CoreRuntimeCtx` gives a component: `next_event` (the `interests`-filtered change stream merged with the
+`schedule_secs` scheduler, `None` on shutdown), point reads, `scan` (the backfill enumerator), a
+`WriteScope`-confined `writer()` (**`None` for `Derived`** — structural §7 confinement), the
+`type_owned_db` escape hatch, and `reset_requested()` (a `version()` bump vs `runtime_component_state`).
+Change-event types (`ChangeOp`/`EnvelopeRef`/`ChangeEvent`) moved to `cp-model` so a kind's component
+consumes them without depending on `cp-core`. Validated generically by `crates/cp-core/tests/runtime.rs`
+(throwaway components) and end-to-end by the `canvas` slice (#11). Folded into `DESIGN.md` §7.
+**Finding:** `cp-model` now depends on `sqlx` — the escape hatch's cost (see #11).
 
-### 5. Event-bus wiring — 🟢 Ready (after #1)
-`EventBus` exists (`events.rs`) but nothing publishes. Emit `ChangeEvent` from the mutation
-path; consumers are SSE (#13) and runtime components (#4).
+### 5. Event-bus wiring — ✅ Done (all three consumers)
+The write path publishes a `ChangeEvent { op, target, type_id, container }` after every committed
+mutation; the SSE endpoint (#13) and the runtime-component change-subscription (filtered by `interests`,
+#4) both consume it. The event types now live in `cp-model` (so a kind's component can consume them);
+`EventBus` stays in `cp-core` as the mechanism.
 
-### 6. Debug shell REPL — 🟡 Iron out
-`DebugShell` has the mode gate + prompt (`debug.rs`); the REPL loop, read commands (show
-channels/items/users/envelope + `debug_summary`), and write commands (through #1,
-capability-gated `Membership`, kind-registered `debug_commands`) are unbuilt. §8 is
-detailed; iron out the command parser/dispatch and how a debug write invokes a
-kind-contributed command.
+### 6. Debug shell REPL — ✅ Done (kind-contributed command execution deferred)
+`cp_core::debug` is a full REPL: the write-mode gate + prompt, direct-DB reads (`show
+channels|items|users`, `inspect`, `members`, with `debug_summary`), and envelope CRUD through the
+mutation API (`create-channel`/`create-item`/`set-payload`/`delete`/`reparent`) + capability-gated
+membership (`add-user-to-channel` → `Membership`; `basic` now implements it, riding `channel_members`).
+`reparent <id> <container|root>` is the only way to build a hierarchy interactively — e.g. nest `basic`
+rooms inside a `space` so its search finds them (added with #3/#9).
+`create-user` bootstraps the fixed `users` substrate (raw insert — a deliberate exception, pre-auth
+#17). Wired as `channel-party shell` (`cp-bin`), sharing `CP_DB` with a running server so seeded writes
+surface live over SSE. Covered by `crates/cp-core/tests/debug_shell.rs`. **Deferred:** executing
+*kind-contributed* `debug_commands()` — needs a registry enumerator + a kind execution hook, unbuilt
+because no kind ships a command yet (e.g. canvas `move-box`, #11); `help` lists built-ins only.
 
 ### 7. Migration tracking — 🟡 Iron out
 Migrations re-run every boot via idempotent `CREATE ... IF NOT EXISTS` (`migrate.rs`). Real
@@ -84,45 +105,80 @@ a `_migrations` table), including how kind-owned migrations version independentl
 
 ## Kinds
 
-### 8. `basic` contents — 🟢 Ready (after #2)
-`children(id, {Item,[basic]}, page, TimeDesc)` with `query.at → seek_time`; serialize
-`NodePage`. A pure consumer of the store primitives.
+### 8. `basic` contents — ✅ Done
+`BasicChannel::contents` runs `children(id, {Item,[basic]}, {cursor|at→seek_time, limit}, TimeDesc)`
+and serializes the `NodePage`; `BasicQuery {at?, cursor?, limit?}` is the kind-owned query type. The
+feed is newest-first, so `at` selects items at/before T (scroll-back-to-date). Covered end-to-end by
+`crates/cp-frontend/tests/contents_slice.rs` (with #12). A pure consumer of the store primitives —
+core and the frontend shell needed no change to add it, exactly as §1/§13 intends.
 
-### 9. `space` contents — 🟡 Iron out (after #2/#3)
-`search(descendants(id), q, {Channel,[basic]}, page)`. Depends on the search/index design;
-pin the query/response shape the island consumes.
+### 9. `space` contents — ✅ Done (`design/index-search.md`)
+`Space::contents` runs `search(scope = self, q, {Channel}, page)` and serializes the `NodePage`;
+`SpaceQuery {q, cursor?, limit?}` is the kind-owned query type; an empty/short `q` yields an empty page.
+**Deviation from §5's `{Channel,[basic]}`:** no `[basic]` type restriction — hardcoding a peer kind's
+string would couple `space` to `basic`; `super_type: Channel` already excludes messages. Covered
+end-to-end by `crates/cp-frontend/tests/space_search.rs` (with a throwaway kind, proving genericity) +
+a real search-box island (#15). A pure consumer of the store primitives — core/shell unchanged.
 
-### 10. `discord-compatible` runtime — 🔴 Design first (large; split before starting)
-The heaviest slice; every method is `todo!()`. Warrants its own design effort, split into:
-- **(a)** Shared Discord client/runtime: serenity, one rate-limited client + token bucket
-  across all bridged guilds.
-- **(b)** Sync ingestion (Primary): backfill-then-poll; write cached-message / cached-user /
-  cached-reaction envelopes; `external_key` dedup (§3 — exactly one cached-user per Discord
-  user); reset = re-fetch from Discord.
-- **(c)** Semantic index (Derived): **requires choosing an embedding provider/model + vector
-  store** (the type-owned table is a placeholder today); driven off the change stream.
-- **(d)** `guild`/`section`/`channel`/`forum` contents: whole-subtree fetch; the island
-  builds the tree.
-- **(e)** Webhook receiver `routes()` → `/ext/discord-compatible/…` (§4/§9).
-- **(f)** Outbound: an `item-type:discord-compatible/message` originating on channel-party,
-  pushed to Discord via webhook.
-- **(g)** Membership: reject (owned by Discord) vs proxy an outbound invite.
-- Tests: a **`wiremock`** mock Discord (§12) — never the live API.
+### 10. `discord-compatible` runtime — 🟡 In progress: (a)+(b)+(d) done (`design/discord.md`, ratified 2026-07-11)
+The heaviest slice, split into sub-parts. **Client: `twilight-http`** (chosen); tests mock it via
+twilight's **proxy** (`Client::builder().proxy(host, true)` → `wiremock`) — never the live API (§12).
+- **(a)** ✅ Shared client / bridge: `DiscordBridge` holds one `Arc<DiscordClient>` (twilight); every
+  runtime component in the slice is spun from it (`bridge.sync()`) so they share it. Config
+  (`BridgeConfig`, `from_env`) passed from the composition root; **components register only when a token
+  is configured** (a tokenless boot runs none — this also removed the old `todo!()` crashloop). Rides
+  twilight's built-in rate limiter (bespoke cross-guild token bucket deferred).
+- **(b)** ✅ Sync ingestion (`Primary`): `DiscordSync` backfills then re-polls a channel's messages →
+  **upserts** `cached-user` (`external_key = discord:user:<id>`, one per user, §3) + `cached-message`
+  through `writer()`; reset = re-fetch (idempotent). **First proof of the `Primary` write path** (§7 —
+  canvas only exercised `Derived`). Container is operator-provided (channel-envelope creation is (d)).
+  Covered by `kinds/discord-compatible/tests/sync_ingest.rs` (wiremock — 3 msgs → 3 cached-messages + 2
+  deduped cached-users, idempotent re-poll). Reactions deferred.
+- **(c)** 🔴 Semantic index (`Derived`): **requires choosing an embedding provider/model + vector
+  store** (the type-owned table is a placeholder). Currently *not registered* (so it can't crashloop);
+  its stub was removed and lands with (c) via the bridge.
+- **(d)** ✅ Structure + contents: the sync now creates the `guild` + `channel` envelopes itself,
+  **deduped without a mapping table** — derived from the source of truth by `scan`ning existing envelopes
+  and matching the Discord id in their payload (idempotent, no crash window). `contents` branches on the
+  slice's own type: leaf `channel`/`forum` → `children` message feed (first use of `descendants` too:
+  structural `guild`/`section` → whole channel subtree so the island builds the tree). Real discord
+  island (guild → channel links; channel → message feed). Covered by the wiremock test (guild + 2
+  channels built + deduped on re-poll; contents both ways). Config is now `guild` + channel ids (the
+  bridge builds the envelopes; no operator-provided container). Deferred: full section/forum structure
+  (the `GET /guilds/:id/channels` fetch → categories/parent_id), guild-name fetch, threads.
+- **(e)** 🟡 Webhook receiver `routes()` → `/ext/discord-compatible/…` (§4/§9) — the first `/ext` mount.
+- **(f)** 🟡 Outbound: an `item-type:discord-compatible/message` originating here, pushed via webhook.
+- **(g)** 🟡 Membership: reject (owned by Discord) vs proxy an outbound invite.
 
-### 11. `canvas` — 🟡 Iron out (after #3)
-Viewport-bbox `contents` over the R-tree; the `SpatialIndex` component; the
-`canvas-text-box` island (pan/zoom/placement, delegating box drawing). Settle the
-coordinate space + bbox-query API and the spatial schema (a flat placeholder table today).
+### 11. `canvas` — ✅ Done (the reference escape-hatch slice) (`design/runtime.md`)
+The self-contained §6 slice: `canvas` owns namespaced `canvas_*` tables core knows nothing of — a
+denormalized box projection + an **R-tree** (`canvas_box_rtree USING rtree`). `SpatialIndex` (`Derived`
+`RuntimeComponent`, #4's first real consumer) backfills + streams box changes into it; `Canvas::contents`
+is a viewport **bbox** query over it (via the `type_owned_db` escape hatch, reconstructing box envelopes
+without touching core's `items`); `CanvasTextBox` carries `{x,y,w,h,text}` and has *no* `index()` (its
+projection is the kind's own table, not a core substrate). Real pan + live island. Covered by
+`crates/cp-frontend/tests/canvas_spatial.rs` (backfill, streaming, viewport filtering, move, delete over
+HTTP). Chosen over "bbox as a 5th core primitive" to prove the escape hatch. **Cost accepted:** `cp-model`
+depends on `sqlx` (the only way to hand a kind a DB handle through `StoreCtx`/`RuntimeCtx`). The
+`sort_key` expression index remains deferred (no consumer).
 
 ## Frontend (`cp-frontend` + `web/`)
 
-### 12. Generic API handlers — 🟢 Ready (after #1/#2)
-`GET /api/channels/:id`, `GET /api/items/:id` (read the envelope), `POST .../contents`
-(→ `cp_core::contents::dispatch`). All return `501` today (`crates/cp-frontend/src/api.rs`).
+### 12. Generic API handlers — ✅ Done
+`GET /api/channels/:id` + `GET /api/items/:id` return the envelope; `POST .../contents` loads the
+channel and calls `cp_core::contents::dispatch` (opaque query in, opaque JSON out). Error mapping: bad
+id → 400, missing → 404, kind `Validation` → 400, else 500. `serve` now builds via a testable
+`cp_frontend::router(state)`. Covered by `crates/cp-frontend/tests/contents_slice.rs`. Remaining `501`s
+are SSE (#13) and the empty `/ext` per-kind mount (no kind contributes routes yet).
 
-### 13. SSE live updates — 🟢 Ready (after #5)
-`GET /api/events` → `tokio_stream::wrappers::BroadcastStream` over the event bus →
-`axum::response::sse` (currently `501` in `sse.rs`); islands subscribe per channel scope.
+### 13. SSE live updates — ✅ Done
+`GET /api/events[?scope=<channel id>]` streams the change bus: `BroadcastStream` over
+`core.events().subscribe()` → `axum::response::sse` with keep-alive. Each `ChangeEvent` becomes a
+`change` SSE event `{op, super_type, id, type_id, container}` (wire shape built in `sse.rs`, not by
+serde on core's type); `scope` keeps events whose container is that channel or that target the channel
+itself; a lagged slow client gets a `lagged` event to resync. Covered by
+`crates/cp-frontend/tests/sse_live.rs` (live delivery + scope filtering). Islands still need to
+consume it (part of #15).
 
 ### 14. `ts-rs` Rust→TS types — 🟡 Iron out
 §9 wants each kind's payload/query/response structs generated into its `web/`. Decide where
@@ -130,32 +186,69 @@ coordinate space + bbox-query API and the spatial schema (a flat placeholder tab
 import them, and how it slots into the npm build ordering. A placeholder TODO is noted in
 `crates/cp-model/src/lib.rs`.
 
-### 15. Island implementations — 🟡 Iron out (per island)
-Placeholders in `kinds/*/web/island.ts`. Each real island — basic message list, space
-search UI, discord threaded view, canvas pan/zoom — needs its data-fetch query/response
-shape (tied to that kind's `contents`) and UI designed. Channel islands delegate item
-rendering to item islands via the registry.
+### 15. Island implementations — 🟡 Iron out (`basic` done; per remaining island)
+`kinds/basic/web/island.ts` is real: a live message list that fetches `POST .../contents`, renders each
+item through its item island via the registry (the §9 recursive-render path — for basic it resolves to
+itself), and reflects the `/api/events` SSE stream in place (created/updated/deleted). The
+`IslandModule` contract now carries channel `mount` + item `renderItem`, both optional
+(`web/scripts/gen-registry.mjs`). `kinds/space/web/island.ts` is also real: a search box that POSTs
+`{q}` to `.../contents` and lists matching channels as links the shell opens (recursive discovery §9).
+`kinds/canvas/web/island.ts` is real too: a pannable viewport that POSTs the visible rect to `contents`,
+draws each box via the item island through the registry, re-queries on pan, and reflects SSE changes.
+Remaining: `discord` threaded view — a placeholder needing its contents query/response shape + UI (#10).
+Island DOM tests are #22.
 
-### 16. Astro SSR / adapter — 🟡 Iron out
-Static today with a placeholder `getStaticPaths` for `channels/[id]`. Real channel routing
-needs a server/hybrid adapter (e.g. `@astrojs/node`) or an explicit
-static-shell-plus-client-resolve decision. Affects deployment (#20) and how `cp-frontend`
-serves the build.
+### 16. Astro routing — ✅ Decided: fully static + client-side SPA routing
+No SSR adapter. Astro static mode can't prerender an arbitrary `/channels/<id>`, so the single
+`index.astro` shell routes on `location.pathname`; `cp-frontend` already falls back to `index.html` for
+unknown paths (`static_files.rs`), so deep links resolve client-side and any id works with no per-id
+prerender. `channels/[id].astro` (and its `getStaticPaths` placeholder) is deleted. This keeps the Rust
+server a plain static file server — simplest Nix build/deploy (#20). Revisit only if per-request server
+rendering is ever needed.
 
 ## Cross-cutting (see also DESIGN §14)
 
-### 17. Native `User` auth + sessions — 🔴 Design first
-§14: out of scope for the data model, but "needed before the frontend is usable." Nothing
-exists beyond the `users` table + `User` struct. Decide auth method, session storage, and
-login flow.
+### 17. Native `User` auth + sessions — ✅ Done (identity/sessions; `design/auth.md`, ratified 2026-07-11)
+Password auth against the `users` substrate with **provisioned accounts** (no public registration) +
+server-side sessions. `cp-core::auth`: argon2id hashing (`users.password_hash`), `provision_user` /
+`set_password` / `authenticate`, and opaque-token sessions (the DB stores only `SHA-256(token)`;
+`create`/`resolve`/`delete`). `cp-frontend::auth`: `POST /api/auth/login|logout` + `GET /api/auth/me`
+(HttpOnly `SameSite=Lax` cookie; `Secure` via `CP_SECURE_COOKIES=1`) and a `CurrentUser` extractor to
+reuse on protected routes. Shell `set-password` provisions a login. Frontend shell shows login state.
+Covered by `crates/cp-core/tests/auth.rs` + `crates/cp-frontend/tests/auth_flow.rs`. Folded into DESIGN
+§2/§14. **Deferred (needs #18):** authenticated *write* endpoints; open self-signup + Discord-OAuth
+linking (#19) are additive and don't disturb this session model. `cp-model` unchanged (auth is not a
+kind capability).
 
-### 18. Permissions model — 🔴 Design first
-§14: beyond "only native users are principals," per-channel authorization is unspecified
-("likely another capability"). Design the capability + its storage before implementing.
+### 18. Permissions model — ✅ Done (`design/permissions.md`, ratified 2026-07-11)
+Per-channel authorization is a `Permission` capability on `ChannelKind` (opt-in like `Membership`),
+**deny-by-default** — a kind with no `Permission` is not writable over HTTP. The fixed `Action`
+vocabulary is `View`/`Post`/`Manage`; #18 enforces `Post` only (reads stay open — `View` is defined so
+that later change needs no signature churn). Core's `authz::authorize` mirrors `contents::dispatch`
+(resolve kind → its policy → default), holding no policy itself; a policy consults the generic
+`channel_members` substrate via the new read primitive `StoreCtx::is_member` (`basic` = "members may
+post" — answering §14's "is `channel_members` sufficient?" → yes). The first authenticated write endpoint
+`POST /api/channels/:id/items` gates on it (`CurrentUser` → 401, authz → 403, unknown type → 400) and
+stamps authorship server-side via `ItemKind::with_author` (§2 polymorphic authorship, no core column;
+client-supplied author overwritten). Covered by `crates/cp-core/tests/authz.rs` (throwaway kinds, §12) +
+`crates/cp-frontend/tests/authenticated_write.rs` (real `basic`/`space` slices, end-to-end) + a compose
+box in the `basic` island. Folded into `DESIGN.md` §2/§4/§8/§9/§13/§14. **Deferred (additive):** read
+gating (`View`), sub-channel creation over HTTP (`Manage`), a channel kind vetoing child item types, and
+resolving authorship up a `linked-users` edge (#19).
 
-### 19. `linked-users` API — 🟡 Iron out
-`user_external_links` + `UserExternalLink` exist; the API to link a native user to a
-`cached-user` item and to resolve authorship up a link (§2) is unspecified.
+### 19. `linked-users` API — ✅ Done (`design/linked-users.md`, ratified 2026-07-11)
+`cp-core::links` (sibling to `auth`) is the edge logic: `link` / `unlink` (type-agnostic — a user ↔ *any*
+item, no hardcoded "cached-user" type; validates item existence; idempotent; conflict if the item is
+already linked, since a cached-user maps to **≤1** native user via `item_id UNIQUE`), `linked_items`
+(forward) and `user_for_item` (reverse — authorship resolution *up* the link, §2). Links are
+**operator-provisioned** via the debug shell (`link-user` / `unlink-user`, write-gated; `show links
+<handle>`) — an identity assertion, so no self-service HTTP write pre-OAuth (same posture as #17). HTTP
+exposes reads only: `GET /api/users/:id/links` + `GET /api/items/:id/linked-user`. The `item_id` FK
+(`ON DELETE CASCADE`) required moving the table below `items` in the migration. Covered by
+`crates/cp-core/tests/links.rs` (throwaway kinds, §12), `crates/cp-frontend/tests/linked_users.rs`, and a
+`debug_shell.rs` case. Folded into `DESIGN.md` §2/§3/§9/§14. **Deferred (additive):** **self-service
+linking** gated by a **per-kind proof-of-ownership** capability (each external kind verifies ownership its
+own way — Discord OAuth, etc.), layered on this same edge without changing storage.
 
 ### 20. Deployment wiring — 🟢 Ready (when there is something worth shipping)
 Follow the `andref-ipfs-depot` precedent: a `path:` flake input from a consumer (the `whale`

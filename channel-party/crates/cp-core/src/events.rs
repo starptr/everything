@@ -1,16 +1,12 @@
-//! The core event bus. The sync component writes envelopes and emits change events; derived
-//! indexers and the frontend SSE consume them — independent tasks, so a slow pipeline never blocks
-//! ingestion. See DESIGN §7/§9.
+//! The core event bus. The write path emits a `ChangeEvent` after every committed mutation;
+//! derived indexers and the frontend SSE consume the stream — independent tasks, so a slow
+//! pipeline never blocks the write. The event *types* live in `cp-model` (so a kind's runtime
+//! component can consume them without depending on `cp-core`); the bus is the mechanism. §7/§9.
 
-use cp_model::{ChannelId, TypeId};
 use tokio::sync::broadcast;
 
-/// A change event: which envelope type changed, and the channel scope it belongs to (if any). §7.
-#[derive(Clone, Debug)]
-pub struct ChangeEvent {
-    pub type_id: TypeId,
-    pub scope: Option<ChannelId>,
-}
+// Re-exported so existing `cp_core::events::ChangeEvent` / `cp_core::ChangeEvent` paths keep working.
+pub use cp_model::{ChangeEvent, ChangeOp, EnvelopeRef};
 
 /// A multi-producer / multi-consumer change bus. §7/§9.
 #[derive(Clone)]

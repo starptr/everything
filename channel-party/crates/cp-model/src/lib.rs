@@ -9,19 +9,23 @@
 
 pub mod debug;
 pub mod envelope;
+pub mod events;
 pub mod ids;
 pub mod kind;
 pub mod migration;
 pub mod runtime;
 pub mod store;
+pub mod write;
 
 pub use debug::{DebugAccess, DebugCommand};
 pub use envelope::{Channel, Item, Json, User, UserExternalLink};
+pub use events::{ChangeEvent, ChangeOp, EnvelopeRef};
 pub use ids::{ChannelId, ItemId, TypeId, UserId};
-pub use kind::{ChannelKind, IndexEntry, ItemKind, Membership};
+pub use kind::{Action, ChannelKind, IndexEntry, ItemKind, Membership, Permission};
 pub use migration::{Migration, Migrations};
-pub use runtime::{Interests, RuntimeComponent, RuntimeCtx, WriteScope};
+pub use runtime::{Interests, RuntimeComponent, RuntimeCtx, RuntimeEvent, WriteScope};
 pub use store::{Cursor, Filter, Node, NodePage, Order, Page, StoreCtx, SuperType};
+pub use write::{NewChannel, NewItem, Upsert, WriteCtx};
 
 /// Crate-wide result type. Kind capabilities and store primitives return this.
 pub type Result<T> = std::result::Result<T, Error>;

@@ -8,3 +8,5 @@ license.workspace = true
 cp-model.workspace = true
 
 async-trait.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true

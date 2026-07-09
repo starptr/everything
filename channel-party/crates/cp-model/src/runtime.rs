@@ -1,11 +1,13 @@
 //! `RuntimeComponent` — the one supervised-task abstraction. Ingesting workers and derived indexers
 //! are the same machine: a long-lived task that does an initial batch pass, then reacts to a stream
-//! ("backfill-then-stream"). There is no separate `Worker` and `Indexer`. See DESIGN §7.
+//! ("backfill-then-stream"). There is no separate `Worker` and `Indexer`. See DESIGN §7 and
+//! `design/runtime.md`.
 
 use async_trait::async_trait;
 
-use crate::ids::TypeId;
-use crate::Result;
+use crate::events::ChangeEvent;
+use crate::ids::{ChannelId, ItemId, TypeId};
+use crate::{Channel, Item, Node, Result, WriteCtx};
 
 /// What a component reacts to: a schedule, and/or the change stream filtered by envelope type. §7.
 #[derive(Clone, Debug, Default)]
@@ -31,10 +33,43 @@ pub enum WriteScope {
     Derived,
 }
 
-/// The handle a component receives: the store (restricted per `writes()`), the change-stream
-/// subscription (filtered by `interests`), the scheduler, and shutdown. Concretely provided by
-/// `cp-core`; a marker trait in the scaffold. §7.
-pub trait RuntimeCtx: Send + Sync {}
+/// One thing a component's loop reacts to, from [`RuntimeCtx::next_event`]. §7.
+pub enum RuntimeEvent {
+    /// An interests-filtered change committed to the store.
+    Change(ChangeEvent),
+    /// The `interests.schedule_secs` interval fired.
+    Tick,
+}
+
+/// The handle a component receives (concretely provided by `cp-core`): the interests-filtered change
+/// stream + scheduler, point reads, a `WriteScope`-confined write surface, the type-owned DB escape
+/// hatch, and the reset signal. See `design/runtime.md`. §7.
+#[async_trait]
+pub trait RuntimeCtx: Send + Sync {
+    /// Await the next change (pre-filtered to `interests.types`) or scheduler tick; `None` once the
+    /// supervisor shuts the component down (a clean loop exit). Broadcast lag is skipped silently.
+    async fn next_event(&self) -> Option<RuntimeEvent>;
+
+    /// Point-read an item — a `ChangeEvent` carries no payload, so a `Derived` indexer fetches the
+    /// changed envelope to project it.
+    async fn get_item(&self, id: ItemId) -> Result<Option<Item>>;
+    async fn get_channel(&self, id: ChannelId) -> Result<Option<Channel>>;
+
+    /// Every existing envelope of the given types, id-ordered — the backfill enumerator. The change
+    /// stream carries only *new* changes, so a component reconstructs prior state through this. §7.
+    async fn scan(&self, types: &[TypeId]) -> Result<Vec<Node>>;
+
+    /// The `Primary` write surface (envelope mutations), or `None` for a `Derived` component — which
+    /// therefore *cannot* write core envelopes. This is the §7 confinement, enforced structurally.
+    fn writer(&self) -> Option<&dyn WriteCtx>;
+
+    /// A handle to the kind's own namespaced tables (the §6 escape hatch). Used to read/write a
+    /// type-owned index; not for touching core's `channels`/`items`.
+    fn type_owned_db(&self) -> &sqlx::SqlitePool;
+
+    /// Whether `version()` was bumped since the last boot — the component resets (idempotently). §7.
+    fn reset_requested(&self) -> bool;
+}
 
 /// A supervised, long-lived component: backfill then steady-state, all in one loop. Components are
 /// crate-contributed singletons (one Discord component manages all bridged guilds), not

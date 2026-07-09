@@ -1,7 +1,10 @@
 # channel-party — Design
 
-Status: scaffolded — `cp-model` interface complete; core mechanisms and kind logic stubbed
-Last updated: 2026-07-04
+Status: core mechanisms implemented (write path · read primitives · index substrates · runtime
+supervisor · event bus · migrator · debug shell · auth · authorization · linked-users) with the
+`basic`/`space`/`canvas` slices real and `discord-compatible` ingestion + structure + contents landed
+(#10 a+b+d); the rest of #10 (semantic index · webhook · outbound · membership) remains. See `TODO.md`.
+Last updated: 2026-07-11
 
 See `TODO.md` for the deferred implementation work, each item tagged with its design-readiness.
 
@@ -15,11 +18,31 @@ headless; a web frontend is merely the first consumer. Everything below is desig
 so that adding a new kind of channel or message touches **zero lines of core or
 frontend-shell code** — it adds a self-contained *vertical slice* instead.
 
-> **Implementation status (scaffolded 2026-07-04).** The §10 structure exists and
-> `nix flake check` is green. `cp-model` is implemented in full; `cp-core`,
-> `cp-frontend`, `cp-bin`, and the four kinds are warning-clean stubs that compile,
-> boot, and serve (the API returns `501` until the store lands). Deferred work — and how
-> much of it still needs a design pass — lives in **`TODO.md`** (keep it in sync).
+> **Implementation status.** The §10 structure exists and `nix flake check` is green.
+> Implemented: `cp-model`; the `cp-core` **write path** (`WriteCtx` — validate → persist →
+> transactional index → change event; `external_key` upsert; the `channel_members` substrate),
+> per `design/write-path.md` (`TODO.md` #1); **all four read primitives** (`StoreCtx` —
+> `children`/`descendants`/`seek_time`/`search`), per `design/read-path.md` + `design/index-search.md`
+> (#2/#3); the **FTS5 index substrate** feeding `search` (#3); the **runtime supervisor** —
+> `spawn_runtime` supervises each `RuntimeComponent` (backfill-then-stream, restart/backoff, the real
+> `RuntimeCtx` with `WriteScope` confinement + `version()` reset), per `design/runtime.md` (#4);
+> **three vertical slices** — `basic`'s feed, `space`'s subtree search, and `canvas`'s viewport-bbox over
+> its *own* R-tree (the reference §6 escape-hatch slice: an R-tree in `canvas_*` tables maintained by a
+> `Derived` `SpatialIndex` component, #11) — on the generic HTTP API (`GET /api/channels|items/:id`,
+> `POST .../contents` dispatch), end-to-end tested (#8/#9/#11/#12);
+> **live updates** — `GET /api/events` streams the change bus over SSE, scope-filterable (#13); the
+> **frontend** — `basic`'s live message list, `space`'s search box, and `canvas`'s pannable viewport,
+> delegating rendering via the registry, on a fully-static, client-side-routed Astro shell (#15/#16); and
+> the **gated debug shell** (`channel-party shell`) — read + envelope-CRUD + `reparent` + capability-gated
+> membership + `set-password` through the mutation API (#6); and **native-user auth** — password login
+> (argon2, provisioned accounts) + server-side sessions (`/api/auth/login|logout|me`, a `CurrentUser`
+> extractor) with the shell's login state in the frontend, per `design/auth.md` (#17). Still stubbed:
+> the `sort_key` index substrate (no consumer yet), the `discord` slice (#10), and per-channel
+> permissions (#18). Deferred work and its design-readiness live in **`TODO.md`**.
+>
+> **Notable coupling** discovered building #4/#11: `cp-model` depends on `sqlx` — the price of the §6
+> escape hatch (handing an escape-hatch kind a DB handle through `StoreCtx`/`RuntimeCtx`). Pure kinds
+> never use it.
 >
 > Deltas from the illustrative code below: `StoreCtx` and `RuntimeCtx` are **traits**
 > (passed as `&dyn`) implemented by `cp-core`, so kind crates depend only on `cp-model`;
@@ -86,6 +109,15 @@ Invariant enforced by core: **only a native `User` can be a principal; items are
 inert content.** Auth, sessions, ownership, and permission checks resolve
 exclusively against `users`.
 
+**Auth is implemented** (`design/auth.md`, `TODO.md` #17): password login (argon2id hash in
+`users.password_hash`) with **provisioned accounts** — no public registration; a login is granted via
+the debug shell's `set-password`. Sessions are server-side (opaque token in an HttpOnly cookie; the DB
+stores only its SHA-256), exposed as `POST /api/auth/login|logout` + `GET /api/auth/me` and a
+`CurrentUser` extractor. **Per-channel authorization is implemented** (§18, `design/permissions.md`): a
+`Permission` capability on `ChannelKind` (deny-by-default), enforced at the authenticated write endpoint;
+authorship is stamped server-side per kind (`with_author`) — no core author column, honoring the
+polymorphic authorship below.
+
 This makes authorship cleanly polymorphic (which is fine precisely *because* there
 is no base class):
 
@@ -95,6 +127,13 @@ is no base class):
 - `item-type:discord-compatible/message` (originates on channel-party, pushed to
   Discord via webhook) → author is a native `User`.
 
+**The `linked-users` edge + authorship resolution are implemented** (§19, `design/linked-users.md`):
+`cp-core::links` links a native user to the external `cached-user` items that represent it (a cached-user
+maps to ≤1 native user) and resolves an item *up* the link to its native user; links are
+**operator-provisioned** (debug shell), HTTP exposes only reads. Self-service linking awaits a *per-kind
+proof-of-ownership* mechanism (each external kind verifies ownership its own way — Discord OAuth, etc.),
+the future form of §14's OAuth-linking question.
+
 ---
 
 ## 3. Data model
@@ -103,7 +142,7 @@ Three tables — **two super-types, plus the fixed `users` substrate.**
 
 ```
 users               (id, handle, auth…, created_at)          -- first-class, native principals only
-user_external_links (user_id → users.id, item_id → items.id) -- the `linked-users` edge, bidirectional
+user_external_links (user_id → users.id, item_id → items.id UNIQUE) -- `linked-users` edge; one native user per external item (§19)
 channels            (id, type_id, container?, payload_json)  -- container = parent channel (null = root)
 items               (id, type_id, container?, external_key?, payload_json)
 ```
@@ -126,8 +165,12 @@ items               (id, type_id, container?, external_key?, payload_json)
   free; "jump to timestamp T" is just seeking to the ULID whose time prefix is T
   (see §5).
 
-Writes go through core's mutation API, which calls the kind's `validate` before
-committing — so no path (including the debug shell) can persist an invalid envelope.
+Writes go through core's mutation API — the `WriteCtx` trait (implemented, see
+`design/write-path.md`): each mutation calls the kind's `validate`, then persists the
+envelope + inline `index()` in one transaction, then emits a change event on commit. So no
+path (including the debug shell) can persist an invalid envelope. `upsert_item` keyed on
+`external_key` gives idempotent mirroring with a stable id; the key is an opaque string the
+kind constructs to encode its own uniqueness grain (resolving §14's namespacing question).
 
 ---
 
@@ -155,6 +198,7 @@ pub trait ChannelKind: Send + Sync {
 
     fn index(&self, p: &Json) -> Option<IndexEntry> { None }          // inline projection, §6
     fn membership(&self) -> Option<&dyn Membership> { None }          // §8
+    fn permission(&self) -> Option<&dyn Permission> { None }          // authorization; None = deny, §18
     fn routes(&self) -> Option<axum::Router> { None }                 // extra HTTP routes, mounted /ext/<type>
     fn debug_commands(&self) -> Vec<DebugCommand> { vec![] }          // §8
     fn debug_summary(&self, c: &Channel) -> Option<String> { None }   // §8
@@ -166,6 +210,7 @@ pub trait ItemKind: Send + Sync {                                     // same sh
     fn type_id(&self) -> &TypeId;
     fn validate(&self, p: &Json) -> Result<()> { Ok(()) }
     fn index(&self, p: &Json) -> Option<IndexEntry> { None }
+    fn with_author(&self, p: Json, u: UserId) -> Json { p }          // stamp server-side authorship, §2/§18
     fn debug_summary(&self, i: &Item) -> Option<String> { None }
 }
 ```
@@ -184,6 +229,7 @@ great deal (one rate-limited client, one search index). This mirrors the
 | `contents` (channel) | list+paginate | name search | fetch-all subtree | viewport bbox |
 | `index` (inline) | name → FTS | – | (via RuntimeComponent) | coord → spatial |
 | `membership` | ✓ | ✓ | reject / proxy to Discord | – |
+| `permission` | members may post | – (deny) | Discord's model | – (deny) |
 | `RuntimeComponent` | – | – | sync (Primary) + semantic index (Derived) | spatial index (Derived) |
 | `routes` | – | – | webhook receiver | – |
 | island (frontend) | message list | search UI | threaded view | pan/zoom canvas |
@@ -223,13 +269,25 @@ The three worked examples all reduce to these:
 | Channel kind | `contents(query)` |
 | --- | --- |
 | `basic` | `children(id, {Item, [basic]}, page, TimeDesc)`; `query.at` → `seek_time` first ⇒ jump-to-timestamp is free |
-| `space` | `search(descendants(id), query.q, {Channel, [basic]}, page)` → paginated name matches |
+| `space` | `search(self, query.q, {Channel}, page)` → paginated name matches over the subtree (impl drops the design's `[basic]` restriction so `space` isn't coupled to a peer type) |
 | `discord/guild` | `descendants(id, {Channel, [channel, section]})` → whole subtree at once; island builds the tree |
 | `discord/section` | same, scoped to itself |
 
 Discovery is **recursive**: a guild island renders channel *references*; opening one
 mounts that child's island, which calls its *own* `contents`. Containers delegate to
 children exactly as they delegate item rendering (§9).
+
+All four primitives are **implemented** (see `design/read-path.md` + `design/index-search.md`):
+`children` is a `UNION ALL` keyset query across the two super-type tables ordered by id
+(`LIMIT n+1` derives the next cursor); `descendants` is a recursive CTE over the channel
+containment edge (root = depth 0, optional depth cap); `seek_time` is a *pure* ULID
+computation (the id just below time `T`'s floor), no query. A `Cursor` is an opaque string
+wrapping a bare ULID keyset boundary — results resume strictly beyond it in the `Order`
+direction, and because a ULID's base32 text sorts like its value the pagination is a plain
+`id <cmp> ?`. **`search`** MATCHes the FTS5 projection (§6), joins back to channels/items, and
+scopes to `scope`'s subtree via the *same* CTE as `descendants`; it ranks by bm25, so it pages by an
+**offset** cursor — deliberately a different opaque encoding from the id-keyset one (which is why
+`Cursor` is per-primitive, not globally structured).
 
 ---
 
@@ -245,12 +303,17 @@ hardcodes no field; it only calls a kind-supplied function. Two tiers:
 `index(payload) -> IndexEntry` is a pure function applied **transactionally on
 write** into core's built-in substrates:
 
-- **FTS5** (trigram tokenizer → true substring search) for `name` / body text.
-- Expression indexes for declared **sort keys**.
-- A **2D / R-tree** substrate for coordinates (`canvas-text-box`).
+- **FTS5** (trigram tokenizer → true substring search) for `name` / body text. **Implemented**
+  (`search_index`, `design/index-search.md`): a standalone FTS5 table keyed by `envelope_id` +
+  `super_type`, written delete-then-insert by `index::upsert`; `StoreCtx::search` MATCHes it and
+  joins back to channels/items (orphaned rows from cascaded deletes are invisible to the join).
+- Expression indexes for declared **sort keys** — *deferred* (no consumer yet; `TODO.md` #11).
+- A **2D / R-tree** substrate for coordinates (`canvas-text-box`) — *deferred* to `canvas` (#11);
+  RTREE is confirmed available in the build.
 
 `IndexEntry { name?, text?, sort_key?, coord? }`. Cheap, deterministic, no I/O, no
-task. A kind that needs no indexing returns `None` and costs nothing.
+task. A kind that needs no indexing returns `None` and costs nothing. `index::upsert` projects
+`name`/`text` today and ignores `sort_key`/`coord` until #11 builds their substrates.
 
 ### Tier 2 — async indexing via `RuntimeComponent` (§7)
 
@@ -262,8 +325,12 @@ owns.
 **Type-owned index tables** are the escape hatch: a crate may ship namespaced
 migrations (`discord_*`, `canvas_*`) registered with core's migrator, giving it a
 fully self-contained search stack — *own table (schema) + RuntimeComponent (writer) +
-`contents` (reader)* — that core never learns the shape of. Cost: those schemas must
-be in each crate's `.sqlx` offline cache for compile-time query checking (§13).
+`contents` (reader)* — that core never learns the shape of. **`canvas` is the reference
+implementation** (`TODO.md` #11, `design/runtime.md`): `canvas_box` + `canvas_box_rtree`
+(an R-tree), a `SpatialIndex` `Derived` component that maintains it off the change stream, and a
+viewport-bbox `contents` reader — none of which core sees. The reader/writer reach their tables via
+`type_owned_db()` on `StoreCtx`/`RuntimeCtx`, which is why `cp-model` depends on `sqlx`. Cost: those
+schemas must be in each crate's `.sqlx` offline cache for compile-time query checking (§13).
 
 ---
 
@@ -288,6 +355,18 @@ pub trait RuntimeComponent: Send + Sync {
 
 `RuntimeCtx` provides the store handle (restricted per `writes()`), the change-stream
 subscription filtered by `interests`, the scheduler, and shutdown.
+
+**Implemented** (`design/runtime.md`, `TODO.md` #4): the supervisor runs one task per component
+(restart + capped backoff, `RuntimeHandle` shutdown); `RuntimeCtx` exposes `next_event` (the filtered
+change stream merged with the scheduler; `None` on shutdown), point reads, `scan` (the backfill
+enumerator), `writer() -> Option<&dyn WriteCtx>` (**`None` for `Derived`** — confinement is structural),
+`type_owned_db` (the §6 escape hatch), and `reset_requested()` (a `version()` bump vs the
+`runtime_component_state` table). The change-event types live in `cp-model`. First `Derived` consumer:
+`canvas`'s `SpatialIndex` (§6, #11); first `Primary` consumer: `discord-compatible`'s `DiscordSync`
+(#10 (a)+(b), `design/discord.md`) — it fetches Discord messages and upserts `cached-user`/`cached-message`
+envelopes through `writer()` (which returns `Some` only for `Primary`). *Delta from the sketch above:*
+`run` takes `cx: &dyn RuntimeCtx` (dyn-safe), and giving escape-hatch kinds a DB handle made `cp-model`
+depend on `sqlx`.
 
 Two facets that are **behavior, not interface**:
 
@@ -338,9 +417,9 @@ capability on `ChannelKind`:
 
 ```rust
 pub trait Membership: Send + Sync {
-    async fn add_user(&self, cx: &StoreCtx, ch: &Channel, u: UserId) -> Result<()>;
-    async fn remove_user(&self, cx: &StoreCtx, ch: &Channel, u: UserId) -> Result<()>;
-    async fn members(&self, cx: &StoreCtx, ch: &Channel) -> Result<Vec<UserId>>;
+    async fn add_user(&self, cx: &dyn WriteCtx, ch: &Channel, u: UserId) -> Result<()>;
+    async fn remove_user(&self, cx: &dyn WriteCtx, ch: &Channel, u: UserId) -> Result<()>;
+    async fn members(&self, cx: &dyn WriteCtx, ch: &Channel) -> Result<Vec<UserId>>;
 }
 ```
 
@@ -362,6 +441,13 @@ contribute commands via `debug_commands()`, each flagged read/write so the mode 
 applies uniformly without the shell knowing what they do. Built-in
 capability-backed commands (membership) + kind-registered commands, all behind the
 one gate. The shell never grows per type.
+
+**Implemented** (`TODO.md` #6, `cp_core::debug`, run via `channel-party shell`): the mode gate, the
+direct-DB reads, and envelope-CRUD + membership through the mutation API. `create-user` bootstraps the
+`users` substrate (raw insert) until auth (#17); `set-password` provisions logins (#17); `link-user` /
+`unlink-user` / `show links` provision the `linked-users` edge (#19). *Executing* kind-registered
+`debug_commands()` is deferred until the first kind ships one (needs a registry enumerator + a per-kind
+execution hook).
 
 ---
 
@@ -399,10 +485,20 @@ language boundary.
 ```
 GET  /api/channels/:id                 -> { id, type_id, container }        (generic)
 POST /api/channels/:id/contents  {q}   -> type-defined contents             (dispatch, §5)
+POST /api/channels/:id/items  {type_id, payload} -> 201 { id }              (authenticated write, §18)
 GET  /api/items/:id                    -> envelope                          (generic)
+GET  /api/users/:id/links              -> { items: […] }                    (linked-users, §2/§19)
+GET  /api/items/:id/linked-user        -> User | 404                        (authorship resolution, §2/§19)
 GET  /api/events?scope=…               -> SSE change stream                 (generic)
+POST /api/auth/login|logout · GET /api/auth/me                              (native-user auth, §2/§17)
 /ext/<type>/…                          -> kind-contributed routes (webhooks, etc.)  (§4)
 ```
+
+`POST …/items` is the first authenticated write (§18, `design/permissions.md`): it requires a session
+(the `CurrentUser` extractor → 401), the channel kind's `Permission` to grant `Post` (→ 403,
+deny-by-default), and a known item type (→ 400); the author is stamped server-side via the item kind's
+`with_author` (§2), then `validate` + persist run in the write path. It stays type-agnostic — the client
+names the `type_id` and the payload is opaque to core.
 
 ---
 
@@ -509,6 +605,8 @@ opts into only the capabilities it needs:
 | `index` (inline) | ChannelKind / ItemKind | core write path (transactional) |
 | `RuntimeComponent` | registry | core runtime (supervised) |
 | `membership` | ChannelKind | core / debug shell |
+| `permission` | ChannelKind | core write path (authz dispatch) |
+| `with_author` | ItemKind | frontend write endpoint |
 | `debug_commands` | ChannelKind | debug shell |
 | `debug_summary` | ChannelKind / ItemKind | debug shell |
 | `routes` | ChannelKind | frontend server |
@@ -523,14 +621,23 @@ Adding a type touches none of these mechanisms — only the slice.
 These are unresolved **design** questions, distinct from the implementation backlog in
 `TODO.md` (which flags which items still need a design pass before coding):
 
-- **Permissions model.** Beyond "only native users are principals," the shape of
-  per-channel authorization is unspecified. Likely another capability, but deferred.
-- **Membership storage.** Whether the generic `channel_members` substrate is
-  sufficient, or membership-heavy kinds should own their edge tables.
+- ~~**Permissions model.**~~ **Resolved (#18, `design/permissions.md`):** a `Permission` capability on
+  `ChannelKind` (the "another capability" this predicted), deny-by-default, enforced at the authenticated
+  write endpoint; the fixed `Action` vocabulary is `View`/`Post`/`Manage` (only `Post` gated so far —
+  reads stay open). Authorship is stamped per-kind server-side (`ItemKind::with_author`), no core column.
+- **Membership storage.** Partly resolved by #18: a `Permission` policy can ride the generic
+  `channel_members` substrate (`basic` = "members may post"), so it is sufficient for the common case;
+  membership-heavy kinds that outgrow it own their own edge tables via the §6 escape hatch (no core
+  change). Still open only as "when to reach for a kind-owned table."
 - **`external_key` namespacing.** Exact uniqueness scope for cached objects
   (per-guild vs global Discord user identity).
-- **Auth / session mechanism** for native users (out of scope for the core data
-  model; needed before the frontend is usable).
+- ~~**Auth / session mechanism** for native users.~~ **Resolved (#17, `design/auth.md`):** password
+  login + provisioned accounts + server-side sessions.
+- ~~**`linked-users` linking.**~~ **Resolved (#19, `design/linked-users.md`):** `cp-core::links` +
+  operator-provisioned links (shell) + read/resolution endpoints. Open self-signup and **self-service
+  linking** remain future extensions — the latter gated by a **per-kind proof-of-ownership** capability
+  (each external `cached-user` kind verifies ownership its own way, e.g. Discord OAuth), layered on the
+  same edge without changing storage.
 - **Registry ergonomics.** Whether to keep explicit registration or adopt
   `inventory`/`linkme` distributed registration as the type count grows.
 ```

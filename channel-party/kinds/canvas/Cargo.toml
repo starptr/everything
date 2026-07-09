@@ -8,3 +8,7 @@ license.workspace = true
 cp-model.workspace = true
 
 async-trait.workspace = true
+# canvas is an escape-hatch kind: it owns namespaced tables (§6) and reads/writes them via sqlx.
+serde = { workspace = true }
+serde_json.workspace = true
+sqlx.workspace = true

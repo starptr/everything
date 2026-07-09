@@ -6,10 +6,25 @@ license.workspace = true
 
 [dependencies]
 cp-core.workspace = true
+cp-model.workspace = true
 
 anyhow.workspace = true
 axum.workspace = true
+axum-extra.workspace = true
+serde = { workspace = true }
 serde_json.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+cp-basic.workspace = true
+cp-canvas.workspace = true
+cp-model.workspace = true
+cp-space.workspace = true
+http-body-util = "0.1"
+serde_json.workspace = true
+tempfile = "3"
+tokio.workspace = true
+tower = { version = "0.5", default-features = false, features = ["util"] }

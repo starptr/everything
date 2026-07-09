@@ -1,6 +1,9 @@
 ---
-// The type-agnostic app shell (nav / channel tree / layout). Entirely type-agnostic: it never
-// knows about concrete channel or item kinds. Opening a channel loads that type's island. §9.
+// The single, type-agnostic app shell. #16 decision: the build is fully static and routing happens
+// client-side (no SSR adapter), so `cp-frontend` keeps serving one static bundle. Astro's static mode
+// can't prerender an arbitrary /channels/<id>, so cp-frontend falls back to this index.html for unknown
+// paths; the script below reads location.pathname and mounts the matching channel's island. Any channel
+// id works with no per-id prerender. The shell never knows about concrete kinds. See DESIGN §9/§16.
 ---
 
 <html lang="en">
@@ -8,16 +11,138 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>channel-party</title>
+    <style is:global>
+      body { font-family: system-ui, sans-serif; margin: 0; color: #111; }
+      header { padding: 0.75rem 1rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+      header a { color: inherit; text-decoration: none; font-weight: 600; }
+      .cp-auth form { margin-top: 0; }
+      .cp-auth input { min-width: 9rem; }
+      .cp-auth span { color: #555; }
+      main { padding: 1rem; }
+      .cp-msglist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+      .cp-msg { padding: 0.35rem 0.6rem; border-radius: 0.4rem; background: #f3f3f5; max-width: 60ch; overflow-wrap: anywhere; }
+      .cp-status { color: #777; font-style: italic; }
+      form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+      input { padding: 0.4rem; min-width: 22rem; }
+    </style>
   </head>
   <body>
     <header>
-      <h1>channel-party</h1>
-      <p>Headless, extensibility-first chat. The shell is type-agnostic; open a channel to load
-        its island.</p>
+      <a href="/">channel-party</a>
+      <div id="auth" class="cp-auth"></div>
     </header>
-    <nav>
-      <!-- A real nav would list channels from the API; scaffold links to a demo channel page. -->
-      <a href="/channels/demo">Open demo channel</a>
-    </nav>
+    <main id="app">Loading…</main>
+    <script>
+      import { islands } from '../generated/island-registry';
+
+      const app = document.getElementById('app')!;
+
+      // --- header auth widget (§17). Reflects login state; provisioned accounts, so a login form only. ---
+      const authEl = document.getElementById('auth')!;
+
+      async function refreshAuth(): Promise<void> {
+        try {
+          const res = await fetch('/api/auth/me');
+          if (res.ok) renderSignedIn(((await res.json()) as { handle: string }).handle);
+          else renderSignedOut();
+        } catch {
+          renderSignedOut();
+        }
+      }
+
+      function renderSignedIn(handle: string): void {
+        const label = document.createElement('span');
+        label.textContent = `signed in as ${handle}`;
+        const out = document.createElement('button');
+        out.textContent = 'Log out';
+        out.addEventListener('click', async () => {
+          await fetch('/api/auth/logout', { method: 'POST' });
+          void refreshAuth();
+        });
+        authEl.replaceChildren(label, out);
+      }
+
+      function renderSignedOut(): void {
+        const form = document.createElement('form');
+        const handle = document.createElement('input');
+        handle.placeholder = 'handle';
+        handle.required = true;
+        handle.autocomplete = 'username';
+        const password = document.createElement('input');
+        password.type = 'password';
+        password.placeholder = 'password';
+        password.required = true;
+        password.autocomplete = 'current-password';
+        const submit = document.createElement('button');
+        submit.textContent = 'Log in';
+        const err = document.createElement('span');
+        err.className = 'cp-status';
+        form.append(handle, password, submit, err);
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          err.textContent = '';
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ handle: handle.value, password: password.value }),
+          });
+          if (res.ok) void refreshAuth();
+          else err.textContent = 'Invalid credentials.';
+        });
+        authEl.replaceChildren(form);
+      }
+
+      void refreshAuth();
+
+      async function openChannel(id: string): Promise<void> {
+        app.textContent = 'Loading channel…';
+        try {
+          const res = await fetch(`/api/channels/${encodeURIComponent(id)}`);
+          if (!res.ok) {
+            app.textContent = `Channel ${id} unavailable (HTTP ${res.status}).`;
+            return;
+          }
+          const { type_id } = (await res.json()) as { type_id: string };
+          const load = islands.get(type_id);
+          if (!load) {
+            app.textContent = `No island registered for type "${type_id}".`;
+            return;
+          }
+          const island = await load();
+          if (!island.mount) {
+            app.textContent = `Type "${type_id}" has no channel view.`;
+            return;
+          }
+          app.replaceChildren();
+          await island.mount(app, { id, type_id });
+        } catch (err) {
+          app.textContent = `Failed to load channel: ${String(err)}`;
+        }
+      }
+
+      function home(): void {
+        app.replaceChildren();
+        const p = document.createElement('p');
+        p.textContent = 'Headless, extensibility-first chat. The shell is type-agnostic — open a channel by id:';
+        const form = document.createElement('form');
+        const input = document.createElement('input');
+        input.name = 'id';
+        input.required = true;
+        input.placeholder = 'channel id (ULID)';
+        const button = document.createElement('button');
+        button.textContent = 'Open';
+        form.append(input, button);
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const id = input.value.trim();
+          if (id) location.assign(`/channels/${encodeURIComponent(id)}`);
+        });
+        app.append(p, form);
+      }
+
+      const match = location.pathname.match(/^\/channels\/([^/]+)\/?$/);
+      if (match) void openChannel(decodeURIComponent(match[1]));
+      else home();
+    </script>
   </body>
 </html>
