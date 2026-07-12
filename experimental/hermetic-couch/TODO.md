@@ -32,14 +32,70 @@ Notes:
 - Files are `git add`-staged (required for flake evaluation) but NOT committed.
 - Not wired into system-sodium/sodium.nix yet (standalone, per plan) — that's Part 5.
 
-## Part 2 — wine runner + Meccha Chameleon  (deferred)
-- [ ] runners/wine.nix: fetch frankea-Whisky prebuilt wine+D3DMetal (jujutsu-bin pattern)
-- [ ] inject pinned DXMT DLLs + DLL overrides
-- [ ] winetricks verbs applied idempotently (state-file tracked)
-- [ ] prefix reconciler (wineboot if absent; install Steam)
-- [ ] preLaunch: boot Steam, wait for login/ownership (drm=steamStub)
-- [ ] games/maccha-chameleon.nix
-- [ ] verify: prefix provisions, Steam login, game renders via DXMT/Metal
+## Part 2 — wine runner + MECCHA CHAMELEON  (this milestone) — SCAFFOLD DONE (pending on-device verify)
+Steam title is **MECCHA CHAMELEON**, App ID **4704690** (Windows-only, $5.99). DESIGN
+still spells it "maccha" in a couple of places; the code uses the correct "meccha".
+- [x] pkgs/whisky-wine.nix (relocate frankea/Whisky `Libraries.tar.gz` v3.1.1 into the store;
+      dontFixup keeps signatures; VERIFIED runs from store — `wine-11.0`, arm64, no external dylibs)
+- [x] DXMT: the Whisky bundle ships DXMT dlls (`DXMT/{x64,x32}`, 5.3MB real Metal d3d11) +
+      `winemetal.so` builtin, but a fresh prefix's d3d11 is wine's own wined3d (fakedll stub) which
+      canNOT give Unreal a Feature-Level-11 device (the "D3D11-compatible GPU required" popup).
+      FIX: runner INJECTS the bundle's DXMT dlls into the prefix system32/syswow64 and forces them
+      native (`WINEDLLOVERRIDES=d3d11,dxgi,d3d10core=n,b`). (Earlier "builtin, no injection" was a
+      misread — wine builtin d3d11 = wined3d, not DXMT; DXMT is the NATIVE dll.)
+- [x] pkgs/winetricks-min.nix (GUI-less winetricks from the upstream script; nixpkgs winetricks
+      drags in zenity→GTK/libadwaita/appstream which FAILS to build on darwin)
+- [x] REWORKED to a hermetic capture→store→offline-launch model (mirrors the java runner);
+      Steam is a capture-time tool, NOT a launch dependency. FOUR runner branches:
+      captured (DRM-free)→hermetic offline launch · captured+drm=steamStub→HYBRID (store bytes +
+      Steam booted in-prefix only for the auth token) · uncaptured→prints capture steps ·
+      `launchViaSteam=true`→non-hermetic fallback (Steam installs AND runs the game).
+- [x] ON-DEVICE FINDING: MECCHA is an Unreal Engine game. After the DXMT-native fix it RENDERS
+      hermetically from the store payload (title screen) — proving graphics + hermetic bytes work.
+      But it then gates on a live Steam auth token ("Failed due to invalid/missing auth token") →
+      it's a row-2 DRM (steamStub) title. So drm="steamStub" now selects the HYBRID branch. First cut
+      used Steam `-applaunch`, but that injects the Steam overlay into the game and DEADLOCKED the wine
+      loader (`RtlpWaitForCriticalSection … loader_section … timed out`). FIX (v2): boot Steam in the
+      BACKGROUND purely as the auth provider (poll ActiveUser reg for logged-in), then launch the game
+      exe DIRECTLY from the store payload (no -applaunch → no overlay injection). SteamAPI in the game
+      authenticates against the running Steam via the shared-prefix registry (steam_appid.txt dev
+      workflow) with SteamAppId env set. Bytes stay content-addressed; login persists in the prefix.
+- [x] pkgs/steam-game-payload.nix (requireFile the game DIRECTORY directly, recursive/content-
+      addressed — no tar, no unpack, one store copy; marked unfree, never cached — DESIGN §1)
+- [x] pkgs/tools/hc-steam-provision.nix (boot Steam in a scratch prefix in the pinned env; impure)
+- [x] pkgs/tools/hc-capture.nix (content-address steamapps/common/<game> dir via
+      `nix-store --add-fixed --recursive` → read .acf buildid → print the per-user
+      `versions."<v>"` stanza). Exposed as flake apps.
+      GAME-AWARE + minimal args: appid + steam-folder are baked from each wine spec into a
+      slug→{appId;folder} table, and version defaults to the Steam buildid (read from .acf).
+      So `hc-capture -- <slug>` is enough; [version] [appid] [folder] are positional overrides.
+- [x] runners/wine.nix hermetic branch: minimal prefix reconcile (wineboot mono/gecko-suppressed
+      + idempotent winetricks) → symlink read-only store payload into the prefix → force builtin
+      DXMT + set SteamAppId (offline steam_api init, NOT DRM circumvention) → exec exe, no Steam.
+- [x] lib/wine-pin.nix (single source of truth for the Whisky bundle pin; runner + tools share it)
+- [x] games/meccha-chameleon.nix ships UNCAPTURED (versions={}, play=null); gameFolder/exe are
+      best-guesses to confirm on first capture. drm=steamStub, vcrun2022, appId 4704690.
+- [x] module.nix: added `play`, `versions`, `gameName` options (+ earlier `drm`, `wine` runner)
+- [x] verify (structural): `nix flake check` green; tools build (writeShellApplication shellcheck
+      passes); uncaptured launcher builds + prints correct guidance; .app + Info.plist OK
+- [ ] verify (interactive, user — needs Rosetta 2 + your owned copy):
+      1) `nix run .#hc-steam-provision` → log in, install MECCHA CHAMELEON, quit Steam
+      2) `nix run .#hc-capture -- meccha-chameleon` (version=buildid, appid/folder from spec) → stanza
+      3) set play = "24149874" + paste versions."24149874" into games/meccha-chameleon.nix
+         (gameFolder="MECCHA CHAMELEON", exe="PenguinHotel.exe" — all confirmed from the real install)
+      4) `NIXPKGS_ALLOW_UNFREE=1 nix run .#meccha-chameleon` → launches from store, no Steam, DXMT/Metal.
+         If it refuses without Steam → it's a row-2 DRM title → set launchViaSteam=true.
+      Rosetta 2 is system-tier (Part 5); runner warns if absent (`softwareupdate --install-rosetta`).
+
+Notes:
+- Impurity is confined to provision/capture (winetricks MS-redists + Steam bootstrap, into the
+  scratch provisioning prefix). The hermetic LAUNCH is offline; only the mutable save/config
+  prefix + the one-time winetricks redist (into `$INSTANCE_DIR/cache`) are written at launch.
+- CONTAINMENT: `WINEPREFIX` + `XDG_CACHE_HOME` both under `$INSTANCE_DIR`; winetricks-min uses curl
+  (no `~/.wget-hsts`). The ONE irreducible out-of-dir artifact is
+  `~/Library/Preferences/org.winehq.wine.plist` (42 B, macOS CFPreferences, shared w/ system Whisky).
+- hc-check (buildid drift warning) still TODO (Part 4); provision + capture are now built here.
+- Per-user payloads are unfree → build with `NIXPKGS_ALLOW_UNFREE=1`; never push to Cachix.
 
 ## Part 3 — emulator runner  (deferred)
 - [ ] runners/emulator.nix (retroarch + cores); requireFile ROMs
@@ -67,8 +123,8 @@ THEIR OWN config (`games.<game>.versions."<v>" = { hash; buildid; }`). A non-her
 local script both (a) ingests that version's copy into the user's nix store
 (requireFile / `nix-store --add-fixed`) and (b) prints the version→hash stanza to
 paste. Meccha is this kind.
-- [ ] bin/hc-capture (Pattern B): tar steamapps/common/<game> → add to store → read
-      .acf buildid → print the `versions."<v>" = { … }` stanza for the user's config
+- [x] hc-capture (Pattern B): content-address steamapps/common/<game> dir → add to store →
+      read .acf buildid → print the `versions."<v>" = { … }` stanza (DONE in Part 2)
 - [ ] bin/hc-check (Pattern B): live buildid vs pinned; drift warning
 - [ ] wire both into versions.nix (shared committed lockfile vs user-supplied versions attr)
 

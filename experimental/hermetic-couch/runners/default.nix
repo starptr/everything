@@ -9,4 +9,5 @@
   native = import ./native.nix { inherit pkgs lib hcLib; };
   love2d = import ./love2d.nix { inherit pkgs lib hcLib; };
   java = import ./java.nix { inherit pkgs lib hcLib; };
+  wine = import ./wine.nix { inherit pkgs lib hcLib; };
 }

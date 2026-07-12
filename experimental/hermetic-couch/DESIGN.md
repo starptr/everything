@@ -44,8 +44,9 @@ game came from.
 
 ### The DRM axis (for manually-captured games)
 
-You *can* tar a Steam game's `steamapps/common/<game>` into the store via
-`requireFile`. Whether the result runs standalone depends on DRM:
+You *can* add a Steam game's `steamapps/common/<game>` directory into the store
+via `requireFile` (recursive, content-addressed). Whether the result runs
+standalone depends on DRM:
 
 | DRM behavior | Files → store? | Runs from the copy? | Tier |
 |---|---|---|---|
@@ -237,11 +238,16 @@ A mismatch is a legible build failure, not a crash three layers into Wine.
 - **Steam `buildid`** (monotonic, authoritative) — identity cross-check + drift
   detection, auto-read from `appmanifest_<appid>.acf`.
 
+For a Steam game these coincide by default: `hc-capture` uses the buildid as the
+`play` version unless you pass a human label — so `versions."24149874"` is the
+zero-typing default, and a semver label is opt-in.
+
 ### 4.4 Helpers
 
-- `hc-capture --version <v>` — requires `--version`, tars
-  `steamapps/common/<game>`, hashes it, auto-reads `buildid` from the `.acf`,
-  and prints the ready-to-paste `versions.<v>` stanza.
+- `hc-capture <slug> [version]` — tars `steamapps/common/<game>`, hashes it into
+  the store, auto-reads `buildid` from the `.acf`, and prints the ready-to-paste
+  `versions.<v>` stanza. Slug alone suffices: appid + folder come from the game
+  spec, and the version defaults to the buildid.
 - `hc-check` — reads the live `.acf` buildid and warns when Steam has moved past
   the pinned snapshot ("pinned 1.3.1 / buildid 13277540, Steam now 134…").
   This is the "current version of the game" signal, active rather than static.
@@ -300,7 +306,7 @@ layer. Whisky-the-app is *not* a layer we depend on.
 |---|---|---|---|
 | CPU x86→ARM | run x86_64 wine+game on ARM | **Rosetta 2** | system-level: `softwareupdate --install-rosetta` |
 | Win32 API | Windows APIs | **frankea-Whisky prebuilt wine** / Apple GPTK / stock `pkgs.wine` | **fetch prebuilt**, don't build (darwin wine is flaky) |
-| DirectX→Metal | translate D3D → Metal | **DXMT** / D3DMetal / DXVK+MoltenVK | DXMT ships hash-pinnable DLL releases |
+| DirectX→Metal | translate D3D → Metal | **DXMT** / D3DMetal / DXVK+MoltenVK | the Whisky bundle **ships DXMT dlls** (`DXMT/{x64,x32}`) + `winemetal.so` builtin; the runner injects them into the prefix as **native** (wine's own builtin d3d11 is wined3d) — one pinned artifact covers this layer too |
 | Prefix provisioning | VC++ redists, DLL overrides | **winetricks** | in nixpkgs; runtime redist fetch is the one impure spot |
 | Distribution / DRM | deliver the game | **Steam** (login+install, or capture) | Tier B / `requireFile` (§1) |
 
@@ -320,11 +326,11 @@ DXMT (3Shain) is now the best-performing D3D11→Metal path on Apple Silicon
 ### Runner config
 
 ```nix
-games.maccha-chameleon.runnerConfig = {
-  wine       = { source = "frankea-whisky"; };  # | "gptk" (requireFile dmg) | "nixpkgs"
-  graphics   = "dxmt";                          # fetch DXMT DLLs → prefix system32 + overrides
+games.meccha-chameleon.runnerConfig = {
+  wine       = { source = "frankea-whisky"; version; url; hash; };  # pinned Libraries.tar.gz
+  graphics   = "dxmt";                          # inject the bundle's DXMT dlls into the prefix, forced native
   winetricks = v: [ "vcrun2022" ] ++ lib.optional (lib.versionOlder v "1.3.0") "d3dcompiler_47";
-  needsSteamRunning = true;                      # drm = "steamStub" → preLaunch boots Steam in prefix
+  steam.appId = 4704690;                        # drm = "steamStub" → launch boots Steam + -applaunch
 };
 ```
 
@@ -454,49 +460,72 @@ The "required dependencies to run on macOS", packaged:
 
 - **Rosetta 2** — system-level (nix-darwin activation:
   `softwareupdate --install-rosetta --agree-to-license`).
-- **Wine** — frankea-Whisky prebuilt wine + D3DMetal bundle, fetched +
-  hash-pinned (no source build).
-- **DXMT** — D3D11→Metal DLLs from a pinned 3Shain/dxmt release, injected into
-  the prefix `system32` with DLL overrides.
-- **winetricks** — `vcrun2022` (Visual C++ runtime), applied idempotently.
+- **Wine** — frankea-Whisky prebuilt wine bundle (`Libraries.tar.gz`), relocated
+  into the store + hash-pinned (no source build). Verified: it runs from the
+  store (`wine-11.0`, arm64, no external dylib deps, signatures intact).
+- **DXMT** — D3D11→Metal. The Whisky bundle ships the DXMT dlls (`DXMT/{x64,x32}`)
+  and the `winemetal.so` builtin, but a fresh prefix's d3d11 is wine's own **wined3d**
+  (D3D→Vulkan→MoltenVK), which can't give Unreal a Feature-Level-11 device. So the
+  runner **injects DXMT's native dlls into the prefix** (`system32`/`syswow64`) and
+  forces them native via `WINEDLLOVERRIDES=d3d11,dxgi,d3d10core=n,b`, beating wined3d.
+  DXMT is version-matched to the wine build because it comes from the same pinned
+  bundle — so one pinned artifact still covers both the Win32 and D3D→Metal layers.
+- **winetricks** — `vcrun2022` (Visual C++ runtime), applied idempotently. Built
+  GUI-less from the upstream script (pkgs/winetricks-min.nix) to avoid nixpkgs'
+  zenity→GTK dependency chain, which fails to build on darwin.
 - **Steam** — installed into the prefix; delivers + authenticates the game.
 
 ```nix
-games.maccha-chameleon = {
+games.meccha-chameleon = {                    # Steam title: MECCHA CHAMELEON (App 4704690)
   runner = "wine";
   drm    = "steamStub";                 # needs Steam running + ownership; verify if actually DRM-free
   runnerConfig = {
-    wine       = { source = "frankea-whisky"; version = "…"; };  # pinned fork release
-    graphics   = "dxmt";                # pinned 3Shain/dxmt release
-    winetricks = _: [ "vcrun2022" ];
-    needsSteamRunning = true;
-    steamAppId = <appid>;               # for hc-check buildid drift
+    wine       = { source = "frankea-whisky"; version = "3.1.1"; url; hash; };  # pinned Libraries.tar.gz
+    graphics   = "dxmt";                # Whisky's builtin DXMT (ABI-matched), forced builtin
+    winetricks = [ "vcrun2022" ];       # list, or a fn of the play version
+    steamAppId = 4704690;               # capture/provision + drift; sets SteamAppId at launch
+    gameFolder = "MECCHA CHAMELEON"; exe = "…";   # confirmed on first capture
   };
-  # game files live in the mutable prefix (Steam install), not the store — Tier B
+  play = "…"; versions."…" = { sha256 = "…"; buildid = "…"; };  # ← from hc-capture (per-user)
 };
 ```
 
-Launch flow:
+**Launch is capture→store→offline, mirroring the java runner** — Steam is a
+capture-time tool, NOT a launch dependency (an earlier Steam-at-launch sketch was
+the non-hermetic shortcut and is now demoted to a fallback):
 
-1. `reconcile` — create prefix if absent (`wineboot`); apply un-applied
-   winetricks verbs (state-file tracked); drop DXMT DLLs + set overrides;
-   install Steam if absent.
-2. `preLaunch` — boot Steam in the prefix, wait for login/ownership.
-3. exec the game (via Steam, or the game exe with `steam_api` satisfied).
+1. `hc-steam-provision` (non-hermetic, one-time) — boot Steam in a *scratch* prefix
+   built from the pinned env; log in + install. Bits land in a runtime dir, never
+   the store.
+2. `hc-capture <name> [ver]` (non-hermetic, per-user) — content-address the
+   `steamapps/common/<game>` directory → `nix-store --add-fixed --recursive` → print
+   the `versions."<ver>"` stanza (unfree, never cached). `requireFile` (recursive)
+   resolves it. Game-aware: the Steam appid + install folder are looked up from the
+   game spec by slug (a build-time table), and the version defaults to the buildid, so
+   just the slug is typed (positional `[ver] [appid] [folder]` override for ad-hoc).
+3. hermetic launch — reconcile a minimal prefix (wineboot + winetricks verbs),
+   inject the bundle's DXMT dlls native into the prefix, symlink the read-only store
+   payload to its expected `steamapps/common` path, force DXMT native via
+   `WINEDLLOVERRIDES`, set `SteamAppId` so a non-enforcing `steam_api` can init
+   offline, then exec the exe. No Steam, no net.
 
-**Tier-A upgrade path.** If Meccha turns out DRM-free once installed,
-`hc-capture` the `steamapps/common/…` dir into the store (`requireFile`,
-versioned per §4) and run it standalone without Steam — moving it toward Tier A.
+**Which tier is it? (the boundary condition).** The hermetic launch works only if
+the game is DRM-free at launch (§1 table, row 1) — discovered by trying step 3.
+If the exe is SteamStub-encrypted or gates on a live ownership check (row 2), a
+static store copy can't run and we do **not** emulate Steam to defeat that; those
+titles set `runnerConfig.launchViaSteam = true` (the honest non-hermetic fallback:
+`wine steam.exe -applaunch <appId>` with the user's own login) — the same
+irreducible per-user boundary as Minecraft's MS-auth token, just heavier.
 
 Acceptance criteria:
 
-- First `nix run .#games.maccha-chameleon` (or the `.app`) provisions the
-  prefix, boots Steam for login/install, then launches the game rendering
-  through DXMT/Metal.
+- After provision + capture, `nix run .#meccha-chameleon` launches from the
+  content-addressed store payload with **no Steam running**, rendering via
+  DXMT/Metal. (If it can't, it's a row-2 DRM title → `launchViaSteam` fallback.)
 - Relaunch reuses the prefix; winetricks verbs are not re-applied.
-- `hc-check` reports Steam `buildid` drift vs the pinned expectation.
-- The environment (wine + DXMT + verbs) rebuilds deterministically from pinned
-  inputs.
+- `hc-check` reports Steam `buildid` drift vs the pinned `versions` entry.
+- The environment (wine + DXMT + verbs) rebuilds deterministically; the game
+  payload is content-addressed and reproducible from the per-user hash.
 
 Refs: [Sodium on Modrinth](https://modrinth.com/mod/sodium) ·
 [Sodium installation wiki](https://github.com/CaffeineMC/sodium/wiki/Installation).

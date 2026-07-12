@@ -34,8 +34,18 @@ let
             "native"
             "love2d"
             "java"
+            "wine"
           ];
           description = "Which runner adapter scaffolds and launches this game.";
+        };
+        drm = lib.mkOption {
+          type = lib.types.enum [
+            "none"
+            "steamStub"
+            "machineBound"
+          ];
+          default = "none";
+          description = "DRM behavior at launch (DESIGN §1); classifies the purity tier.";
         };
         displayName = lib.mkOption {
           type = lib.types.str;
@@ -46,6 +56,21 @@ let
           type = lib.types.attrs;
           default = { };
           description = "Runner-specific configuration (see runners/<runner>.nix).";
+        };
+        gameName = lib.mkOption {
+          type = lib.types.str;
+          default = name;
+          description = "Stable slug for captured payloads / tooling (defaults to the attr name).";
+        };
+        play = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Selected version to launch (keys into `versions`); DESIGN §4.";
+        };
+        versions = lib.mkOption {
+          type = lib.types.attrsOf lib.types.attrs;
+          default = { };
+          description = "Per-user version→{sha256;buildid} map from hc-capture (Pattern B).";
         };
         settings = lib.mkOption {
           type = lib.types.attrs;
