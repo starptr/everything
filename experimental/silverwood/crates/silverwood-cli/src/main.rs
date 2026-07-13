@@ -1,13 +1,20 @@
 //! `silverwood` — a thin CLI over `silverwood-core`.
 //!
-//! Part 0 exposes only `info`, which opens (creating if needed) a forest and
-//! prints its identity. Workstream commands arrive with Part 1.
+//! Every command takes explicit arguments (core supplies no defaults) and can
+//! emit machine-readable JSON with `--json`, so any frontend can drive the same
+//! backend by shelling out. The one frontend policy that lives here is the
+//! default forest location, `$HOME/.silverwood`.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::str::FromStr;
 
-use clap::{Parser, Subcommand};
-use silverwood_core::Forest;
+use clap::{Parser, Subcommand, ValueEnum};
+use silverwood_core::{
+    CheckoutMode, Forest, HttpsGitUrl, NewPrimitive, NewWorkstream, Session, Workstream,
+    WorkstreamId,
+};
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
 /// attached to it.
@@ -18,6 +25,10 @@ struct Cli {
     #[arg(long, global = true, value_name = "DIR")]
     forest: Option<PathBuf>,
 
+    /// Emit machine-readable JSON instead of human-readable text.
+    #[arg(long, global = true)]
+    json: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -26,6 +37,100 @@ struct Cli {
 enum Command {
     /// Open the forest (creating it if absent) and print its identity.
     Info,
+
+    /// Create a workstream, provisioning its code-checkout.
+    New {
+        /// Human-friendly name.
+        #[arg(long)]
+        name: String,
+        /// HTTPS git endpoint to clone from.
+        #[arg(long, value_name = "HTTPS_URL")]
+        source: String,
+        /// How the checkout is materialized.
+        #[arg(long, value_enum)]
+        mode: ModeArg,
+    },
+
+    /// List workstreams.
+    Ls {
+        /// Include archived workstreams.
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Show a workstream by id.
+    Show { id: String },
+
+    /// Archive a workstream (tombstone).
+    Archive { id: String },
+
+    /// Namespaced key-value state (frontend-owned).
+    #[command(subcommand)]
+    Kv(KvCommand),
+
+    /// Claude session associations.
+    #[command(subcommand)]
+    Session(SessionCommand),
+}
+
+#[derive(Subcommand)]
+enum KvCommand {
+    /// Set a value (value is an opaque JSON string).
+    Set {
+        id: String,
+        namespace: String,
+        key: String,
+        value: String,
+    },
+    /// Get a value.
+    Get {
+        id: String,
+        namespace: String,
+        key: String,
+    },
+    /// List all entries in a namespace.
+    Ls { id: String, namespace: String },
+    /// Remove a value.
+    Unset {
+        id: String,
+        namespace: String,
+        key: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum SessionCommand {
+    /// Attach a Claude session.
+    Attach {
+        id: String,
+        session_id: String,
+        name: String,
+    },
+    /// List attached sessions.
+    Ls { id: String },
+    /// Rename an attached session.
+    Rename {
+        id: String,
+        session_id: String,
+        name: String,
+    },
+    /// Detach a session.
+    Detach { id: String, session_id: String },
+}
+
+/// CLI mirror of `CheckoutMode` (keeps `clap` out of `silverwood-core`).
+#[derive(Clone, Copy, ValueEnum)]
+enum ModeArg {
+    #[value(name = "jj-colocated")]
+    JjColocated,
+}
+
+impl ModeArg {
+    fn to_core(self) -> CheckoutMode {
+        match self {
+            ModeArg::JjColocated => CheckoutMode::JjColocated,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -39,22 +144,214 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+type CliResult = Result<(), Box<dyn std::error::Error>>;
+
+fn run(cli: Cli) -> CliResult {
     let root = match cli.forest {
         Some(path) => path,
         None => default_forest_dir()?,
     };
+    let json = cli.json;
+    let forest = Forest::open(&root)?;
 
     match cli.command {
-        Command::Info => {
-            let forest = Forest::open(&root)?;
-            println!("root      = {}", forest.root().display());
-            println!("forest_id = {}", forest.id());
-            println!("peer_id   = {}", forest.peer_id());
+        Command::Info => info(&forest, json),
+
+        Command::New { name, source, mode } => {
+            let source = HttpsGitUrl::parse(&source)?;
+            let ws = forest.create_workstream(NewWorkstream {
+                name,
+                primitive: NewPrimitive::CodeCheckout {
+                    source,
+                    mode: mode.to_core(),
+                },
+            })?;
+            emit(json, &ws, || print_workstream(&ws));
+            Ok(())
+        }
+
+        Command::Ls { all } => {
+            let list = forest.list(all)?;
+            emit(json, &list, || {
+                for ws in &list {
+                    println!(
+                        "{}  {:8}  {}",
+                        ws.id,
+                        enum_str(ws.body.status),
+                        ws.body.name
+                    );
+                }
+            });
+            Ok(())
+        }
+
+        Command::Show { id } => {
+            let ws = forest.get(parse_id(&id)?)?;
+            emit(json, &ws, || print_workstream(&ws));
+            Ok(())
+        }
+
+        Command::Archive { id } => {
+            let id = parse_id(&id)?;
+            forest.archive(id)?;
+            let ws = forest.get(id)?;
+            emit(json, &ws, || println!("archived {}", ws.id));
+            Ok(())
+        }
+
+        Command::Kv(cmd) => run_kv(&forest, json, cmd),
+        Command::Session(cmd) => run_session(&forest, json, cmd),
+    }
+}
+
+fn run_kv(forest: &Forest, json: bool, cmd: KvCommand) -> CliResult {
+    match cmd {
+        KvCommand::Set {
+            id,
+            namespace,
+            key,
+            value,
+        } => {
+            let id = parse_id(&id)?;
+            forest.set_kv(id, &namespace, &key, &value)?;
+            let entries = forest.list_kv(id, &namespace)?;
+            emit(json, &entries, || print_kv(&entries));
+        }
+        KvCommand::Unset { id, namespace, key } => {
+            let id = parse_id(&id)?;
+            forest.unset_kv(id, &namespace, &key)?;
+            let entries = forest.list_kv(id, &namespace)?;
+            emit(json, &entries, || print_kv(&entries));
+        }
+        KvCommand::Get { id, namespace, key } => {
+            let value = forest.get_kv(parse_id(&id)?, &namespace, &key)?;
+            emit(json, &value, || {
+                if let Some(v) = &value {
+                    println!("{v}");
+                }
+            });
+        }
+        KvCommand::Ls { id, namespace } => {
+            let entries = forest.list_kv(parse_id(&id)?, &namespace)?;
+            emit(json, &entries, || print_kv(&entries));
         }
     }
-
     Ok(())
+}
+
+fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
+    let id = match &cmd {
+        SessionCommand::Attach { id, .. }
+        | SessionCommand::Ls { id }
+        | SessionCommand::Rename { id, .. }
+        | SessionCommand::Detach { id, .. } => parse_id(id)?,
+    };
+
+    match cmd {
+        SessionCommand::Attach {
+            session_id, name, ..
+        } => forest.attach_session(id, &session_id, &name)?,
+        SessionCommand::Rename {
+            session_id, name, ..
+        } => forest.rename_session(id, &session_id, &name)?,
+        SessionCommand::Detach { session_id, .. } => forest.detach_session(id, &session_id)?,
+        SessionCommand::Ls { .. } => {}
+    }
+
+    let sessions = forest.get(id)?.body.sessions;
+    emit(json, &sessions, || print_sessions(&sessions));
+    Ok(())
+}
+
+fn info(forest: &Forest, json: bool) -> CliResult {
+    if json {
+        let value = serde_json::json!({
+            "root": forest.root().display().to_string(),
+            "forest_id": forest.id().to_string(),
+            "peer_id": forest.peer_id(),
+        });
+        println!("{}", serde_json::to_string_pretty(&value)?);
+    } else {
+        println!("root      = {}", forest.root().display());
+        println!("forest_id = {}", forest.id());
+        println!("peer_id   = {}", forest.peer_id());
+    }
+    Ok(())
+}
+
+/// Emit `value` as pretty JSON, or run `human` for text output.
+fn emit<T: serde::Serialize>(json: bool, value: &T, human: impl FnOnce()) {
+    if json {
+        match serde_json::to_string_pretty(value) {
+            Ok(text) => println!("{text}"),
+            Err(err) => eprintln!("silverwood: serializing output: {err}"),
+        }
+    } else {
+        human();
+    }
+}
+
+fn print_workstream(ws: &Workstream) {
+    println!(
+        "{}  [{}]  {}",
+        ws.id,
+        enum_str(ws.body.status),
+        ws.body.name
+    );
+    println!("  kind:     {}", ws.body.kind);
+    println!(
+        "  source:   {} ({})",
+        ws.body.primitive.source,
+        enum_str(ws.body.primitive.mode)
+    );
+    println!("  created:  {}", ws.body.created_at);
+    for (forest_id, checkout) in &ws.body.checkouts {
+        println!(
+            "  checkout: [{}] {} (forest {forest_id})",
+            enum_str(checkout.state),
+            checkout.location
+        );
+    }
+    if !ws.body.sessions.is_empty() {
+        println!("  sessions: {}", ws.body.sessions.len());
+    }
+    let kv_entries: usize = ws.body.kv.values().map(BTreeMap::len).sum();
+    if kv_entries > 0 {
+        println!(
+            "  kv:       {kv_entries} entr{} in {} namespace(s)",
+            if kv_entries == 1 { "y" } else { "ies" },
+            ws.body.kv.len()
+        );
+    }
+}
+
+fn print_kv(entries: &BTreeMap<String, String>) {
+    for (key, value) in entries {
+        println!("{key} = {value}");
+    }
+}
+
+fn print_sessions(sessions: &BTreeMap<String, Session>) {
+    for (session_id, session) in sessions {
+        println!(
+            "{session_id}  {}  (since {})",
+            session.name, session.created_at
+        );
+    }
+}
+
+/// Render a serde enum to its serialized string form (single source of truth
+/// with the stored representation), e.g. `Status::Active` → `active`.
+fn enum_str(value: impl serde::Serialize) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
+}
+
+fn parse_id(input: &str) -> Result<WorkstreamId, Box<dyn std::error::Error>> {
+    WorkstreamId::from_str(input)
+        .map_err(|e| format!("invalid workstream id {input:?}: {e}").into())
 }
 
 /// Resolve the default forest location, `$HOME/.silverwood`.

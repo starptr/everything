@@ -47,19 +47,33 @@
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
         # The `silverwood` CLI binary (whole workspace built as one graph).
-        # Part 1 will wrap this with `jujutsu` + `git` on PATH once checkout
-        # provisioning shells out to `jj git clone --colocate`.
-        silverwood = craneLib.buildPackage (
+        silverwood-unwrapped = craneLib.buildPackage (
           commonArgs
           // {
             inherit cargoArtifacts;
             meta.mainProgram = "silverwood";
           }
         );
+
+        # The shipped package: the binary with jujutsu + git on PATH, since
+        # checkout provisioning (`jj git clone --colocate`) shells out to them.
+        silverwood = pkgs.runCommand "silverwood"
+          {
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            meta.mainProgram = "silverwood";
+          }
+          ''
+            mkdir -p "$out/bin"
+            makeWrapper ${silverwood-unwrapped}/bin/silverwood "$out/bin/silverwood" \
+              --prefix PATH : ${lib.makeBinPath [
+                pkgs.jujutsu
+                pkgs.git
+              ]}
+          '';
       in
       {
         checks = {
-          inherit silverwood;
+          inherit silverwood-unwrapped;
 
           clippy = craneLib.cargoClippy (
             commonArgs
@@ -99,6 +113,7 @@
         };
 
         packages.default = silverwood;
+        packages.unwrapped = silverwood-unwrapped;
 
         apps.default = flake-utils.lib.mkApp {
           drv = silverwood;

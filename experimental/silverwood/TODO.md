@@ -72,13 +72,20 @@ Part 2 notes:
   is the flat on-disk shape, un-flattened during hydrate.
 - Integration test helpers moved to `tests/common/mod.rs` (shared by `provisioning.rs` + `associated_data.rs`).
 
-## Part 3 — CLI surface  (`--json`)
-- [ ] **wrap `packages.default` with `makeWrapper` (jujutsu + git on PATH)** — deferred from Part 0/1; due now that the CLI's `new` shells out to `jj`
-- [ ] subcommands: `new`, `ls`, `show`, `archive`, `kv (get/set/ls)`, `session (attach/ls/rename/detach)`
-- [ ] all inputs explicit (no defaults): `new --name <n> --source <https-url> --mode jj-colocated`
-- [ ] dual output: human-readable default + `--json` for frontends
-- [ ] verify (structural): end-to-end CLI drives a forest start-to-finish; `--json` parses; exit codes sane
-- [ ] verify (interactive, user): drive a full create → ls → show → attach-session → archive cycle by hand
+## Part 3 — CLI surface  (`--json`) — DONE
+- [x] **wrapped `packages.default` with `makeWrapper` (jujutsu + git on PATH)** — `packages.unwrapped` is the bare crane build; checks use unwrapped
+- [x] subcommands: `new`, `ls [--all]`, `show <id>`, `archive <id>`, `kv (set/get/ls/unset)`, `session (attach/ls/rename/detach)`
+- [x] all inputs explicit (no defaults): `new --name <n> --source <https-url> --mode jj-colocated`; `--mode` is a clap ValueEnum (`ModeArg`, keeps clap out of core)
+- [x] dual output: human-readable default + `--json` (global flag); mutating cmds print the affected object after the change
+- [x] verify (structural): `nix flake check` green + `cli.rs` smoke tests (info json, ls empty=`[]`, bad-id exits non-zero) — no network needed
+- [x] verify (behavioral): drove the WRAPPED binary (`nix build .#default`) new→ls→kv→session→show→archive with a real clone of
+      octocat/Hello-World → checkout `ready`, working copy has `.jj`+`.git`+`README`, `--json` emits the full frontend contract,
+      archive hides from `ls` / shows in `ls --all`. Proves jj/git resolve via the wrapper OUTSIDE the dev shell. PASSED.
+
+Part 3 notes:
+- CLI has no automated `new`/clone test (needs network + jj, unavailable in the nextest sandbox); `cli.rs` covers the non-network
+  plumbing, and the real create path is verified by hand (above) + the core `#[ignore]` `real_jj_colocated_clone`.
+- Enum display in the CLI uses `enum_str` (serialize→string) so it shares the single source of truth with the stored form.
 
 ## Part 4 — sync  (deferred; DESIGN §7)
 - [ ] per-document merge over a `DocStore` backend (`LoroDoc::import` + merge, not overwrite)
