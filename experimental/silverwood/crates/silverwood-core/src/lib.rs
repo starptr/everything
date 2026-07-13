@@ -7,8 +7,8 @@
 //!
 //! Part 0 established the skeleton (identity, config, [`DocStore`],
 //! [`Forest::open`]). Part 1 adds the workstream document — one Loro document
-//! per workstream — and the code-checkout primitive with jj-colocated
-//! provisioning.
+//! per workstream — and the basic workstream kind (a code-change with
+//! jj-colocated provisioning, plus per-forest checkouts and agent sessions).
 
 mod config;
 mod doc;
@@ -28,6 +28,6 @@ pub use id::{ForestId, WorkstreamId};
 pub use provider::{CheckoutProvider, JjColocated};
 pub use source::HttpsGitUrl;
 pub use workstream::{
-    Checkout, CheckoutMode, CheckoutPrimitive, CheckoutState, NewPrimitive, NewWorkstream, Session,
-    Status, Workstream, WorkstreamBody,
+    AgentKind, AgentSession, Checkout, CheckoutMode, CheckoutState, CodeChange, NewKind,
+    NewWorkstream, Status, Workstream, WorkstreamBody, WorkstreamKind,
 };

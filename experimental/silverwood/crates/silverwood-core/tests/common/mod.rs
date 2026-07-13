@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use silverwood_core::{
-    CheckoutMode, CheckoutProvider, HttpsGitUrl, NewPrimitive, NewWorkstream, Result,
+    CheckoutMode, CheckoutProvider, HttpsGitUrl, NewKind, NewWorkstream, Result,
 };
 
 /// A fresh, unique temp dir for an isolated forest.
@@ -29,7 +29,7 @@ impl CheckoutProvider for FakeOk {
 pub fn new_ws(name: &str) -> NewWorkstream {
     NewWorkstream {
         name: name.into(),
-        primitive: NewPrimitive::CodeCheckout {
+        kind: NewKind::Basic {
             source: HttpsGitUrl::parse("https://github.com/octocat/Hello-World.git").unwrap(),
             mode: CheckoutMode::JjColocated,
         },

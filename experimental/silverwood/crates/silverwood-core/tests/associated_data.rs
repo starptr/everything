@@ -1,10 +1,10 @@
 //! Integration tests for a workstream's associated data: namespaced kv and
-//! Claude session associations. Uses the fake provider (no network, no jj).
+//! agent session associations. Uses the fake provider (no network, no jj).
 
 mod common;
 
 use common::{new_ws, temp_forest, FakeOk};
-use silverwood_core::Forest;
+use silverwood_core::{AgentKind, Forest};
 
 #[test]
 fn kv_round_trip() {
@@ -49,9 +49,13 @@ fn session_lifecycle() {
     let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
     let ws = forest.create_workstream(new_ws("sess-demo")).unwrap();
 
-    forest.attach_session(ws.id, "abc-123", "planning").unwrap();
+    forest
+        .attach_session(ws.id, "abc-123", AgentKind::ClaudeCode, "planning")
+        .unwrap();
     assert!(
-        forest.attach_session(ws.id, "abc-123", "dup").is_err(),
+        forest
+            .attach_session(ws.id, "abc-123", AgentKind::ClaudeCode, "dup")
+            .is_err(),
         "duplicate attach must error"
     );
 
@@ -59,8 +63,10 @@ fn session_lifecycle() {
         .rename_session(ws.id, "abc-123", "planning v2")
         .unwrap();
     let got = forest.get(ws.id).unwrap();
-    assert_eq!(got.body.sessions["abc-123"].name, "planning v2");
-    assert!(!got.body.sessions["abc-123"].created_at.is_empty());
+    let session = &got.body.sessions().expect("basic kind has sessions")["abc-123"];
+    assert_eq!(session.name, "planning v2");
+    assert_eq!(session.kind, AgentKind::ClaudeCode);
+    assert!(!session.created_at.is_empty());
 
     assert!(
         forest.rename_session(ws.id, "nope", "x").is_err(),
@@ -68,7 +74,13 @@ fn session_lifecycle() {
     );
 
     forest.detach_session(ws.id, "abc-123").unwrap();
-    assert!(forest.get(ws.id).unwrap().body.sessions.is_empty());
+    assert!(forest
+        .get(ws.id)
+        .unwrap()
+        .body
+        .sessions()
+        .unwrap()
+        .is_empty());
 
     // Detaching an absent session is a no-op.
     forest.detach_session(ws.id, "abc-123").unwrap();

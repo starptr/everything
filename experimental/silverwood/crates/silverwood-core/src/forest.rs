@@ -13,15 +13,15 @@ use crate::error::{Error, Result};
 use crate::id::{ForestId, WorkstreamId};
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
-    Checkout, CheckoutPrimitive, CheckoutState, NewPrimitive, NewWorkstream, Status, Workstream,
-    WorkstreamBody, CODE_CHECKOUT_KIND,
+    AgentKind, Checkout, CheckoutState, CodeChange, NewKind, NewWorkstream, Status, Workstream,
+    WorkstreamBody, WorkstreamKind,
 };
 
 /// Config file at the forest root.
 const CONFIG_FILE: &str = "config.toml";
 /// Subdirectory holding one document per workstream.
 const WORKSTREAMS_DIR: &str = "workstreams";
-/// Subdirectory holding provisioned code-checkouts.
+/// Subdirectory holding provisioned checkouts.
 const WORKING_COPIES_DIR: &str = "working-copies";
 
 /// One local instance of silverwood state, rooted at a directory.
@@ -85,15 +85,15 @@ impl Forest {
         &self.config
     }
 
-    /// Create a workstream, provisioning its code-checkout.
+    /// Create a workstream, provisioning its checkout.
     ///
     /// The document is written first with the checkout `Pending`, then the
     /// checkout is provisioned, then the state is flipped to `Ready`/`Failed`
     /// in place. A failed provision leaves a recoverable workstream (its
     /// document persists with state `Failed`) and surfaces the error.
     pub fn create_workstream(&self, new: NewWorkstream) -> Result<Workstream> {
-        let (source, mode) = match &new.primitive {
-            NewPrimitive::CodeCheckout { source, mode } => (source, *mode),
+        let (source, mode) = match &new.kind {
+            NewKind::Basic { source, mode } => (source, *mode),
         };
 
         let id = WorkstreamId::generate();
@@ -112,14 +112,15 @@ impl Forest {
         let body = WorkstreamBody {
             name: new.name,
             status: Status::Active,
-            kind: CODE_CHECKOUT_KIND.to_string(),
             created_at: now_rfc3339(),
-            primitive: CheckoutPrimitive {
-                source: source.as_str().to_string(),
-                mode,
+            kind: WorkstreamKind::Basic {
+                code_change: CodeChange {
+                    source: source.as_str().to_string(),
+                    mode,
+                },
+                checkouts,
+                sessions: BTreeMap::new(),
             },
-            checkouts,
-            sessions: BTreeMap::new(),
             kv: BTreeMap::new(),
         };
 
@@ -205,10 +206,16 @@ impl Forest {
             .unwrap_or_default())
     }
 
-    /// Attach a Claude session to a workstream. Errors if already attached.
-    pub fn attach_session(&self, id: WorkstreamId, session_id: &str, name: &str) -> Result<()> {
+    /// Attach an agent session to a workstream. Errors if already attached.
+    pub fn attach_session(
+        &self,
+        id: WorkstreamId,
+        session_id: &str,
+        agent_kind: AgentKind,
+        name: &str,
+    ) -> Result<()> {
         let doc = self.load_doc(id)?;
-        doc::attach_session(&doc, session_id, name, &now_rfc3339())?;
+        doc::attach_session(&doc, session_id, agent_kind, name, &now_rfc3339())?;
         self.docs.save(id, &doc::snapshot(&doc)?)
     }
 

@@ -36,9 +36,9 @@ fn new_creates_a_ready_colocated_checkout() {
     // Reported workstream fields.
     assert_eq!(ws["name"], "auth-refactor");
     assert_eq!(ws["status"], "active");
-    assert_eq!(ws["kind"], "code-checkout");
-    assert_eq!(ws["primitive"]["mode"], "jj-colocated");
-    assert!(ws["primitive"]["source"]
+    assert_eq!(ws["kind"], "basic");
+    assert_eq!(ws["code_change"]["mode"], "jj-colocated");
+    assert!(ws["code_change"]["source"]
         .as_str()
         .unwrap()
         .contains("starptr/example"));
@@ -130,18 +130,45 @@ fn kv_and_session_lifecycle() {
         1
     );
 
-    // sessions: attach, duplicate errors, rename preserves created_at, absent
-    // rename errors, detach removes.
-    ok(&dir, &["session", "attach", &id, "sess-1", "planning"]);
-    fails(&dir, &["session", "attach", &id, "sess-1", "dup"]);
+    // sessions: attach (agent kind required), duplicate errors, rename preserves
+    // kind + created_at, absent rename errors, detach removes.
+    ok(
+        &dir,
+        &[
+            "session",
+            "attach",
+            &id,
+            "sess-1",
+            "--agent",
+            "claude-code",
+            "planning",
+        ],
+    );
+    fails(
+        &dir,
+        &[
+            "session",
+            "attach",
+            &id,
+            "sess-1",
+            "--agent",
+            "claude-code",
+            "dup",
+        ],
+    );
 
     let before = json(&dir, &["--json", "session", "ls", &id]);
+    assert_eq!(before["sess-1"]["kind"], "claude-code");
     let created_at = before["sess-1"]["created_at"].as_str().unwrap().to_string();
     assert!(!created_at.is_empty());
 
     ok(&dir, &["session", "rename", &id, "sess-1", "planning v2"]);
     let after = json(&dir, &["--json", "session", "ls", &id]);
     assert_eq!(after["sess-1"]["name"], "planning v2");
+    assert_eq!(
+        after["sess-1"]["kind"], "claude-code",
+        "rename must preserve kind"
+    );
     assert_eq!(
         after["sess-1"]["created_at"],
         created_at.as_str(),

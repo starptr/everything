@@ -1,4 +1,4 @@
-//! End-to-end tests for workstream creation + code-checkout provisioning.
+//! End-to-end tests for workstream creation + checkout provisioning.
 //!
 //! The automated tests use a fake provider (no network, no `jj`). The real
 //! jj-colocated clone is behind `#[ignore]` — run it in the dev shell with
@@ -28,8 +28,9 @@ fn create_list_get_archive_round_trip() {
 
     let ws = forest.create_workstream(new_ws("demo")).unwrap();
     assert_eq!(ws.body.status, Status::Active);
-    assert_eq!(ws.body.kind, "code-checkout");
-    let checkout = ws.body.checkouts.values().next().expect("one checkout");
+    assert_eq!(ws.body.kind.tag(), "basic");
+    let checkouts = ws.body.checkouts().expect("basic kind has checkouts");
+    let checkout = checkouts.values().next().expect("one checkout");
     assert_eq!(checkout.state, CheckoutState::Ready);
 
     // get reloads to an equal value.
@@ -60,7 +61,7 @@ fn failed_provision_is_recoverable() {
     // The workstream persists with its checkout marked Failed — recoverable.
     let all = forest.list(false).unwrap();
     assert_eq!(all.len(), 1);
-    let checkout = all[0].body.checkouts.values().next().unwrap();
+    let checkout = all[0].body.checkouts().unwrap().values().next().unwrap();
     assert_eq!(checkout.state, CheckoutState::Failed);
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -86,7 +87,7 @@ fn real_jj_colocated_clone() {
     let forest = Forest::open(&dir).unwrap(); // real JjColocated provider
 
     let ws = forest.create_workstream(new_ws("hello")).unwrap();
-    let checkout = ws.body.checkouts.values().next().unwrap();
+    let checkout = ws.body.checkouts().unwrap().values().next().unwrap();
     assert_eq!(checkout.state, CheckoutState::Ready);
 
     let checkout_dir = Path::new(&checkout.location);

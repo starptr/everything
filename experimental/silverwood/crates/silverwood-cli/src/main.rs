@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    CheckoutMode, Forest, HttpsGitUrl, NewPrimitive, NewWorkstream, Session, Workstream,
+    AgentKind, AgentSession, CheckoutMode, Forest, HttpsGitUrl, NewKind, NewWorkstream, Workstream,
     WorkstreamId,
 };
 
@@ -38,7 +38,7 @@ enum Command {
     /// Open the forest (creating it if absent) and print its identity.
     Info,
 
-    /// Create a workstream, provisioning its code-checkout.
+    /// Create a workstream, provisioning its checkout.
     New {
         /// Human-friendly name.
         #[arg(long)]
@@ -68,7 +68,7 @@ enum Command {
     #[command(subcommand)]
     Kv(KvCommand),
 
-    /// Claude session associations.
+    /// Agent session associations.
     #[command(subcommand)]
     Session(SessionCommand),
 }
@@ -100,10 +100,13 @@ enum KvCommand {
 
 #[derive(Subcommand)]
 enum SessionCommand {
-    /// Attach a Claude session.
+    /// Attach an agent session.
     Attach {
         id: String,
         session_id: String,
+        /// Which agent the session belongs to.
+        #[arg(long, value_enum)]
+        agent: AgentArg,
         name: String,
     },
     /// List attached sessions.
@@ -129,6 +132,21 @@ impl ModeArg {
     fn to_core(self) -> CheckoutMode {
         match self {
             ModeArg::JjColocated => CheckoutMode::JjColocated,
+        }
+    }
+}
+
+/// CLI mirror of `AgentKind` (keeps `clap` out of `silverwood-core`).
+#[derive(Clone, Copy, ValueEnum)]
+enum AgentArg {
+    #[value(name = "claude-code")]
+    ClaudeCode,
+}
+
+impl AgentArg {
+    fn to_core(self) -> AgentKind {
+        match self {
+            AgentArg::ClaudeCode => AgentKind::ClaudeCode,
         }
     }
 }
@@ -161,7 +179,7 @@ fn run(cli: Cli) -> CliResult {
             let source = HttpsGitUrl::parse(&source)?;
             let ws = forest.create_workstream(NewWorkstream {
                 name,
-                primitive: NewPrimitive::CodeCheckout {
+                kind: NewKind::Basic {
                     source,
                     mode: mode.to_core(),
                 },
@@ -249,8 +267,11 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
 
     match cmd {
         SessionCommand::Attach {
-            session_id, name, ..
-        } => forest.attach_session(id, &session_id, &name)?,
+            session_id,
+            agent,
+            name,
+            ..
+        } => forest.attach_session(id, &session_id, agent.to_core(), &name)?,
         SessionCommand::Rename {
             session_id, name, ..
         } => forest.rename_session(id, &session_id, &name)?,
@@ -258,7 +279,7 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
         SessionCommand::Ls { .. } => {}
     }
 
-    let sessions = forest.get(id)?.body.sessions;
+    let sessions = forest.get(id)?.body.sessions().cloned().unwrap_or_default();
     emit(json, &sessions, || print_sessions(&sessions));
     Ok(())
 }
@@ -298,22 +319,24 @@ fn print_workstream(ws: &Workstream) {
         enum_str(ws.body.status),
         ws.body.name
     );
-    println!("  kind:     {}", ws.body.kind);
-    println!(
-        "  source:   {} ({})",
-        ws.body.primitive.source,
-        enum_str(ws.body.primitive.mode)
-    );
+    println!("  kind:     {}", ws.body.kind.tag());
+    if let Some(code_change) = ws.body.code_change() {
+        println!(
+            "  source:   {} ({})",
+            code_change.source,
+            enum_str(code_change.mode)
+        );
+    }
     println!("  created:  {}", ws.body.created_at);
-    for (forest_id, checkout) in &ws.body.checkouts {
+    for (forest_id, checkout) in ws.body.checkouts().into_iter().flatten() {
         println!(
             "  checkout: [{}] {} (forest {forest_id})",
             enum_str(checkout.state),
             checkout.location
         );
     }
-    if !ws.body.sessions.is_empty() {
-        println!("  sessions: {}", ws.body.sessions.len());
+    if let Some(count) = ws.body.sessions().map(BTreeMap::len).filter(|n| *n > 0) {
+        println!("  sessions: {count}");
     }
     let kv_entries: usize = ws.body.kv.values().map(BTreeMap::len).sum();
     if kv_entries > 0 {
@@ -331,11 +354,13 @@ fn print_kv(entries: &BTreeMap<String, String>) {
     }
 }
 
-fn print_sessions(sessions: &BTreeMap<String, Session>) {
+fn print_sessions(sessions: &BTreeMap<String, AgentSession>) {
     for (session_id, session) in sessions {
         println!(
-            "{session_id}  {}  (since {})",
-            session.name, session.created_at
+            "{session_id}  {}  [{}]  (since {})",
+            session.name,
+            enum_str(session.kind),
+            session.created_at
         );
     }
 }

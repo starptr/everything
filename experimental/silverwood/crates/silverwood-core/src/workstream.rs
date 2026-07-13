@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::id::WorkstreamId;
 use crate::source::HttpsGitUrl;
 
-/// The `kind` stored on a code-checkout workstream.
-pub(crate) const CODE_CHECKOUT_KIND: &str = "code-checkout";
+/// The `kind` discriminant stored on a basic workstream.
+pub(crate) const BASIC_KIND: &str = "basic";
 
 /// Lifecycle status of a workstream. Deletion is the `Archived` tombstone —
 /// documents are never removed, so archival merges under future sync.
@@ -17,7 +17,7 @@ pub enum Status {
     Archived,
 }
 
-/// How a code-checkout is materialized on disk. Open enum: one mode today.
+/// How a code-change is materialized on disk. Open enum: one mode today.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
@@ -36,6 +36,15 @@ pub enum CheckoutState {
     Ready,
     /// Provisioning failed; the workstream is recoverable.
     Failed,
+}
+
+/// Which agent an [`AgentSession`] belongs to. Open enum: one kind today.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum AgentKind {
+    /// A Claude Code session.
+    ClaudeCode,
 }
 
 impl Status {
@@ -65,17 +74,18 @@ impl CheckoutState {
     }
 }
 
-/// The code-checkout primitive's stored configuration.
+/// A code-change's stored configuration: the source it clones and the mode it is
+/// materialized in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CheckoutPrimitive {
+pub struct CodeChange {
     /// The HTTPS source the checkout is cloned from.
     pub source: String,
-    /// The mode the checkout was created with.
+    /// The mode the checkout is materialized in.
     pub mode: CheckoutMode,
 }
 
-/// A per-forest materialization of a workstream's checkout. Keyed by forest id
-/// in the document, so two forests provisioning the same workstream never
+/// A per-forest materialization of a workstream's code-change. Keyed by forest
+/// id in the document, so two forests provisioning the same workstream never
 /// conflict.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Checkout {
@@ -87,42 +97,95 @@ pub struct Checkout {
     pub mode: CheckoutMode,
 }
 
-/// A Claude Code session associated with a workstream.
+/// A generic agent session associated with a workstream kind that supports them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Session {
+pub struct AgentSession {
+    /// Which agent this session belongs to.
+    pub kind: AgentKind,
     /// Human-friendly name for the session.
     pub name: String,
     /// When the association was created (RFC3339).
     pub created_at: String,
 }
 
+/// The kind of a workstream — an open, tagged enum. Today the only kind is
+/// [`WorkstreamKind::Basic`]; future kinds may relate to agent sessions (and
+/// other data) differently, which is why sessions live inside the kind rather
+/// than at the workstream's top level.
+///
+/// The kind is fixed at creation and never changes (see `doc.rs` for the
+/// merge-safety invariant that relies on this). Serialize-only + internally
+/// tagged: the `kind` discriminant and the variant's fields flatten to the top
+/// level of the workstream's `--json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum WorkstreamKind {
+    /// A code-change, its per-forest checkouts, and zero or more agent sessions.
+    Basic {
+        /// The code-change this workstream is built around.
+        code_change: CodeChange,
+        /// Per-forest checkout materializations, keyed by forest id.
+        checkouts: BTreeMap<String, Checkout>,
+        /// Associated agent sessions, keyed by session id.
+        sessions: BTreeMap<String, AgentSession>,
+    },
+}
+
+impl WorkstreamKind {
+    /// The stored `kind` discriminant for this variant (matches its serde tag).
+    pub fn tag(&self) -> &'static str {
+        match self {
+            WorkstreamKind::Basic { .. } => BASIC_KIND,
+        }
+    }
+}
+
 /// The stored body of a workstream document — everything but its id (the id is
 /// the document's key in the [`crate::DocStore`], not stored inside it).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Serialize-only: hydration builds this by hand from the on-disk shape, and no
+/// caller deserializes it directly.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorkstreamBody {
     /// Human-friendly name.
     pub name: String,
     /// Lifecycle status.
     pub status: Status,
-    /// Primitive kind (`"code-checkout"`).
-    pub kind: String,
     /// Creation timestamp (RFC3339), minted by core.
     pub created_at: String,
-    /// The code-checkout primitive configuration.
-    pub primitive: CheckoutPrimitive,
-    /// Per-forest checkout materializations, keyed by forest id.
-    #[serde(default)]
-    pub checkouts: BTreeMap<String, Checkout>,
-    /// Associated Claude sessions, keyed by session id.
-    #[serde(default)]
-    pub sessions: BTreeMap<String, Session>,
-    /// Open frontend state: namespace → key → JSON-encoded value.
-    #[serde(default)]
+    /// The workstream's kind and its kind-specific data.
+    #[serde(flatten)]
+    pub kind: WorkstreamKind,
+    /// Open frontend state: namespace → key → JSON-encoded value. Kind-agnostic.
     pub kv: BTreeMap<String, BTreeMap<String, String>>,
 }
 
+impl WorkstreamBody {
+    /// The code-change, if this workstream's kind has one.
+    pub fn code_change(&self) -> Option<&CodeChange> {
+        match &self.kind {
+            WorkstreamKind::Basic { code_change, .. } => Some(code_change),
+        }
+    }
+
+    /// The per-forest checkouts, if this workstream's kind has them.
+    pub fn checkouts(&self) -> Option<&BTreeMap<String, Checkout>> {
+        match &self.kind {
+            WorkstreamKind::Basic { checkouts, .. } => Some(checkouts),
+        }
+    }
+
+    /// The agent sessions, if this workstream's kind supports them.
+    pub fn sessions(&self) -> Option<&BTreeMap<String, AgentSession>> {
+        match &self.kind {
+            WorkstreamKind::Basic { sessions, .. } => Some(sessions),
+        }
+    }
+}
+
 /// A workstream: its stable id plus its stored body.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Workstream {
     /// Stable id (also the document key).
     pub id: WorkstreamId,
@@ -137,15 +200,15 @@ pub struct Workstream {
 pub struct NewWorkstream {
     /// Human-friendly name.
     pub name: String,
-    /// The primitive to build the workstream around.
-    pub primitive: NewPrimitive,
+    /// The kind to build the workstream around.
+    pub kind: NewKind,
 }
 
-/// The primitive to build a new workstream around.
+/// The kind to build a new workstream around.
 #[derive(Debug, Clone)]
-pub enum NewPrimitive {
-    /// A code-checkout cloned from an HTTPS source in a given mode.
-    CodeCheckout {
+pub enum NewKind {
+    /// A basic workstream: a code-change cloned from an HTTPS source in a mode.
+    Basic {
         source: HttpsGitUrl,
         mode: CheckoutMode,
     },
@@ -153,6 +216,8 @@ pub enum NewPrimitive {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     /// The hand-written `as_str` forms must match the serde string forms, since
@@ -181,5 +246,21 @@ mod tests {
                 serde_json::json!(state.as_str())
             );
         }
+    }
+
+    /// `WorkstreamKind::tag()` must match the serde `kind` discriminant, since
+    /// the document stores the tag via `tag()` and reads it back as the `kind`.
+    #[test]
+    fn kind_tag_matches_serde() {
+        let kind = WorkstreamKind::Basic {
+            code_change: CodeChange {
+                source: "https://example.com/x.git".into(),
+                mode: CheckoutMode::JjColocated,
+            },
+            checkouts: BTreeMap::new(),
+            sessions: BTreeMap::new(),
+        };
+        let json = serde_json::to_value(&kind).unwrap();
+        assert_eq!(json["kind"], serde_json::json!(kind.tag()));
     }
 }

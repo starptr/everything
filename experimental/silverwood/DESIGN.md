@@ -16,9 +16,11 @@ layer underneath them that lets you swap the frontend without migrating data.
 - **Decouple frontend from backend.** Frontends (TUI, GUI, editor plugin, web)
   come and go; the checkout locations, agent-session associations, and workstream
   metadata are stable and outlive any one frontend.
-- **A primitive, generalizable later.** The workstream primitive is a
-  **code-checkout** for now. The design leaves room to generalize to a **feature**
-  (potentially a nested, reparentable hierarchy) without a rewrite — see §8.
+- **A kind, generalizable later.** A workstream has exactly one **kind**; today
+  the only kind is **basic** (a code-change, its checkouts, and zero or more agent
+  sessions). The design leaves room for other kinds — e.g. a **feature**
+  (potentially a nested, reparentable hierarchy) that relates to sessions
+  differently — without a rewrite. See §8.
 - **CRDT-friendly from day one.** State is stored as CRDT documents so that
   multiple *forests* (e.g. laptop and a remote dev shell) can eventually
   synchronize in an eventually-consistent way. Actual sync is deferred (§7); the
@@ -50,13 +52,13 @@ layer underneath them that lets you swap the frontend without migrating data.
 | Term | Meaning |
 | --- | --- |
 | **Forest** | One local instance of silverwood state — by default the directory `~/.silverwood`. Two machines = two forests. A forest is *not necessarily* a directory in the future; storage is abstracted (§4). |
-| **Workstream** | The unit a developer works on. Has a human name, common properties, exactly one **primitive**, and open namespaced KV. One Loro document per workstream. |
-| **Primitive** | The kind of thing a workstream is built around. Today: **code-checkout**. Future: **feature** (§8). |
-| **Code-checkout** | A working copy of a repository, provisioned by silverwood by cloning an HTTPS git endpoint in a specified **mode** (§3). |
-| **Claude session** | A Claude Code session id + human-friendly name, associated with a workstream (zero or more). |
+| **Workstream** | The unit a developer works on. Has a human name, common properties, exactly one **kind**, and open namespaced KV. One Loro document per workstream. |
+| **Kind** | What a workstream *is*. Today the only kind is **basic** (§3): a code-change, its checkouts, and agent sessions. Future kinds may hold different data and relate to sessions differently (§8). |
+| **Code-change** | What a basic workstream is built around: a working copy provisioned by silverwood by cloning an HTTPS git endpoint in a specified **mode** (§3). |
+| **Agent session** | An **agent kind** (today only `claude-code`) + a session id + a human-friendly name, associated with a basic workstream (zero or more). |
 | **Forest id / peer id** | The forest's stable identity, used as the Loro peer/actor id so edits are attributable. Local, never synced. |
 | **DocStore** | The trait abstracting where workstream documents are persisted (files by default). |
-| **CheckoutProvider** | The trait abstracting how a code-checkout is materialized on disk (jj-colocated clone today). |
+| **CheckoutProvider** | The trait abstracting how a code-change is materialized on disk (jj-colocated clone today). |
 
 ---
 
@@ -92,29 +94,37 @@ nested mergeable children; keyed maps give stable identity under merge):
 root (LoroMap)
 ├─ name        : string            # LWW register — owned here
 ├─ status      : "active" | "archived"
-├─ kind        : "code-checkout"
+├─ kind        : "basic"           # the workstream-kind discriminant
 ├─ created_at  : RFC3339 string    # minted by core
-├─ primitive   : LoroMap           # code-checkout data (see §3)
-│   ├─ source    : string          # https git url
-│   └─ mode      : "jj-colocated"
-├─ checkouts   : LoroMap keyed by <forest-id>   # per-forest materialization
-│   └─ <forest-id> : { location, state, mode }  # keyed → concurrent creates never conflict
-├─ sessions    : LoroMap keyed by <claude-session-id>   # OR-Set by construction
-│   └─ <session-id> : { name, created_at }
+├─ basic       : LoroMap           # the "basic" kind's data — created once at genesis (§2.3)
+│   ├─ code_change : LoroMap        # code-change config (see §3)
+│   │   ├─ source    : string       # https git url
+│   │   └─ mode      : "jj-colocated"
+│   ├─ checkouts   : LoroMap keyed by <forest-id>   # per-forest materialization
+│   │   └─ <forest-id> : { location, state, mode }  # keyed → concurrent creates never conflict
+│   └─ sessions    : LoroMap keyed by <agent-session-id>   # OR-Set by construction
+│       └─ <session-id> : { kind, name, created_at }        # kind = agent kind, e.g. "claude-code"
 └─ kv          : LoroMap (namespace → LoroMap(key → json-string))   # open frontend state (§5)
 ```
 
+Sessions live *inside* the kind, not at the workstream's top level, because a
+different future kind may relate to sessions differently (or not at all).
+
 The **movable tree** (`get_tree`) container is intentionally unused in v1. It is
-the reason Loro was chosen and is reserved for the future feature hierarchy (§8).
+the reason Loro was chosen and is reserved for a future nested kind hierarchy (§8).
 
 ### 2.3 CRDT semantics
 
 - **Engine: Loro** (`loro = "^1"`), Rust-native. Chosen over Automerge because the
-  future feature primitive may be a *reparentable hierarchy*, and Loro ships a
+  future feature kind may be a *reparentable hierarchy*, and Loro ships a
   movable-tree CRDT that resolves concurrent moves without cycles/duplication —
   which Automerge does not (§8). Cost accepted: Loro has no autosurgeon-style
   derive, so core hand-writes the container⇄struct mapping (§5).
-- **Scalars** (name, status, primitive fields) are last-writer-wins registers.
+- **Scalars** (name, status, code-change fields) are last-writer-wins registers.
+- **The kind container** (`basic`) and its child maps are created once, at genesis,
+  and the kind is immutable — so two forests never concurrently create the same
+  container (which would LWW-drop one side's contents). See the merge-safety
+  invariant in `doc.rs`.
 - **Collections** (sessions, kv, checkouts) are keyed maps — concurrent additions
   union; the per-forest keying of `checkouts` means two forests independently
   materializing the same workstream never conflict.
@@ -128,29 +138,34 @@ nothing user-facing.
 
 - Core **does** mint what a caller cannot meaningfully supply: the workstream
   UUID, `created_at`, and the initial `active` status (a lifecycle invariant).
-- Core **does not** invent policy: `name`, checkout `source`, and checkout `mode`
-  are always caller-specified. There is no default mode, no auto-created working
-  branch, no ambient repo inference.
+- Core **does not** invent policy: `name`, the code-change `source` and `mode`,
+  and a session's **agent kind** are always caller-specified. There is no default
+  mode, no default agent kind, no auto-created working branch, no ambient repo
+  inference.
 - Defaults, inference, and UX belong in a frontend (the CLI is itself a frontend
   and, for now, also requires explicit inputs).
 
 ---
 
-## 3. The primitive: code-checkout
+## 3. The basic kind: a code-change (+ checkouts + agent sessions)
 
-A code-checkout is a working copy silverwood provisions by cloning a remote. The
-`silverwood-core` constructor contract:
+The **basic** kind is the only workstream kind today. It is built around a
+**code-change** — a working copy silverwood provisions by cloning a remote — and
+also owns that code-change's per-forest checkouts and zero or more agent sessions.
+The `silverwood-core` constructor contract:
 
 ```rust
 Forest::create_workstream(NewWorkstream {
     name: String,                        // explicit — no default name
-    primitive: NewPrimitive::CodeCheckout {
+    kind: NewKind::Basic {
         source: HttpsGitUrl,             // https:// clone URL; scheme validated → error otherwise
         mode:   CheckoutMode::JjColocated,  // open enum; one variant today
     },
 })
 ```
 
+- **`WorkstreamKind` is an open, tagged enum**, `Basic` its only variant today;
+  the enum is where new kinds (with their own data and session relationships) land.
 - **`CheckoutMode` is an open enum**, `JjColocated` its only variant today. It is
   the sole checkout mode to begin with.
 - **`JjColocated` means exactly:** run
@@ -168,10 +183,11 @@ Forest::create_workstream(NewWorkstream {
 
 ### Coherence: session discovery
 
-Because core owns the checkout path, it knows the corresponding Claude Code
-project directory (`~/.claude/projects/<escaped-checkout-path>/`) and can *discover*
-sessions to offer for naming/attachment, rather than requiring every session id to
-be entered by hand. (Discovery is a later part; the association model exists now.)
+Because core owns the checkout path, it knows the corresponding project directory
+for a given agent kind — e.g. for `claude-code`, `~/.claude/projects/<escaped-checkout-path>/`
+— and can *discover* sessions to offer for naming/attachment, rather than requiring
+every session id to be entered by hand. (Discovery is a later part; the association
+model, including the agent kind, exists now.)
 
 ---
 
@@ -218,7 +234,7 @@ Forest::list(opts) -> Result<Vec<WorkstreamSummary>> // filters archived unless 
 Forest::get(WorkstreamId) -> Result<Workstream>
 Forest::archive(WorkstreamId) -> Result<()>          // tombstone
 Forest::set_kv(WorkstreamId, namespace, key, json) -> Result<()>
-Forest::attach_session(WorkstreamId, session_id, name) -> Result<()>
+Forest::attach_session(WorkstreamId, session_id, agent_kind, name) -> Result<()>
 ```
 
 - **Namespaced KV** is how frontends store their own per-workstream state. A
@@ -226,9 +242,10 @@ Forest::attach_session(WorkstreamId, session_id, name) -> Result<()>
   JSON-valued keys; core stores them opaquely and never interprets them. This is
   what keeps the backend genuinely frontend-agnostic: no frontend can force a core
   schema change.
-- The domain types (`Workstream`, `Checkout`, `Session`) are plain idiomatic Rust
-  structs. Because Loro has no derive layer, core owns the hand-written mapping
-  between these structs and the Loro containers, keeping CRDT plumbing hidden.
+- The domain types (`Workstream`, `WorkstreamKind`, `Checkout`, `AgentSession`) are
+  plain idiomatic Rust structs. Because Loro has no derive layer, core owns the
+  hand-written mapping between these structs and the Loro containers, keeping CRDT
+  plumbing hidden.
 
 ---
 
@@ -282,16 +299,17 @@ Deferred, but the model is built for it:
 
 ---
 
-## 8. Future: the feature primitive
+## 8. Future: more workstream kinds (e.g. feature)
 
-The primitive generalizes from **code-checkout** to **feature**. A feature is a
-unit of work not tied to a single checkout, and features may **nest and be
-reparented** (drag a sub-feature under a different parent). Concurrent reparenting
-across forests is the classic hard CRDT problem (a naive merge yields cycles or
-duplicates). **Loro's movable-tree CRDT resolves it deterministically** — which is
-precisely why Loro is the engine even though v1 uses none of it. When the feature
-primitive lands, workstreams gain a tree container and the flat forest membership
-is unchanged.
+New kinds are added as `WorkstreamKind` variants — the reason sessions live inside
+the kind rather than at the top level. A likely next kind is **feature**: a unit of
+work not tied to a single checkout, which may relate to agent sessions differently
+and may **nest and be reparented** (drag a sub-feature under a different parent).
+Concurrent reparenting across forests is the classic hard CRDT problem (a naive
+merge yields cycles or duplicates). **Loro's movable-tree CRDT resolves it
+deterministically** — which is precisely why Loro is the engine even though v1 uses
+none of it. When such a kind lands, that workstream gains a tree container and the
+flat forest membership is unchanged.
 
 ---
 
@@ -302,8 +320,8 @@ is unchanged.
 - **SQLite-backed `DocStore`** — worth it for transactional multi-document writes,
   or do files suffice indefinitely?
 - **Session auto-discovery** surface and its UX split between core and frontend.
-- **Multi-primitive workstreams** — the model says "exactly one primitive"; revisit
-  when features arrive.
+- **Multi-kind workstreams** — the model says "exactly one kind"; revisit
+  when new kinds arrive.
 - **HTTPS-only vs SSH remotes** — start HTTPS-only (validated); reconsider later.
 - **Peer-id derivation** — hash the forest UUID to a stable u64, or store an
   independent u64 in `config.toml`.

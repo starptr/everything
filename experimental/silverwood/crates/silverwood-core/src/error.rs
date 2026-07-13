@@ -33,11 +33,11 @@ pub enum Error {
     #[error("crdt error: {0}")]
     Loro(String),
 
-    /// A code-checkout source was not a valid HTTPS git endpoint.
+    /// A code-change source was not a valid HTTPS git endpoint.
     #[error("invalid source: {0}")]
     InvalidSource(String),
 
-    /// Provisioning a code-checkout failed.
+    /// Provisioning a checkout failed.
     #[error("checkout provisioning failed: {0}")]
     Provision(String),
 

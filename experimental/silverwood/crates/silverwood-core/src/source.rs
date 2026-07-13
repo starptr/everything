@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 
-/// An HTTPS git endpoint a code-checkout is cloned from (e.g. a GitHub clone
+/// An HTTPS git endpoint a code-change is cloned from (e.g. a GitHub clone
 /// URL). Validated at construction: the scheme must be `https` and a host must
 /// be present. Non-HTTPS forms (`ssh://`, `git@…`) are rejected — per
 /// `DESIGN.md`, silverwood accepts HTTPS sources only for now.

@@ -102,6 +102,22 @@ Part 3.1 notes:
 - e2e tests need network + jj → `#[ignore]`d (sandbox has neither); run with `nix develop --command cargo test -p silverwood-cli -- --ignored`.
 - Assertions are observable-only (CLI `--json` + checkout working copy); they do NOT touch forest internals (`config.toml`, `.loro` files).
 
+## Part 3.2 — generalize sessions → agent sessions under a workstream kind
+- [x] `Session` → `AgentSession { kind: AgentKind, name, created_at }`; `AgentKind` open enum (`#[non_exhaustive]`, `claude-code` only)
+- [x] introduce `WorkstreamKind` (tagged, `#[non_exhaustive]`, one variant `Basic { code_change, checkouts, sessions }`); `CheckoutPrimitive` → `CodeChange`; `NewPrimitive` → `NewKind`
+- [x] `WorkstreamBody` = `{ name, status, created_at, kind: WorkstreamKind, kv }` — sessions/checkouts/code-change move INSIDE the kind; `kv` stays top-level (kind-agnostic)
+- [x] Loro layout: nest kind data under a genesis-created `basic` container (`code_change`/`checkouts`/`sessions`); `kv` stays at root
+- [x] `attach_session` gains an explicit `agent_kind` (no defaults, DESIGN §2.4); CLI `session attach --agent claude-code` (clap `AgentArg`, mirrors `--mode`)
+- [x] verify (structural): `nix flake check` green — round-trip, CRUD, `concurrent_edits_converge` (now through the nested `basic` path)
+- [ ] verify (network e2e, devshell): `session attach --agent claude-code` → `ls` shows `kind":"claude-code"`, rename preserves kind+created_at
+
+Part 3.2 notes:
+- **Clean break**: the on-disk doc shape changed (no backward-compat reader); pre-release, so existing forests are just recreated.
+- **Serialize-only body types**: nothing deserializes `Workstream`/`WorkstreamBody`/`WorkstreamKind` (reads go via the private `StoredBody`; CLI tests parse untyped `Value`). Dropping their `Deserialize` derive lets us use the reliable Serialize side of `#[serde(flatten)]` + an internally-tagged (`tag="kind"`) enum → flat `--json` (`kind:"basic"` + `code_change`/`checkouts`/`sessions` at top level), keeping `ws["checkouts"]` test access working.
+- **Merge-safety invariant** (in `doc.rs`): the `basic` container + its children are created ONCE in `build`; kind is immutable; mutators only `child_map` (fetch, never `insert_container`). This is what keeps the nested layout free of the concurrent-same-key-container drop bug.
+- `AgentKind` needs no hand-written `as_str` (sessions are serde-encoded, never written as a bare Loro scalar), unlike `CheckoutMode`.
+- Ergonomic accessors `WorkstreamBody::{code_change,checkouts,sessions}()` return `Option<&_>` to keep enum destructuring out of the CLI/tests (forward-compat for kinds without those).
+
 ## Part 4 — sync  (deferred; DESIGN §7)
 - [ ] per-document merge over a `DocStore` backend (`LoroDoc::import` + merge, not overwrite)
 - [ ] Loro `export(updates)` + version vectors for delta sync; remote (SSH) `DocStore` backend

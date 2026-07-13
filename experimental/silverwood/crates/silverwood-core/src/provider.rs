@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::source::HttpsGitUrl;
 use crate::workstream::CheckoutMode;
 
-/// Materializes a code-checkout on disk for a chosen [`CheckoutMode`].
+/// Materializes a checkout on disk for a chosen [`CheckoutMode`].
 ///
 /// Provisioning is a local, fallible side effect: an implementation clones
 /// `source` into `dest` (which must not already exist). Injected into
