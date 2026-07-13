@@ -1,0 +1,15 @@
+[package]
+name = "silverwood-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Thin CLI over silverwood-core."
+
+[[bin]]
+name = "silverwood"
+path = "src/main.rs"
+
+[dependencies]
+silverwood-core.workspace = true
+clap.workspace = true

@@ -6,17 +6,29 @@ This file is the persistent progress tracker across agent/LLM sessions. Keep it
 current: mark `[~]` when starting, `[x]` when done + verified, and add a short
 note when a decision or finding deviates from DESIGN.md.
 
-## Part 0 — scaffold + forest skeleton  (this milestone)
-- [ ] workspace `Cargo.toml` + `crates/silverwood-core` + `crates/silverwood-cli` (bin `silverwood`)
-- [ ] `flake.nix` (crane): inputs nixpkgs-unstable + crane + flake-utils + advisory-db;
+## Part 0 — scaffold + forest skeleton  (this milestone) — DONE
+- [x] workspace `Cargo.toml` + `crates/silverwood-core` + `crates/silverwood-cli` (bin `silverwood`)
+- [x] `flake.nix` (crane): inputs nixpkgs-unstable + crane + flake-utils + advisory-db;
       `eachDefaultSystem`; single workspace `src`; `buildDepsOnly` artifacts reused everywhere
-- [ ] flake `checks`: clippy (--deny warnings), cargoDoc (--deny warnings), fmt, taplo, audit, deny, nextest
-- [ ] `packages.default` = CLI wrapped (`makeWrapper`) with `jujutsu` + `git` on PATH; `apps.default`; devShell (+ jujutsu, git)
-- [ ] `rustfmt.toml` / `taplo.toml` / `deny.toml` as needed for the checks to pass
-- [ ] `DocStore` trait + files-per-doc impl (load/save bytes by workstream id; enumerate ids)
-- [ ] `Forest::open(root)` — locate/create the forest dir, mint forest id + derived peer id, write `config.toml`
-- [ ] verify (structural): `nix flake check` green; `nix run . -- --help` prints usage
-- [ ] verify (interactive, user): `nix develop` → `cargo run` opens a forest at a temp root; `config.toml` written once
+- [x] flake `checks`: clippy (--deny warnings), cargoDoc (--deny warnings), fmt, taplo, audit, deny, nextest
+- [~] `packages.default` = CLI (`meta.mainProgram`); `apps.default`; devShell (+ jujutsu, git, taplo).
+      makeWrapper (jj/git on PATH) DEFERRED to Part 1 — nothing shells out yet, so wrapping now would
+      only pull jujutsu into the closure for no runtime use.
+- [x] `deny.toml` (permissive license allowlist; multiple-versions=allow). No `rustfmt.toml`/`taplo.toml`
+      needed — defaults satisfy the fmt/toml-fmt checks.
+- [x] `DocStore` trait + files-per-doc impl (`*.loro`; load/save bytes by workstream id; enumerate ids) + unit tests
+- [x] `Forest::open(root)` — locate/create the forest dir, mint forest id + derived peer id, write `config.toml` + tests
+- [x] verify (structural): `nix flake check` green (rustc 1.96.1); `nix run . -- --help` prints usage
+- [x] verify (behavioral): `nix run . -- --forest <tmp> info` creates `config.toml`+`workstreams/`+`working-copies/`,
+      prints forest/peer id; second run returns the identical identity (idempotent)
+
+Part 0 notes:
+- **TOML/u64 gotcha**: TOML integers are i64; a raw u64 peer id > i64::MAX fails to serialize
+  (`ConfigSer(OutOfRange)`). `derive_peer_id` masks to `[1, i64::MAX]` (63 bits — ample for Loro
+  peer uniqueness). Caught by the `open_creates_layout`/`peer_id_is_nonzero` tests, not the build.
+- **crane warning** (cosmetic): virtual-workspace root has no `[package]`, so crane logs a
+  placeholder-name warning for the fmt/audit/deny check derivations. Harmless; checks pass.
+- Files are `git add`-staged (flake eval needs it) but NOT committed.
 
 ## Part 1 — workstream model + code-checkout provisioning  (jj-colocated)
 - [ ] `Workstream` / `Checkout` / `Session` structs ⇄ Loro container mapping (hand-written; no derive)

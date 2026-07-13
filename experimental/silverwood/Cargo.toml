@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/silverwood-core", "crates/silverwood-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/yutonishida/everything"
+
+[workspace.dependencies]
+silverwood-core = { path = "crates/silverwood-core" }
+
+uuid = { version = "1", features = ["v7", "serde"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
