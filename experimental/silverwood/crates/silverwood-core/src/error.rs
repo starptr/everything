@@ -45,6 +45,14 @@ pub enum Error {
     #[error("workstream not found: {0}")]
     NotFound(WorkstreamId),
 
+    /// A session with this id is already attached to the workstream.
+    #[error("session already attached: {0}")]
+    SessionExists(String),
+
+    /// No session with this id is attached to the workstream.
+    #[error("session not attached: {0}")]
+    SessionNotFound(String),
+
     /// A stored workstream document did not match the expected structure.
     #[error("corrupt workstream document: {0}")]
     Corrupt(String),

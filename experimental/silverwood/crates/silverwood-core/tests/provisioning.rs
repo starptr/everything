@@ -4,44 +4,20 @@
 //! jj-colocated clone is behind `#[ignore]` — run it in the dev shell with
 //! `cargo test -- --ignored`.
 
-use std::path::{Path, PathBuf};
+mod common;
 
+use std::path::Path;
+
+use common::{new_ws, temp_forest, FakeOk};
 use silverwood_core::{
-    CheckoutMode, CheckoutProvider, CheckoutState, Error, Forest, HttpsGitUrl, NewPrimitive,
-    NewWorkstream, Result, Status,
+    CheckoutMode, CheckoutProvider, CheckoutState, Error, Forest, HttpsGitUrl, Result, Status,
 };
-
-/// A fresh, unique temp dir for an isolated forest.
-fn temp_forest(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("silverwood-it-{}-{}", std::process::id(), tag));
-    let _ = std::fs::remove_dir_all(&dir);
-    dir
-}
-
-/// A provider that just creates the destination directory — no network, no jj.
-struct FakeOk;
-impl CheckoutProvider for FakeOk {
-    fn provision(&self, _mode: CheckoutMode, _source: &HttpsGitUrl, dest: &Path) -> Result<()> {
-        std::fs::create_dir_all(dest).unwrap();
-        Ok(())
-    }
-}
 
 /// A provider that always fails provisioning.
 struct FakeFail;
 impl CheckoutProvider for FakeFail {
     fn provision(&self, _mode: CheckoutMode, _source: &HttpsGitUrl, _dest: &Path) -> Result<()> {
         Err(Error::Provision("boom".into()))
-    }
-}
-
-fn new_ws(name: &str) -> NewWorkstream {
-    NewWorkstream {
-        name: name.into(),
-        primitive: NewPrimitive::CodeCheckout {
-            source: HttpsGitUrl::parse("https://github.com/octocat/Hello-World.git").unwrap(),
-            mode: CheckoutMode::JjColocated,
-        },
     }
 }
 

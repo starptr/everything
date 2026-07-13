@@ -163,11 +163,73 @@ impl Forest {
 
     /// Archive a workstream (tombstone; the document is retained).
     pub fn archive(&self, id: WorkstreamId) -> Result<()> {
-        let bytes = self.docs.load(id)?.ok_or(Error::NotFound(id))?;
-        let doc = doc::load(self.peer_id(), &bytes)?;
+        let doc = self.load_doc(id)?;
         doc::set_status(&doc, Status::Archived)?;
-        self.docs.save(id, &doc::snapshot(&doc)?)?;
-        Ok(())
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Set a namespaced key-value entry on a workstream. The value is an opaque
+    /// JSON string; core never interprets it — it is a frontend's own state.
+    pub fn set_kv(&self, id: WorkstreamId, namespace: &str, key: &str, value: &str) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        doc::set_kv(&doc, namespace, key, value)?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Remove a namespaced key-value entry (no-op if absent).
+    pub fn unset_kv(&self, id: WorkstreamId, namespace: &str, key: &str) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        doc::unset_kv(&doc, namespace, key)?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Read a namespaced key-value entry, if present.
+    pub fn get_kv(&self, id: WorkstreamId, namespace: &str, key: &str) -> Result<Option<String>> {
+        Ok(self
+            .get(id)?
+            .body
+            .kv
+            .get(namespace)
+            .and_then(|m| m.get(key))
+            .cloned())
+    }
+
+    /// List all key-value entries in a namespace (empty if the namespace is absent).
+    pub fn list_kv(&self, id: WorkstreamId, namespace: &str) -> Result<BTreeMap<String, String>> {
+        Ok(self
+            .get(id)?
+            .body
+            .kv
+            .get(namespace)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    /// Attach a Claude session to a workstream. Errors if already attached.
+    pub fn attach_session(&self, id: WorkstreamId, session_id: &str, name: &str) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        doc::attach_session(&doc, session_id, name, &now_rfc3339())?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Rename an attached session. Errors if not attached.
+    pub fn rename_session(&self, id: WorkstreamId, session_id: &str, name: &str) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        doc::rename_session(&doc, session_id, name)?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Detach a session from a workstream (no-op if not attached).
+    pub fn detach_session(&self, id: WorkstreamId, session_id: &str) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        doc::detach_session(&doc, session_id)?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Load a workstream's document, ready to author under this forest's peer id.
+    fn load_doc(&self, id: WorkstreamId) -> Result<loro::LoroDoc> {
+        let bytes = self.docs.load(id)?.ok_or(Error::NotFound(id))?;
+        doc::load(self.peer_id(), &bytes)
     }
 }
 

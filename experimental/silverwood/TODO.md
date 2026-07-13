@@ -54,11 +54,23 @@ Part 1 notes:
 - **jj/git wrapper still deferred** — moved to Part 3: `create_workstream` shells out to `jj`, but the shipped `silverwood` binary
   doesn't expose create until the Part 3 CLI, so the package only needs the jj/git PATH wrapper once `new` lands. (Dev shell has both.)
 
-## Part 2 — associated data: kv + sessions
-- [ ] `set_kv` / `get_kv` / `list_kv` — namespaced, value = opaque JSON string, core never interprets
-- [ ] `attach_session` / `rename_session` / `detach_session` (tombstone); sessions keyed by claude session id
-- [ ] verify (structural): kv + session round-trip; **merge test** — fork a doc, edit both, `import`/merge, assert convergence (proves the CRDT model holds)
+## Part 2 — associated data: kv + sessions — DONE
+- [x] `set_kv` / `get_kv` / `list_kv` / `unset_kv` — namespaced, value = opaque JSON string, core never interprets
+- [x] `attach_session` (errors if dup) / `rename_session` (errors if absent, preserves created_at) / `detach_session` (no-op if absent)
+- [x] verify (structural): `nix flake check` green — kv round-trip (LWW overwrite, namespace isolation, unset), session lifecycle,
+      build↔hydrate round-trip with populated kv/sessions
+- [x] verify (**CRDT merge**): `doc::tests::concurrent_edits_converge` — two peers load one base, edit the SAME kv namespace
+      (different keys) + attach different sessions, exchange updates both ways → converge to the union. PASSED. Proves the model merges.
 - [ ] (later) session auto-discovery from the checkout path → `~/.claude/projects/<escaped>/`
+
+Part 2 notes:
+- **CRDT-safety fix (important)**: the first merge test FAILED — concurrently creating the SAME nested-container key drops one
+  side (parent map LWW-picks one container). Fix: `kv` and `sessions` are now FLAT maps of scalar strings in the single
+  genesis-created container — kv keyed by JSON `["namespace","key"]`, sessions keyed by session id with a JSON-encoded `Session`
+  value. `checkouts` stays nested (safe: keyed by forest id, never concurrently same-key). Rule for future nested state:
+  never create the same container key on two forests concurrently. Public `WorkstreamBody` stays nested; `doc::StoredBody`
+  is the flat on-disk shape, un-flattened during hydrate.
+- Integration test helpers moved to `tests/common/mod.rs` (shared by `provisioning.rs` + `associated_data.rs`).
 
 ## Part 3 — CLI surface  (`--json`)
 - [ ] **wrap `packages.default` with `makeWrapper` (jujutsu + git on PATH)** — deferred from Part 0/1; due now that the CLI's `new` shells out to `jj`
