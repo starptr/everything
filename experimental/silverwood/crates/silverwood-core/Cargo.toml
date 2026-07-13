@@ -9,5 +9,9 @@ description = "Frontend-agnostic backend for code/agent workstreams: forest, wor
 [dependencies]
 uuid.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 toml.workspace = true
 thiserror.workspace = true
+loro.workspace = true
+url.workspace = true
+time.workspace = true

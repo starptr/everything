@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::id::WorkstreamId;
+
 /// Errors returned by `silverwood-core`.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -26,6 +28,26 @@ pub enum Error {
     /// A document store held a file whose name is not a valid workstream id.
     #[error("invalid workstream id in doc store: {0:?}")]
     InvalidDocId(PathBuf),
+
+    /// The underlying CRDT engine (Loro) reported an error.
+    #[error("crdt error: {0}")]
+    Loro(String),
+
+    /// A code-checkout source was not a valid HTTPS git endpoint.
+    #[error("invalid source: {0}")]
+    InvalidSource(String),
+
+    /// Provisioning a code-checkout failed.
+    #[error("checkout provisioning failed: {0}")]
+    Provision(String),
+
+    /// No workstream exists with the given id.
+    #[error("workstream not found: {0}")]
+    NotFound(WorkstreamId),
+
+    /// A stored workstream document did not match the expected structure.
+    #[error("corrupt workstream document: {0}")]
+    Corrupt(String),
 }
 
 /// Convenience alias for results from this crate.

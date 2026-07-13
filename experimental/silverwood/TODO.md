@@ -30,16 +30,29 @@ Part 0 notes:
   placeholder-name warning for the fmt/audit/deny check derivations. Harmless; checks pass.
 - Files are `git add`-staged (flake eval needs it) but NOT committed.
 
-## Part 1 — workstream model + code-checkout provisioning  (jj-colocated)
-- [ ] `Workstream` / `Checkout` / `Session` structs ⇄ Loro container mapping (hand-written; no derive)
-- [ ] one `LoroDoc` per workstream; snapshot export/import round-trip through `DocStore`
-- [ ] `HttpsGitUrl` newtype + https-scheme validation (reject ssh/git@ → typed error)
-- [ ] `CheckoutMode` open enum (`JjColocated` only); `NewWorkstream` / `NewPrimitive` types
-- [ ] `CheckoutProvider` trait + `JjColocated` impl = `jj git clone --colocate <src> working-copies/<uuid>`
-- [ ] `create_workstream`: mint id/created_at/active → write doc with checkout `state="pending"` → clone → flip `ready`/`failed`
-- [ ] `list` (filter archived unless asked) / `get` / `archive` (in-doc tombstone, never delete the file)
-- [ ] verify (structural): unit test round-trips a workstream doc; `create_workstream` against a real PUBLIC https repo clones + persists + reloads
-- [ ] verify (interactive, user): create from a GitHub HTTPS URL → `working-copies/<uuid>` is a colocated repo (`.jj` AND `.git` present, `jj status` works); reopen forest → workstream still there
+## Part 1 — workstream model + code-checkout provisioning  (jj-colocated) — DONE
+- [x] `Workstream`/`Checkout`/`Session`/`WorkstreamBody` structs ⇄ Loro container mapping (`doc.rs`, hand-written; no derive)
+- [x] one `LoroDoc` per workstream; snapshot export/import round-trip through `DocStore`
+- [x] `HttpsGitUrl` newtype + https-scheme validation (reject ssh/git@/http → typed `InvalidSource`) + unit tests
+- [x] `CheckoutMode` open enum (`#[non_exhaustive]`, `JjColocated` only); `NewWorkstream`/`NewPrimitive`/`CheckoutState` types
+- [x] `CheckoutProvider` trait + `JjColocated` impl = `jj git clone --colocate <src> working-copies/<uuid>` (captures stderr on failure)
+- [x] `create_workstream`: mint id/created_at/active → write doc (checkout `pending`) → provision → flip `ready`/`failed` in place → persist
+- [x] `list` (filter archived unless asked, sorted by id) / `get` / `archive` (in-doc `status=archived` tombstone, file retained)
+- [x] provider injected via `Forest::open_with_provider` so tests avoid network; `FakeOk`/`FakeFail` integration tests in nextest
+- [x] verify (structural): `nix flake check` green — doc round-trip, CRUD, failed-provision-recoverable, persist-across-reopen (FakeProvider)
+- [x] verify (behavioral): `#[ignore]` `real_jj_colocated_clone` (devshell, `cargo test -- --ignored`) — real clone → `.jj` AND `.git` present, state `Ready`, persists across reopen. PASSED.
+
+Part 1 notes:
+- **Loro 1.13.6**. Confirmed API: `doc.get_map(name)` (root by name), `map.insert(k, scalar)`, `map.insert_container(k, LoroMap::new())`,
+  `doc.export(ExportMode::snapshot())` / `doc.import(&bytes)`, `doc.set_peer_id` (rejects only `PeerID::MAX`). Reads hydrate via
+  `serde_json::to_value(&map.get_deep_value())` → `serde_json::from_value` (LoroValue: Serialize; `get_deep_value` resolves nested
+  containers so no `🦜:` container refs). Nav for in-place edits: `map.get(k)` → `Some(ValueOrContainer::Container(Container::Map(m)))`.
+- **Lineage preserved**: build the doc once (all containers created once); the pending→ready/failed flip and archive mutate EXISTING
+  containers in place (never rebuild), so future cross-forest merge stays valid.
+- **deny**: added `BSL-1.0` (Boost) — a permissive license used by a crate in Loro's dependency tree.
+- **created_at**: `time::OffsetDateTime::now_utc()` formatted RFC3339.
+- **jj/git wrapper still deferred** — moved to Part 3: `create_workstream` shells out to `jj`, but the shipped `silverwood` binary
+  doesn't expose create until the Part 3 CLI, so the package only needs the jj/git PATH wrapper once `new` lands. (Dev shell has both.)
 
 ## Part 2 — associated data: kv + sessions
 - [ ] `set_kv` / `get_kv` / `list_kv` — namespaced, value = opaque JSON string, core never interprets
@@ -48,6 +61,7 @@ Part 0 notes:
 - [ ] (later) session auto-discovery from the checkout path → `~/.claude/projects/<escaped>/`
 
 ## Part 3 — CLI surface  (`--json`)
+- [ ] **wrap `packages.default` with `makeWrapper` (jujutsu + git on PATH)** — deferred from Part 0/1; due now that the CLI's `new` shells out to `jj`
 - [ ] subcommands: `new`, `ls`, `show`, `archive`, `kv (get/set/ls)`, `session (attach/ls/rename/detach)`
 - [ ] all inputs explicit (no defaults): `new --name <n> --source <https-url> --mode jj-colocated`
 - [ ] dual output: human-readable default + `--json` for frontends
