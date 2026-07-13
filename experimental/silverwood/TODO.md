@@ -87,6 +87,21 @@ Part 3 notes:
   plumbing, and the real create path is verified by hand (above) + the core `#[ignore]` `real_jj_colocated_clone`.
 - Enum display in the CLI uses `enum_str` (serialize→string) so it shares the single source of truth with the stored form.
 
+## Part 3.1 — env-configurable forest + CLI e2e tests — DONE
+- [x] `SILVERWOOD_FOREST_PATH` env var (CLI-only, frontend policy). Precedence: `--forest` flag > env var > `$HOME/.silverwood`.
+      `resolve_forest_dir` in main.rs treats an empty env value as unset. Documented in DESIGN §4.
+- [x] `tempfile`/`serde_json` added to `silverwood-cli` `[dev-dependencies]` (`tempfile = "3"`, matching channel-party's convention).
+- [x] `tests/common/mod.rs` (CLI): `forest()` (tempfile TempDir), `run/ok/json/fails/create` driving `CARGO_BIN_EXE_silverwood` with the env var.
+- [x] Sandbox-safe CLI tests (`cli.rs`, run in `nix flake check`): env-var resolves `root`, `--forest` overrides env, empty `ls`=`[]`,
+      non-https source rejected without cloning, bad/absent id fails.
+- [x] verify (network e2e, `tests/e2e.rs`, `#[ignore]`, devshell): full lifecycle vs `https://github.com/starptr/example.git` —
+      new→ready colocated checkout (`README.md`+`.jj`+`.git` on disk), kv set/get/ls/unset + namespace isolation,
+      session attach/dup-error/rename-preserves-created_at/absent-error/detach, archive tombstone keeps checkout + persists. PASSED (3/3).
+
+Part 3.1 notes:
+- e2e tests need network + jj → `#[ignore]`d (sandbox has neither); run with `nix develop --command cargo test -p silverwood-cli -- --ignored`.
+- Assertions are observable-only (CLI `--json` + checkout working copy); they do NOT touch forest internals (`config.toml`, `.loro` files).
+
 ## Part 4 — sync  (deferred; DESIGN §7)
 - [ ] per-document merge over a `DocStore` backend (`LoroDoc::import` + merge, not overwrite)
 - [ ] Loro `export(updates)` + version vectors for delta sync; remote (SSH) `DocStore` backend

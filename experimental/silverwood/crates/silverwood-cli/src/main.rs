@@ -21,7 +21,7 @@ use silverwood_core::{
 #[derive(Parser)]
 #[command(name = "silverwood", version, about, long_about = None)]
 struct Cli {
-    /// Path to the forest (defaults to `$HOME/.silverwood`).
+    /// Path to the forest (default: `$SILVERWOOD_FOREST_PATH`, else `$HOME/.silverwood`).
     #[arg(long, global = true, value_name = "DIR")]
     forest: Option<PathBuf>,
 
@@ -149,7 +149,7 @@ type CliResult = Result<(), Box<dyn std::error::Error>>;
 fn run(cli: Cli) -> CliResult {
     let root = match cli.forest {
         Some(path) => path,
-        None => default_forest_dir()?,
+        None => resolve_forest_dir()?,
     };
     let json = cli.json;
     let forest = Forest::open(&root)?;
@@ -354,12 +354,21 @@ fn parse_id(input: &str) -> Result<WorkstreamId, Box<dyn std::error::Error>> {
         .map_err(|e| format!("invalid workstream id {input:?}: {e}").into())
 }
 
-/// Resolve the default forest location, `$HOME/.silverwood`.
+/// Resolve the forest location when `--forest` is not given: the
+/// `SILVERWOOD_FOREST_PATH` env var if set (and non-empty), else
+/// `$HOME/.silverwood`.
 ///
-/// This default is frontend policy and deliberately lives here, not in
-/// `silverwood-core` (see `DESIGN.md` §2.4).
-fn default_forest_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let home = std::env::var_os("HOME")
-        .ok_or("HOME is not set; pass --forest <DIR> to choose a forest location")?;
+/// Precedence overall is `--forest` flag > `SILVERWOOD_FOREST_PATH` > default —
+/// all frontend policy that deliberately lives here, not in `silverwood-core`
+/// (see `DESIGN.md` §2.4).
+fn resolve_forest_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(path) = std::env::var_os("SILVERWOOD_FOREST_PATH") {
+        if !path.is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    let home = std::env::var_os("HOME").ok_or(
+        "no forest location: pass --forest <DIR>, set SILVERWOOD_FOREST_PATH, or set HOME",
+    )?;
     Ok(PathBuf::from(home).join(".silverwood"))
 }

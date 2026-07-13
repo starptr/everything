@@ -197,6 +197,9 @@ Default forest layout:
   simple: rewrite the snapshot on each committed mutation.
 - **`config.toml`** holds the forest id (a UUID) and its derived stable Loro peer
   id, plus local settings. It is machine-local state and is never synced.
+- **Forest location resolution** is a CLI (frontend) concern — core always takes an
+  explicit path (§2.4). The `silverwood` CLI resolves, in precedence order:
+  `--forest <DIR>` flag → `SILVERWOOD_FOREST_PATH` env var → `$HOME/.silverwood`.
 
 ---
 
