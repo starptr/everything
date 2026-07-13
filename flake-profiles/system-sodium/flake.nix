@@ -129,6 +129,11 @@
               (final: super: {
                 lute3 = inputs.soup.legacyPackages."aarch64-darwin".lute3;
               })
+              # silverwood (experimental/silverwood) via soup. Uses silverwood's own
+              # nixpkgs, so it avoids the apple_sdk_11_0 error that disables check-gits/lute3.
+              (final: super: {
+                silverwood = inputs.soup.legacyPackages."aarch64-darwin".silverwood;
+              })
               # HACK: skip broken tests until PR #502783 bumps resticprofile to 0.33.0
               (final: super: {
                 resticprofile = super.resticprofile.overrideAttrs (o: { doCheck = false; });

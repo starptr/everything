@@ -54,6 +54,15 @@
         devenv.follows = "devenv";
       };
     };
+
+    # silverwood lives in this monorepo (experimental/silverwood). git+file (NOT
+    # path:) so .gitignore is respected — excludes its ~1.5G Rust target/. An
+    # ABSOLUTE path is required: a relative `git+file:..` does not resolve when
+    # soup is itself evaluated as a git subdir-flake. No nixpkgs.follows:
+    # silverwood keeps its own modern nixpkgs (unstable) + crane, sidestepping
+    # soup's stale pin. (Absolute path ⇒ only resolvable where the monorepo lives
+    # at this path — i.e. keep this input out of the github:starptr/soup mirror.)
+    silverwood.url = "git+file:///Users/yuto/src/everything?dir=experimental/silverwood";
   };
 
   nixConfig = {
@@ -83,7 +92,7 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       # TODO: remove in favor of `exports`
       flake-inputs = {
-        inherit (inputs) love chaseln dark-notify-wrapped fenix check-gits jujutsu claude-code-overlay;
+        inherit (inputs) love chaseln dark-notify-wrapped fenix check-gits jujutsu claude-code-overlay silverwood;
       };
       # List of flake inputs that we want to transparently re-export (i.e. without custom packaging)
       exports = import ./exports.nix;

@@ -26,7 +26,8 @@ rec {
   jujutsu = callPackageWithMaybeFlakeInputs ./pkgs/jujutsu.nix { };
   jujutsu-bin = (callPackageWithMaybeFlakeInputs ./pkgs/jujutsu-bin/main.nix { }).latest.${system};
   natto-py = callPackageWithMaybeFlakeInputs ./pkgs/natto-py/default.nix { };
-  lute3 = callPackageWithMaybeFlakeInputs ./pkgs/lute3/default.nix { 
+  lute3 = callPackageWithMaybeFlakeInputs ./pkgs/lute3/default.nix {
     natto-py = natto-py;
   };
+  silverwood = callPackageWithMaybeFlakeInputs ./pkgs/silverwood.nix { };
 }
