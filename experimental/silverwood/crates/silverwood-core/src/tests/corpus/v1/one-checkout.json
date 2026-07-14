@@ -1,0 +1,19 @@
+{
+  "name": "one-checkout",
+  "status": "active",
+  "created_at": "1970-01-01T00:00:00Z",
+  "kind": "basic",
+  "code_change": {
+    "source": "https://example.com/x.git",
+    "mode": "jj-colocated"
+  },
+  "checkouts": {
+    "forest-a": {
+      "location": "/tmp/a",
+      "state": "ready",
+      "mode": "jj-colocated"
+    }
+  },
+  "sessions": {},
+  "kv": {}
+}

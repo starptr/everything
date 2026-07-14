@@ -30,7 +30,16 @@
         inherit (pkgs) lib;
 
         craneLib = crane.mkLib pkgs;
-        src = craneLib.cleanCargoSource ./.;
+        # Keep Rust/Cargo sources plus the frozen schema-migration test corpus
+        # (binary `.loro` + expected `.json` fixtures under any `corpus/` dir),
+        # which `cleanCargoSource` would otherwise strip — the migration tests
+        # `include_bytes!` them, so they must survive into the build sandbox.
+        src = lib.cleanSourceWith {
+          src = ./.;
+          name = "source";
+          filter =
+            path: type: (lib.hasInfix "/corpus/" path) || (craneLib.filterCargoSources path type);
+        };
 
         commonArgs = {
           inherit src;

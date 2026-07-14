@@ -211,11 +211,14 @@ Default forest layout:
   (`ExportMode::snapshot()`) as the document bytes; optionally append updates
   (`ExportMode::updates`) and recompact if a document's history grows. v1 keeps it
   simple: rewrite the snapshot on each committed mutation.
-- **No stored schema version yet.** The on-disk shape carries no version marker, so
-  a shape change is a clean break (recreate the forest). A versioned, deterministic
-  migration path is required before durable data / sync — see §9.
-- **`config.toml`** holds the forest id (a UUID) and its derived stable Loro peer
-  id, plus local settings. It is machine-local state and is never synced.
+- **Document schema version.** Every document stamps a `schema_version` root
+  scalar (absent = v1, the pre-versioning shape). This is the migration source of
+  truth — the *document* is the portable, synced unit, so the marker lives on it,
+  not (only) in `config.toml`. Reads upgrade older documents in memory; the
+  `upgrade-forest` command rewrites them; see §9. (Distinct from `config.toml`'s
+  own `version`, which tracks the config-file format.)
+- **`config.toml`** holds the forest id (a UUID), its derived stable Loro peer
+  id, and the config-file `version`, plus local settings. Machine-local, never synced.
 - **Forest location resolution** is a CLI (frontend) concern — core always takes an
   explicit path (§2.4). The `silverwood` CLI resolves, in precedence order:
   `--forest <DIR>` flag → `SILVERWOOD_FOREST_PATH` env var → `$HOME/.silverwood`.
@@ -318,45 +321,90 @@ flat forest membership is unchanged.
 
 ---
 
-## 9. Schema evolution & migration (future — required before durable data)
+## 9. Schema evolution & migration
 
 The document shape *will* change over silverwood's life (this doc's own history
-already restructured sessions under a workstream kind). There is **no migration
-path today**: a schema change is a **clean break**, and any existing forest is
-recreated. `doc.rs`'s `into_body` only understands the current shape — an
-old-format document fails with `Error::Corrupt` rather than being upgraded. That
-is acceptable *only* while silverwood is pre-release with no data worth keeping.
+already restructured sessions under a workstream kind). Silverwood carries a
+**versioned migration framework** so forests upgrade safely and documents stay
+bounded in size.
 
-**Eventually a versioned, deterministic migration path is required.** What makes
-this harder than a normal schema migration is that it collides with the sync goal
-(§7): once forests sync, two peers may run **different silverwood versions**, and a
-**destructive** migration (restructuring containers — e.g. moving a field to a new
-container) mints *new* Loro container ids, breaking merge lineage so an un-migrated
-peer's edits diverge or are silently dropped. So "rewrite the document on open"
-is not a safe migration by itself.
+### 9.0 When to change the schema at all
 
-The intended tiered approach, most-preferred first:
+Before adding a schema change, weigh it against the flexibility already in the
+model — often both work, so pick the better design:
 
-1. **Additive & tolerant — the default.** Only *add* fields/containers; never move,
-   rename, or remove. Readers fall back to serde defaults, so old and new versions
-   interoperate with no migration at all. `StoredBody` already does this (its
-   `basic`/`checkouts`/`sessions`/`kv` are `#[serde(default)]`). This is what Loro
-   wants; make it the house style for most changes.
-2. **Read-time normalization** for changes that cannot be additive: parse both old
-   and new shapes, normalize in `into_body`, and re-save in the new shape on the
-   next mutation. Clean only for pre-sync / single-forest data, since restructuring
-   containers still fights merge lineage.
-3. **Versioned, deterministic migration** for genuinely destructive changes: add a
-   `schema_version` marker (on the document and/or `config.toml`), migrate on open
-   by transforming **via Loro operations** (not a from-scratch rebuild, which
-   discards lineage), bump the version, and apply the transform **deterministically**
-   so peers on the new version converge rather than fork. Cross-version coexistence
-   during a rolling upgrade is the open hard part.
+- **Use existing flexibility** when the data is frontend-owned, experimental, or
+  sparse. The `kv` namespace (§5) is exactly this escape hatch: a frontend stores
+  arbitrary JSON-valued state with no core change and no migration.
+- **Change the schema** (add a field/container/kind) when the data is *core* —
+  owned by silverwood, shared across frontends, merged or queried by core with
+  first-class CRDT semantics, or simply not honestly expressible as opaque `kv`.
 
-The seam for all three is the `hydrate → StoredBody → into_body` boundary in
-`doc.rs` (on-disk JSON → domain), plus `Forest::open` / the `DocStore` for
-whole-forest upgrades. A `schema_version` marker should be introduced **before**
-sync ships, even if the first migrations are only additive.
+### 9.1 The mechanism
+
+- **Marker.** Each document stamps a `schema_version` root scalar (absent = v1).
+  `migrate::DOC_SCHEMA_VERSION` is what this build reads and writes.
+- **Versioned decode → migrate → re-encode.** `migrate.rs` holds a **frozen decode
+  struct per version** (`StoredBodyV1`, …) and a chain of pure-Rust
+  `vN → vN+1` functions folding any older document up to the latest
+  [`WorkstreamBody`]. Migrations are plain Rust over plain types — deterministic
+  and unit-testable. Persisting re-encodes with `doc::build`, which stamps the
+  latest version and, being a fresh op-graph, **shrinks** the document.
+- **Read = upgrade-on-read** (in memory, no write); **write = lazy
+  upgrade-on-write** (mutators rewrite the touched document first, since in-place
+  mutation navigates the latest layout); **`silverwood upgrade-forest`** rewrites
+  every document eagerly. A document newer than this build → `Error::SchemaTooNew`.
+- **Seam:** `hydrate → migrate::to_latest_body` for reads; `Forest::upgrade_all`
+  over the `DocStore` for whole-forest upgrades.
+
+### 9.2 Never lose data — but stay bounded
+
+Never losing data by *never moving/renaming/removing* is unsustainable: Loro
+retains history, so an append-only shape bloats without limit. So destructive
+restructuring (and history compaction) is **expected and supported**, not avoided —
+it is how a document stays small over time. Two change classes:
+
+- **Additive** (new field/container with a default): forward/backward compatible.
+  Different-version peers interoperate with no coordination — the sync-safe default.
+  (`serde(default)` on the decode structs already gives this.)
+- **Destructive / compacting** (move/rename/remove, or trim history via
+  `ExportMode::shallow_snapshot`): needed for bounded size, but it mints new Loro
+  container ids / drops history, so it **cannot** merge with an un-migrated replica.
+  This is the committed guarantee's cost.
+
+### 9.3 The guarantee: barrier + additive-safe (and why)
+
+Once forests sync (§7), a **destructive** migration collides with eventual
+consistency: two replicas at different versions can't merge a restructured
+container. The researched options are (a) additive+defaults with deterministic
+migrations, (b) bidirectional lenses (Cambria — lets versions coexist, but heavy
+and with fundamental soundness tradeoffs), or (c) a coordinated upgrade barrier.
+Silverwood commits to **(a)+(c)**: additive changes need no coordination;
+destructive/compacting changes require forests to reach a sync barrier, then a
+migrated document is distributed (not independently recomputed — independent
+rebuilds get different peer ids and can't merge). This dovetails with Loro's
+shallow-snapshot GC, which itself only trims safely past a barrier. Concurrent
+cross-version editing without a barrier (lenses) is deferred.
+
+Grounding facts (Loro): ops dedup by `(PeerID, Counter)` — identical ops converge,
+divergent ops at the same id silently corrupt (so deterministic migrations must be
+distributed, not re-derived); containers cannot be renamed/moved; snapshot bytes
+are not guaranteed deterministic (so tests compare *logical state*, not bytes).
+
+### 9.4 Testing doctrine
+
+Schema migration under eventual consistency has subtle bugs that review cannot
+catch, so it is tested hard (`src/tests/`):
+
+- **Frozen corpus** — real `.loro` bytes per version, generated by that version's
+  code and committed under `src/tests/corpus/vN/`; **never regenerated** (that is
+  what makes "read genuinely old bytes" a real test). Compare *logical projections*,
+  not bytes.
+- **Convergence property tests** (proptest) — K forests, random concurrent ops,
+  **all sync orderings** → converge to the union, no loss. A two-version toy schema
+  proves migrate + converge across a version bump under the barrier model.
+- **Empirical Loro-invariant probes** — assert the dedup/idempotence behaviours the
+  design rests on, so a Loro change that breaks them fails loudly.
 
 ---
 

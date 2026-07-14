@@ -12,8 +12,8 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    AgentKind, AgentSession, CheckoutMode, Forest, HttpsGitUrl, NewKind, NewWorkstream, Workstream,
-    WorkstreamId,
+    AgentKind, AgentSession, CheckoutMode, Forest, HttpsGitUrl, NewKind, NewWorkstream,
+    UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -71,6 +71,13 @@ enum Command {
     /// Agent session associations.
     #[command(subcommand)]
     Session(SessionCommand),
+
+    /// Upgrade every document in the forest to the latest schema version.
+    UpgradeForest {
+        /// Report what would change without writing.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -219,6 +226,12 @@ fn run(cli: Cli) -> CliResult {
 
         Command::Kv(cmd) => run_kv(&forest, json, cmd),
         Command::Session(cmd) => run_session(&forest, json, cmd),
+
+        Command::UpgradeForest { dry_run } => {
+            let reports = forest.upgrade_all(dry_run)?;
+            emit(json, &reports, || print_upgrade(&reports, dry_run));
+            Ok(())
+        }
     }
 }
 
@@ -285,19 +298,47 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
 }
 
 fn info(forest: &Forest, json: bool) -> CliResult {
+    let pending = forest.pending_upgrades()?;
     if json {
         let value = serde_json::json!({
             "root": forest.root().display().to_string(),
             "forest_id": forest.id().to_string(),
             "peer_id": forest.peer_id(),
+            "schema_version": DOC_SCHEMA_VERSION,
+            "pending_upgrades": pending,
         });
         println!("{}", serde_json::to_string_pretty(&value)?);
     } else {
-        println!("root      = {}", forest.root().display());
-        println!("forest_id = {}", forest.id());
-        println!("peer_id   = {}", forest.peer_id());
+        println!("root           = {}", forest.root().display());
+        println!("forest_id      = {}", forest.id());
+        println!("peer_id        = {}", forest.peer_id());
+        println!("schema_version = {DOC_SCHEMA_VERSION}");
+        if pending > 0 {
+            println!("pending        = {pending} document(s) need `upgrade-forest`");
+        }
     }
     Ok(())
+}
+
+/// Print an `upgrade-forest` report: the upgraded documents plus a summary.
+fn print_upgrade(reports: &[UpgradeReport], dry_run: bool) {
+    let verb = if dry_run { "would upgrade" } else { "upgraded" };
+    let upgraded: Vec<&UpgradeReport> = reports.iter().filter(|r| r.upgraded()).collect();
+    for r in &upgraded {
+        println!("{}  v{} → v{}  ({verb})", r.id, r.from, r.to);
+    }
+    if upgraded.is_empty() {
+        println!(
+            "forest up-to-date: {} document(s) at v{DOC_SCHEMA_VERSION}",
+            reports.len()
+        );
+    } else {
+        println!(
+            "{verb} {} of {} document(s) to v{DOC_SCHEMA_VERSION}",
+            upgraded.len(),
+            reports.len()
+        );
+    }
 }
 
 /// Emit `value` as pretty JSON, or run `human` for text output.

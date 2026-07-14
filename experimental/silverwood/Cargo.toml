@@ -21,3 +21,4 @@ loro = "1"
 url = "2"
 time = { version = "0.3", features = ["std", "formatting"] }
 tempfile = "3"
+proptest = "1"

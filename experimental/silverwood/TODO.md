@@ -118,6 +118,23 @@ Part 3.2 notes:
 - `AgentKind` needs no hand-written `as_str` (sessions are serde-encoded, never written as a bare Loro scalar), unlike `CheckoutMode`.
 - Ergonomic accessors `WorkstreamBody::{code_change,checkouts,sessions}()` return `Option<&_>` to keep enum destructuring out of the CLI/tests (forward-compat for kinds without those).
 
+## Part 3.3 — schema evolution & versioned migration
+- [x] document `schema_version` root scalar (`migrate::DOC_SCHEMA_VERSION`, absent=v1); stamped in `doc::build`
+- [x] `migrate.rs`: frozen per-version decode (`StoredBodyV1`), `detect_version`, `to_latest_body` (chain fold), `Error::SchemaTooNew`/`Migration`
+- [x] read = upgrade-on-read (`hydrate`→`to_latest_body`); write = lazy upgrade-on-write (`load_doc`→`migrate_bytes`+save); `Forest::upgrade_all(dry_run)` + `pending_upgrades`
+- [x] CLI `upgrade-forest [--dry-run]` (human + `--json`); `info` shows `schema_version` + pending count
+- [x] `FilesDocStore::save` now atomic (temp + rename) so a crashed upgrade can't truncate a doc
+- [x] test harness (`src/tests/`, `proptest` dev-dep): loro-invariant probes, v1 round-trip + frozen byte corpus, K-forest any-order convergence, two-version toy migrate-under-barrier
+- [x] frozen corpus under `src/tests/corpus/v1/` (+ README freeze discipline); `flake.nix` `src` filter keeps `/corpus/` past `cleanCargoSource`
+- [x] verify (structural): `nix flake check` green — clippy/doc/fmt/taplo/audit/deny/nextest incl. the new suites
+
+Part 3.3 notes:
+- **Guarantee = barrier + additive-safe** (DESIGN §9.3): additive changes merge across versions with no coordination; destructive/compacting changes need a sync barrier, then a migrated doc is *distributed* (independent rebuilds get different peer ids → can't merge). Cambria lenses (concurrent cross-version) deferred.
+- **Mechanism = rebuild** (decode Vn → pure-Rust migrate → `build` latest), which shrinks the doc; sound for single-forest now. When sync lands, additive→in-place op-migration (merge-safe) and destructive→rebuild+barrier+shallow-snapshot.
+- **Empirical Loro probes confirmed**: identical ops under the same `(PeerID,Counter)` converge (dedup), and re-import is idempotent — the premises the whole design rests on.
+- **Test-vs-bytes**: compare *logical projections*, not snapshot bytes (Loro byte-determinism unguaranteed). Frozen corpus = real old bytes, never regenerated (`SILVERWOOD_REGEN_CORPUS=1` only for the in-dev version).
+- Only one real version exists (v1), so the cross-version convergence proof rides a synthetic two-version toy schema in `src/tests/synthetic.rs`; the first real v2 drops into `migrate.rs`'s chain.
+
 ## Part 4 — sync  (deferred; DESIGN §7)
 - [ ] per-document merge over a `DocStore` backend (`LoroDoc::import` + merge, not overwrite)
 - [ ] Loro `export(updates)` + version vectors for delta sync; remote (SSH) `DocStore` backend

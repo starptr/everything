@@ -56,6 +56,14 @@ pub enum Error {
     /// A stored workstream document did not match the expected structure.
     #[error("corrupt workstream document: {0}")]
     Corrupt(String),
+
+    /// A document's schema is newer than this build can read; upgrade silverwood.
+    #[error("document schema v{found} is newer than supported v{supported}; upgrade silverwood")]
+    SchemaTooNew { found: u32, supported: u32 },
+
+    /// A schema migration step failed.
+    #[error("migrating workstream document: {0}")]
+    Migration(String),
 }
 
 /// Convenience alias for results from this crate.

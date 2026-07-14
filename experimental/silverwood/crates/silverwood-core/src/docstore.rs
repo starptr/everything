@@ -53,8 +53,13 @@ impl DocStore for FilesDocStore {
     }
 
     fn save(&self, id: WorkstreamId, bytes: &[u8]) -> Result<()> {
+        // Write to a sibling temp file then rename, so a crash mid-write leaves
+        // the previous document intact rather than a truncated one. The `.tmp`
+        // extension is not `.loro`, so `list_ids` ignores any leftover.
         let path = self.path_for(id);
-        fs::write(&path, bytes).map_err(|e| Error::io(path, e))
+        let tmp = path.with_extension("tmp");
+        fs::write(&tmp, bytes).map_err(|e| Error::io(&tmp, e))?;
+        fs::rename(&tmp, &path).map_err(|e| Error::io(&path, e))
     }
 
     fn list_ids(&self) -> Result<Vec<WorkstreamId>> {

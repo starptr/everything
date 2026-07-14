@@ -30,13 +30,13 @@
 //! LWW keys; `checkouts` nests per-forest maps, safe because keyed by forest id.
 
 use loro::{Container, ExportMode, LoroDoc, LoroMap, ValueOrContainer};
-use serde::Deserialize;
 
 use crate::error::{Error, Result};
 use crate::id::WorkstreamId;
+use crate::migrate;
 use crate::workstream::{
-    AgentKind, AgentSession, Checkout, CheckoutState, CodeChange, Status, Workstream,
-    WorkstreamBody, WorkstreamKind, BASIC_KIND,
+    AgentKind, AgentSession, Checkout, CheckoutState, Status, Workstream, WorkstreamBody,
+    WorkstreamKind, BASIC_KIND,
 };
 
 /// Name of the single root map container.
@@ -58,6 +58,11 @@ pub(crate) fn build(peer_id: u64, body: &WorkstreamBody) -> Result<LoroDoc> {
     root.insert("created_at", body.created_at.as_str())
         .map_err(loro_err)?;
     root.insert("kind", body.kind.tag()).map_err(loro_err)?;
+    root.insert(
+        migrate::SCHEMA_VERSION_KEY,
+        migrate::DOC_SCHEMA_VERSION as i64,
+    )
+    .map_err(loro_err)?;
 
     // The kind container (named after the kind). Created once here — never in a
     // mutator — per the module's merge-safety invariant.
@@ -127,19 +132,57 @@ pub(crate) fn snapshot(doc: &LoroDoc) -> Result<Vec<u8>> {
     doc.export(ExportMode::snapshot()).map_err(loro_err)
 }
 
-/// Hydrate a [`Workstream`] from stored bytes.
+/// The JSON of a document's root map (resolving nested containers).
+fn root_json(id: WorkstreamId, doc: &LoroDoc) -> Result<serde_json::Value> {
+    serde_json::to_value(doc.get_map(ROOT).get_deep_value())
+        .map_err(|e| Error::Corrupt(format!("workstream {id} not serializable: {e}")))
+}
+
+/// Hydrate a [`Workstream`] from stored bytes, upgrading any older schema to the
+/// latest in memory (no disk write). Errors [`Error::SchemaTooNew`] if the
+/// document is newer than this build supports.
 pub(crate) fn hydrate(id: WorkstreamId, bytes: &[u8]) -> Result<Workstream> {
     let doc = LoroDoc::new();
     doc.import(bytes).map_err(loro_err)?;
-    let value = doc.get_map(ROOT).get_deep_value();
-    let json = serde_json::to_value(&value)
-        .map_err(|e| Error::Corrupt(format!("workstream {id} not serializable: {e}")))?;
-    let stored: StoredBody = serde_json::from_value(json)
-        .map_err(|e| Error::Corrupt(format!("workstream {id}: {e}")))?;
+    let root = root_json(id, &doc)?;
     Ok(Workstream {
         id,
-        body: stored.into_body(id)?,
+        body: migrate::to_latest_body(id, &root)?,
     })
+}
+
+/// Read a stored document's schema version without fully hydrating it.
+pub(crate) fn peek_version(id: WorkstreamId, bytes: &[u8]) -> Result<u32> {
+    let doc = LoroDoc::new();
+    doc.import(bytes).map_err(loro_err)?;
+    migrate::detect_version(&root_json(id, &doc)?)
+}
+
+/// Migrate a stored document to the latest schema, re-encoding under `peer_id`.
+/// Returns the rebuilt bytes (a fresh snapshot at the latest version) if the
+/// document was older, or `None` if it is already at the latest. Errors
+/// [`Error::SchemaTooNew`] if the document is newer than this build supports.
+pub(crate) fn migrate_bytes(
+    id: WorkstreamId,
+    bytes: &[u8],
+    peer_id: u64,
+) -> Result<Option<Vec<u8>>> {
+    let doc = LoroDoc::new();
+    doc.import(bytes).map_err(loro_err)?;
+    let root = root_json(id, &doc)?;
+    let from = migrate::detect_version(&root)?;
+    if from > migrate::DOC_SCHEMA_VERSION {
+        return Err(Error::SchemaTooNew {
+            found: from,
+            supported: migrate::DOC_SCHEMA_VERSION,
+        });
+    }
+    if from == migrate::DOC_SCHEMA_VERSION {
+        return Ok(None);
+    }
+    let body = migrate::to_latest_body(id, &root)?;
+    let rebuilt = build(peer_id, &body)?;
+    Ok(Some(snapshot(&rebuilt)?))
 }
 
 /// Overwrite the root `status` scalar (used to archive).
@@ -284,81 +327,6 @@ fn kv_key(namespace: &str, key: &str) -> String {
 /// JSON-encode an agent session for storage as a scalar map value.
 fn agent_session_json(session: &AgentSession) -> String {
     serde_json::to_string(session).expect("encoding an agent session is infallible")
-}
-
-/// The document's stored shape, before the kind data and kv are un-flattened
-/// into the typed [`WorkstreamBody`].
-#[derive(Deserialize)]
-struct StoredBody {
-    name: String,
-    status: Status,
-    kind: String,
-    created_at: String,
-    /// Present iff `kind == "basic"`.
-    #[serde(default)]
-    basic: Option<StoredBasic>,
-    /// JSON `["namespace","key"]` → value.
-    #[serde(default)]
-    kv: std::collections::BTreeMap<String, String>,
-}
-
-/// The stored shape of the `basic` kind container.
-#[derive(Deserialize)]
-struct StoredBasic {
-    code_change: CodeChange,
-    #[serde(default)]
-    checkouts: std::collections::BTreeMap<String, Checkout>,
-    /// session id → JSON-encoded `AgentSession`.
-    #[serde(default)]
-    sessions: std::collections::BTreeMap<String, String>,
-}
-
-impl StoredBody {
-    fn into_body(self, id: WorkstreamId) -> Result<WorkstreamBody> {
-        let kind = match self.kind.as_str() {
-            BASIC_KIND => {
-                let basic = self.basic.ok_or_else(|| {
-                    Error::Corrupt(format!(
-                        "workstream {id}: kind=basic but no `basic` container"
-                    ))
-                })?;
-                let mut sessions = std::collections::BTreeMap::new();
-                for (session_id, encoded) in basic.sessions {
-                    let session: AgentSession = serde_json::from_str(&encoded).map_err(|e| {
-                        Error::Corrupt(format!("workstream {id} session {session_id}: {e}"))
-                    })?;
-                    sessions.insert(session_id, session);
-                }
-                WorkstreamKind::Basic {
-                    code_change: basic.code_change,
-                    checkouts: basic.checkouts,
-                    sessions,
-                }
-            }
-            other => {
-                return Err(Error::Corrupt(format!(
-                    "workstream {id}: unknown kind {other:?}"
-                )))
-            }
-        };
-
-        let mut kv: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>> =
-            std::collections::BTreeMap::new();
-        for (composite, value) in self.kv {
-            let [namespace, key]: [String; 2] = serde_json::from_str(&composite).map_err(|e| {
-                Error::Corrupt(format!("workstream {id} kv key {composite:?}: {e}"))
-            })?;
-            kv.entry(namespace).or_default().insert(key, value);
-        }
-
-        Ok(WorkstreamBody {
-            name: self.name,
-            status: self.status,
-            created_at: self.created_at,
-            kind,
-            kv,
-        })
-    }
 }
 
 #[cfg(test)]

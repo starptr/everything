@@ -16,15 +16,20 @@ mod docstore;
 mod error;
 mod forest;
 mod id;
+mod migrate;
 mod provider;
 mod source;
 mod workstream;
 
+#[cfg(test)]
+mod tests;
+
 pub use config::ForestConfig;
 pub use docstore::{DocStore, FilesDocStore};
 pub use error::{Error, Result};
-pub use forest::Forest;
+pub use forest::{Forest, UpgradeReport};
 pub use id::{ForestId, WorkstreamId};
+pub use migrate::DOC_SCHEMA_VERSION;
 pub use provider::{CheckoutProvider, JjColocated};
 pub use source::HttpsGitUrl;
 pub use workstream::{

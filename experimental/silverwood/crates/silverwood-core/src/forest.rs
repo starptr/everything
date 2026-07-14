@@ -6,16 +6,38 @@ use std::path::{Path, PathBuf};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
+use serde::Serialize;
+
 use crate::config::ForestConfig;
 use crate::doc;
 use crate::docstore::{DocStore, FilesDocStore};
 use crate::error::{Error, Result};
 use crate::id::{ForestId, WorkstreamId};
+use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
     AgentKind, Checkout, CheckoutState, CodeChange, NewKind, NewWorkstream, Status, Workstream,
     WorkstreamBody, WorkstreamKind,
 };
+
+/// The outcome for one document in a [`Forest::upgrade_all`] pass.
+#[derive(Debug, Clone, Serialize)]
+pub struct UpgradeReport {
+    /// The workstream whose document was inspected.
+    pub id: WorkstreamId,
+    /// The document's schema version before the pass.
+    pub from: u32,
+    /// The latest schema version (what it was, or would be, upgraded to).
+    pub to: u32,
+}
+
+impl UpgradeReport {
+    /// Whether the document was below the latest version — i.e. upgraded, or in
+    /// a dry run *would* be upgraded.
+    pub fn upgraded(&self) -> bool {
+        self.from != self.to
+    }
+}
 
 /// Config file at the forest root.
 const CONFIG_FILE: &str = "config.toml";
@@ -234,9 +256,61 @@ impl Forest {
     }
 
     /// Load a workstream's document, ready to author under this forest's peer id.
+    ///
+    /// Lazily upgrades the document to the latest schema first (persisting the
+    /// rewrite), since in-place mutators navigate the latest layout. Errors
+    /// [`Error::SchemaTooNew`] if the document is newer than this build.
     fn load_doc(&self, id: WorkstreamId) -> Result<loro::LoroDoc> {
         let bytes = self.docs.load(id)?.ok_or(Error::NotFound(id))?;
+        let bytes = match doc::migrate_bytes(id, &bytes, self.peer_id())? {
+            Some(rewritten) => {
+                self.docs.save(id, &rewritten)?;
+                rewritten
+            }
+            None => bytes,
+        };
         doc::load(self.peer_id(), &bytes)
+    }
+
+    /// Upgrade every document in the forest to the latest schema version,
+    /// returning a per-document report sorted by id. With `dry_run`, inspects and
+    /// reports without writing. Idempotent — documents already at the latest are
+    /// left untouched. Errors [`Error::SchemaTooNew`] if any document is newer
+    /// than this build supports.
+    pub fn upgrade_all(&self, dry_run: bool) -> Result<Vec<UpgradeReport>> {
+        let latest = migrate::DOC_SCHEMA_VERSION;
+        let mut reports = Vec::new();
+        for id in self.docs.list_ids()? {
+            let bytes = self.docs.load(id)?.ok_or(Error::NotFound(id))?;
+            let from = doc::peek_version(id, &bytes)?;
+            if from > latest {
+                return Err(Error::SchemaTooNew {
+                    found: from,
+                    supported: latest,
+                });
+            }
+            if from < latest && !dry_run {
+                if let Some(rewritten) = doc::migrate_bytes(id, &bytes, self.peer_id())? {
+                    self.docs.save(id, &rewritten)?;
+                }
+            }
+            reports.push(UpgradeReport {
+                id,
+                from,
+                to: latest,
+            });
+        }
+        reports.sort_by_key(|r| r.id);
+        Ok(reports)
+    }
+
+    /// Count documents below the latest schema version (a read-only scan).
+    pub fn pending_upgrades(&self) -> Result<usize> {
+        Ok(self
+            .upgrade_all(true)?
+            .iter()
+            .filter(|r| r.upgraded())
+            .count())
     }
 }
 
