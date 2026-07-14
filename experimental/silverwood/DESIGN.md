@@ -211,6 +211,9 @@ Default forest layout:
   (`ExportMode::snapshot()`) as the document bytes; optionally append updates
   (`ExportMode::updates`) and recompact if a document's history grows. v1 keeps it
   simple: rewrite the snapshot on each committed mutation.
+- **No stored schema version yet.** The on-disk shape carries no version marker, so
+  a shape change is a clean break (recreate the forest). A versioned, deterministic
+  migration path is required before durable data / sync — see §9.
 - **`config.toml`** holds the forest id (a UUID) and its derived stable Loro peer
   id, plus local settings. It is machine-local state and is never synced.
 - **Forest location resolution** is a CLI (frontend) concern — core always takes an
@@ -296,6 +299,8 @@ Deferred, but the model is built for it:
   edits. Sync must load and merge documents, not overwrite them.
 - Membership union + in-document tombstones (§2.1) mean adds and deletes both
   converge without a central index.
+- **Sync assumes a shared schema.** Peers running different silverwood versions
+  need the migration story in §9 to converge rather than fork.
 
 ---
 
@@ -313,7 +318,49 @@ flat forest membership is unchanged.
 
 ---
 
-## 9. Open questions
+## 9. Schema evolution & migration (future — required before durable data)
+
+The document shape *will* change over silverwood's life (this doc's own history
+already restructured sessions under a workstream kind). There is **no migration
+path today**: a schema change is a **clean break**, and any existing forest is
+recreated. `doc.rs`'s `into_body` only understands the current shape — an
+old-format document fails with `Error::Corrupt` rather than being upgraded. That
+is acceptable *only* while silverwood is pre-release with no data worth keeping.
+
+**Eventually a versioned, deterministic migration path is required.** What makes
+this harder than a normal schema migration is that it collides with the sync goal
+(§7): once forests sync, two peers may run **different silverwood versions**, and a
+**destructive** migration (restructuring containers — e.g. moving a field to a new
+container) mints *new* Loro container ids, breaking merge lineage so an un-migrated
+peer's edits diverge or are silently dropped. So "rewrite the document on open"
+is not a safe migration by itself.
+
+The intended tiered approach, most-preferred first:
+
+1. **Additive & tolerant — the default.** Only *add* fields/containers; never move,
+   rename, or remove. Readers fall back to serde defaults, so old and new versions
+   interoperate with no migration at all. `StoredBody` already does this (its
+   `basic`/`checkouts`/`sessions`/`kv` are `#[serde(default)]`). This is what Loro
+   wants; make it the house style for most changes.
+2. **Read-time normalization** for changes that cannot be additive: parse both old
+   and new shapes, normalize in `into_body`, and re-save in the new shape on the
+   next mutation. Clean only for pre-sync / single-forest data, since restructuring
+   containers still fights merge lineage.
+3. **Versioned, deterministic migration** for genuinely destructive changes: add a
+   `schema_version` marker (on the document and/or `config.toml`), migrate on open
+   by transforming **via Loro operations** (not a from-scratch rebuild, which
+   discards lineage), bump the version, and apply the transform **deterministically**
+   so peers on the new version converge rather than fork. Cross-version coexistence
+   during a rolling upgrade is the open hard part.
+
+The seam for all three is the `hydrate → StoredBody → into_body` boundary in
+`doc.rs` (on-disk JSON → domain), plus `Forest::open` / the `DocStore` for
+whole-forest upgrades. A `schema_version` marker should be introduced **before**
+sync ships, even if the first migrations are only additive.
+
+---
+
+## 10. Open questions
 
 - **Explicit `base_ref` / working-branch** params on checkout creation — add when
   wanted (kept out now per §2.4).
