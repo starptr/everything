@@ -7,9 +7,9 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] Vendor `Fallomai/openui` @ `2963e59` into `experimental/papyrus` (see `VENDOR.md`)
 - [x] Rebrand: `package.json` name/bin → papyrus; drop stale upstream URLs; remove
       prebuilt `.js` duplicates
-- [ ] `flake.nix` — bun2nix `writeBunApplication` (server) + client build; commit
+- [x] `flake.nix` — bun2nix `writeBunApplication` (server) + client build; commit
       `bun.nix` + `client/bun.nix`
-- [ ] soup re-export (`git+file` input + `pkgs/papyrus.nix` + `extraPackages.nix`)
+- [x] soup re-export (`git+file` input + `pkgs/papyrus.nix` + `extraPackages.nix`)
 
 ## Part 1 — Deploy (deferred)
 - [ ] Wire papyrus onto sodium's PATH (silverwood-style soup consumption)
