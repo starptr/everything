@@ -10,8 +10,9 @@
 //!
 //! The root map holds the scalars (`name`, `status`, `created_at`) plus the
 //! `kind` discriminant, one kind container named after the kind (today `basic`),
-//! and a root-level `kv` map. The `basic` container nests `code_change`,
-//! `checkouts` (keyed by forest id) and `sessions`.
+//! and a root-level `kv` map. The `basic` container nests `code_change` and
+//! `checkouts` (keyed by forest id). Agent sessions are **not** a kind container:
+//! they are ordinary `kv` entries under the core-reserved [`SESSION_NS`].
 //!
 //! ## Merge-safety invariant
 //!
@@ -19,15 +20,15 @@
 //! unsafe: each forest makes a distinct container and the parent map LWW-picks
 //! one, silently dropping the other's contents. We avoid this by only ever
 //! creating containers **once, at genesis in [`build`]** — the `kind` is fixed
-//! at creation and the `basic`/`code_change`/`checkouts`/`sessions`/`kv`
-//! containers are never lazily re-created in a mutator (mutators fetch them with
-//! `child_map`, which errors if absent). Two forests derive from the same base
-//! snapshot, so they share those container ids.
+//! at creation and the `basic`/`code_change`/`checkouts`/`kv` containers are
+//! never lazily re-created in a mutator (mutators fetch them with `child_map`,
+//! which errors if absent). Two forests derive from the same base snapshot, so
+//! they share those container ids.
 //!
-//! Within those genesis containers, `sessions` and `kv` store *scalar string*
-//! values (kv keyed by JSON `["namespace","key"]`, sessions keyed by session id
-//! with a JSON-encoded [`AgentSession`]) so independent entries merge as ordinary
-//! LWW keys; `checkouts` nests per-forest maps, safe because keyed by forest id.
+//! Within those genesis containers, `kv` stores *scalar string* values keyed by
+//! JSON `["namespace","key"]` so independent entries merge as ordinary LWW keys
+//! (sessions, living under [`SESSION_NS`], merge the same way); `checkouts` nests
+//! per-forest maps, safe because keyed by forest id.
 
 use loro::{Container, ExportMode, LoroDoc, LoroMap, ValueOrContainer};
 
@@ -36,7 +37,7 @@ use crate::id::WorkstreamId;
 use crate::migrate;
 use crate::workstream::{
     AgentKind, AgentSession, Checkout, CheckoutState, Status, Workstream, WorkstreamBody,
-    WorkstreamKind, BASIC_KIND,
+    WorkstreamKind, BASIC_KIND, SESSION_NS,
 };
 
 /// Name of the single root map container.
@@ -70,7 +71,6 @@ pub(crate) fn build(peer_id: u64, body: &WorkstreamBody) -> Result<LoroDoc> {
         WorkstreamKind::Basic {
             code_change,
             checkouts,
-            sessions,
         } => {
             let basic = root
                 .insert_container(BASIC_KIND, LoroMap::new())
@@ -91,20 +91,11 @@ pub(crate) fn build(peer_id: u64, body: &WorkstreamBody) -> Result<LoroDoc> {
             for (forest_id, checkout) in checkouts {
                 write_checkout(&checkouts_map, forest_id, checkout)?;
             }
-
-            // sessions: flat map of scalar strings (see module docs).
-            let sessions_map = basic
-                .insert_container("sessions", LoroMap::new())
-                .map_err(loro_err)?;
-            for (session_id, session) in sessions {
-                sessions_map
-                    .insert(session_id.as_str(), agent_session_json(session))
-                    .map_err(loro_err)?;
-            }
         }
     }
 
     // kv: flat map of scalar strings at the root — kind-agnostic frontend state.
+    // Sessions ride along here too, under the reserved SESSION_NS (see module docs).
     let kv = root
         .insert_container("kv", LoroMap::new())
         .map_err(loro_err)?;
@@ -194,6 +185,13 @@ pub(crate) fn set_status(doc: &LoroDoc, status: Status) -> Result<()> {
     Ok(())
 }
 
+/// Overwrite the root `name` scalar (used to rename a workstream).
+pub(crate) fn set_name(doc: &LoroDoc, name: &str) -> Result<()> {
+    doc.get_map(ROOT).insert("name", name).map_err(loro_err)?;
+    doc.commit();
+    Ok(())
+}
+
 /// Overwrite the `state` of an existing per-forest checkout entry, in place.
 pub(crate) fn set_checkout_state(
     doc: &LoroDoc,
@@ -227,16 +225,18 @@ pub(crate) fn unset_kv(doc: &LoroDoc, namespace: &str, key: &str) -> Result<()> 
     Ok(())
 }
 
-/// Attach an agent session. Errors if `session_id` is already attached.
-pub(crate) fn attach_session(
+/// Create an agent session — a scalar entry in the root `kv` map under the
+/// reserved [`SESSION_NS`], keyed by session id. Errors if already present.
+pub(crate) fn create_session(
     doc: &LoroDoc,
     session_id: &str,
     agent_kind: AgentKind,
     name: &str,
     created_at: &str,
 ) -> Result<()> {
-    let sessions = child_map(&basic_map(doc)?, "sessions")?;
-    if sessions.get(session_id).is_some() {
+    let kv = child_map(&doc.get_map(ROOT), "kv")?;
+    let composite = kv_key(SESSION_NS, session_id);
+    if kv.get(&composite).is_some() {
         return Err(Error::SessionExists(session_id.to_string()));
     }
     let session = AgentSession {
@@ -244,36 +244,35 @@ pub(crate) fn attach_session(
         name: name.to_string(),
         created_at: created_at.to_string(),
     };
-    sessions
-        .insert(session_id, agent_session_json(&session))
+    kv.insert(composite.as_str(), agent_session_json(&session))
         .map_err(loro_err)?;
     doc.commit();
     Ok(())
 }
 
-/// Rename an attached session (preserving its `kind` and `created_at`). Errors
-/// if absent.
+/// Rename a session (preserving its `kind` and `created_at`). Errors if absent.
 pub(crate) fn rename_session(doc: &LoroDoc, session_id: &str, name: &str) -> Result<()> {
-    let sessions = child_map(&basic_map(doc)?, "sessions")?;
-    let existing = sessions
-        .get(session_id)
+    let kv = child_map(&doc.get_map(ROOT), "kv")?;
+    let composite = kv_key(SESSION_NS, session_id);
+    let existing = kv
+        .get(&composite)
         .and_then(value_as_string)
         .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
     let mut session: AgentSession = serde_json::from_str(&existing)
         .map_err(|e| Error::Corrupt(format!("session {session_id}: {e}")))?;
     session.name = name.to_string();
-    sessions
-        .insert(session_id, agent_session_json(&session))
+    kv.insert(composite.as_str(), agent_session_json(&session))
         .map_err(loro_err)?;
     doc.commit();
     Ok(())
 }
 
-/// Detach a session. A no-op if it is not attached.
-pub(crate) fn detach_session(doc: &LoroDoc, session_id: &str) -> Result<()> {
-    let sessions = child_map(&basic_map(doc)?, "sessions")?;
-    if sessions.get(session_id).is_some() {
-        sessions.delete(session_id).map_err(loro_err)?;
+/// Remove a session. A no-op if it is not present.
+pub(crate) fn remove_session(doc: &LoroDoc, session_id: &str) -> Result<()> {
+    let kv = child_map(&doc.get_map(ROOT), "kv")?;
+    let composite = kv_key(SESSION_NS, session_id);
+    if kv.get(&composite).is_some() {
+        kv.delete(&composite).map_err(loro_err)?;
         doc.commit();
     }
     Ok(())
@@ -350,7 +349,6 @@ mod tests {
                     mode: CheckoutMode::JjColocated,
                 },
                 checkouts: BTreeMap::new(),
-                sessions: BTreeMap::new(),
             },
             kv: BTreeMap::new(),
         }
@@ -363,19 +361,21 @@ mod tests {
             .entry("com.example".into())
             .or_default()
             .insert("theme".into(), "\"dark\"".into());
-        let WorkstreamKind::Basic { sessions, .. } = &mut body.kind;
-        sessions.insert(
+        // A session is just a reserved-namespace kv entry (see SESSION_NS).
+        body.kv.entry(SESSION_NS.into()).or_default().insert(
             "sid-1".into(),
-            AgentSession {
+            agent_session_json(&AgentSession {
                 kind: AgentKind::ClaudeCode,
                 name: "planning".into(),
                 created_at: "t0".into(),
-            },
+            }),
         );
 
         let doc = build(7, &body).unwrap();
         let ws = hydrate(WorkstreamId::generate(), &snapshot(&doc).unwrap()).unwrap();
         assert_eq!(ws.body, body);
+        // The typed session view decodes the reserved namespace.
+        assert_eq!(ws.body.sessions()["sid-1"].name, "planning");
     }
 
     /// The heart of the CRDT model: two forests editing the same workstream
@@ -392,9 +392,9 @@ mod tests {
 
         // Concurrent edits — crucially, the SAME kv namespace on both sides.
         set_kv(&a, "fe", "left", "1").unwrap();
-        attach_session(&a, "sess-A", AgentKind::ClaudeCode, "from A", "t0").unwrap();
+        create_session(&a, "sess-A", AgentKind::ClaudeCode, "from A", "t0").unwrap();
         set_kv(&b, "fe", "right", "2").unwrap();
-        attach_session(&b, "sess-B", AgentKind::ClaudeCode, "from B", "t0").unwrap();
+        create_session(&b, "sess-B", AgentKind::ClaudeCode, "from B", "t0").unwrap();
 
         // Exchange updates in both directions.
         let ua = a.export(ExportMode::all_updates()).unwrap();
@@ -410,25 +410,25 @@ mod tests {
         // ...which is the union of both forests' edits in the shared namespace.
         assert_eq!(wa.body.kv["fe"]["left"], "1");
         assert_eq!(wa.body.kv["fe"]["right"], "2");
-        let sessions = wa.body.sessions().expect("basic kind has sessions");
+        let sessions = wa.body.sessions();
         assert!(sessions.contains_key("sess-A"));
         assert!(sessions.contains_key("sess-B"));
     }
 
     /// The public `--json` contract is flat: `kind` is a string discriminant and
-    /// the basic kind's data (code_change/checkouts/sessions) plus kv sit at the
-    /// top level alongside the id. Frontends (and the CLI e2e tests) depend on it.
+    /// the basic kind's data (code_change/checkouts) plus kv sit at the top level
+    /// alongside the id. Sessions are *not* a top-level field — they are kv entries
+    /// under the reserved [`SESSION_NS`]. Frontends + the CLI e2e tests depend on it.
     #[test]
     fn public_json_shape_is_flat() {
         let mut body = sample_body();
-        let WorkstreamKind::Basic { sessions, .. } = &mut body.kind;
-        sessions.insert(
+        body.kv.entry(SESSION_NS.into()).or_default().insert(
             "sid-1".into(),
-            AgentSession {
+            agent_session_json(&AgentSession {
                 kind: AgentKind::ClaudeCode,
                 name: "planning".into(),
                 created_at: "t0".into(),
-            },
+            }),
         );
         let ws = Workstream {
             id: WorkstreamId::generate(),
@@ -440,8 +440,13 @@ mod tests {
         assert_eq!(json["kind"], "basic");
         assert_eq!(json["code_change"]["mode"], "jj-colocated");
         assert!(json["checkouts"].is_object());
-        assert_eq!(json["sessions"]["sid-1"]["kind"], "claude-code");
-        assert_eq!(json["sessions"]["sid-1"]["name"], "planning");
         assert!(json["kv"].is_object());
+        // No top-level `sessions`; they live in the reserved kv namespace as
+        // JSON-string values that decode back to an AgentSession.
+        assert!(json.get("sessions").is_none());
+        let encoded = json["kv"][SESSION_NS]["sid-1"].as_str().unwrap();
+        let session: AgentSession = serde_json::from_str(encoded).unwrap();
+        assert_eq!(session.kind, AgentKind::ClaudeCode);
+        assert_eq!(session.name, "planning");
     }
 }

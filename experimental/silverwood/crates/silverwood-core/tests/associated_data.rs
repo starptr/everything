@@ -44,26 +44,57 @@ fn kv_round_trip() {
 }
 
 #[test]
+fn reserved_namespace_is_rejected() {
+    let dir = temp_forest("reserved");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+    let ws = forest.create_workstream(new_ws("reserved-demo")).unwrap();
+
+    // The core-reserved prefix cannot be written through raw kv...
+    assert!(forest
+        .set_kv(ws.id, "app.andref.silverwood.session", "sid", "{}")
+        .is_err());
+    assert!(forest
+        .set_kv(ws.id, "app.andref.silverwood.anything", "k", "v")
+        .is_err());
+    assert!(forest
+        .unset_kv(ws.id, "app.andref.silverwood.session", "sid")
+        .is_err());
+    // ...but a frontend's own namespace is fine.
+    forest
+        .set_kv(ws.id, "app.andref.papyrus", "position", "{}")
+        .unwrap();
+
+    // Sessions go through the typed API and land in the reserved namespace.
+    forest
+        .create_session(ws.id, "s1", AgentKind::ClaudeCode, "n")
+        .unwrap();
+    assert_eq!(forest.get(ws.id).unwrap().body.sessions().len(), 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn session_lifecycle() {
     let dir = temp_forest("sessions");
     let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
     let ws = forest.create_workstream(new_ws("sess-demo")).unwrap();
 
     forest
-        .attach_session(ws.id, "abc-123", AgentKind::ClaudeCode, "planning")
+        .create_session(ws.id, "abc-123", AgentKind::ClaudeCode, "planning")
         .unwrap();
     assert!(
         forest
-            .attach_session(ws.id, "abc-123", AgentKind::ClaudeCode, "dup")
+            .create_session(ws.id, "abc-123", AgentKind::ClaudeCode, "dup")
             .is_err(),
-        "duplicate attach must error"
+        "duplicate create must error"
     );
 
     forest
         .rename_session(ws.id, "abc-123", "planning v2")
         .unwrap();
     let got = forest.get(ws.id).unwrap();
-    let session = &got.body.sessions().expect("basic kind has sessions")["abc-123"];
+    let sessions = got.body.sessions();
+    let session = &sessions["abc-123"];
     assert_eq!(session.name, "planning v2");
     assert_eq!(session.kind, AgentKind::ClaudeCode);
     assert!(!session.created_at.is_empty());
@@ -73,17 +104,11 @@ fn session_lifecycle() {
         "renaming an absent session must error"
     );
 
-    forest.detach_session(ws.id, "abc-123").unwrap();
-    assert!(forest
-        .get(ws.id)
-        .unwrap()
-        .body
-        .sessions()
-        .unwrap()
-        .is_empty());
+    forest.remove_session(ws.id, "abc-123").unwrap();
+    assert!(forest.get(ws.id).unwrap().body.sessions().is_empty());
 
-    // Detaching an absent session is a no-op.
-    forest.detach_session(ws.id, "abc-123").unwrap();
+    // Removing an absent session is a no-op.
+    forest.remove_session(ws.id, "abc-123").unwrap();
 
     let _ = std::fs::remove_dir_all(&dir);
 }

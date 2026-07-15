@@ -78,7 +78,7 @@ proptest! {
                 doc::set_kv(&d, &format!("f{i}"), &format!("k{ki}"), &format!("v{vi}")).unwrap();
             }
             for si in sess_ops.iter().copied().collect::<BTreeSet<u8>>() {
-                doc::attach_session(&d, &format!("f{i}-s{si}"), AgentKind::ClaudeCode, "n", "t0")
+                doc::create_session(&d, &format!("f{i}-s{si}"), AgentKind::ClaudeCode, "n", "t0")
                     .unwrap();
             }
             forests.push(d);
@@ -106,9 +106,10 @@ proptest! {
                     .is_some();
                 prop_assert!(present, "lost kv f{}/k{}", i, ki);
             }
+            let sessions = merged.sessions();
             for si in sess_ops.iter().copied().collect::<BTreeSet<u8>>() {
                 prop_assert!(
-                    merged.sessions().unwrap().contains_key(&format!("f{i}-s{si}")),
+                    sessions.contains_key(&format!("f{i}-s{si}")),
                     "lost session f{}-s{}",
                     i,
                     si

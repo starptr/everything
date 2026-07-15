@@ -1,15 +1,20 @@
-//! The v1 document corpus.
+//! The document corpus: round-trip + frozen-byte fixtures.
 //!
 //! Two layers:
 //! - **Round-trip**: current code builds every structure in [`sample_bodies`],
 //!   snapshots, and hydrates back to an equal body — plus version-stamp and
 //!   already-latest checks.
-//! - **Frozen bytes**: real v1 `.loro` snapshots committed under `corpus/v1/`
-//!   (see `corpus/README.md`) hydrate to their committed projection. This guards
-//!   the day v2 lands and these become genuinely *old* bytes. Regenerate with
-//!   `SILVERWOOD_REGEN_CORPUS=1 cargo test -p silverwood-core corpus::regenerate`.
+//! - **Frozen bytes**: real `.loro` snapshots committed under `corpus/vN/` (see
+//!   `corpus/README.md`). The current version's bytes guard model drift; older
+//!   versions' bytes are genuine *old* bytes that guard the migration path — the
+//!   `v1` snapshots stored sessions inside the kind, so reading them must migrate
+//!   the sessions into the reserved kv namespace.
+//!
+//! Regenerate the current version's fixtures — and refresh older versions' `.json`
+//! projections from their frozen `.loro` — with
+//! `SILVERWOOD_REGEN_CORPUS=1 cargo test -p silverwood-core corpus::regenerate`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use loro::{ExportMode, LoroDoc};
 
@@ -20,14 +25,28 @@ use crate::migrate::DOC_SCHEMA_VERSION;
 
 const PEER: u64 = 1;
 
-fn corpus_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/corpus/v1")
+fn corpus_dir(version: u32) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("src/tests/corpus/v{version}"))
+}
+
+/// Read a `<name>.loro` + `<name>.json` fixture from a version's corpus dir.
+fn read_fixture(dir: &Path, name: &str) -> (Vec<u8>, serde_json::Value) {
+    let loro_path = dir.join(format!("{name}.loro"));
+    let json_path = dir.join(format!("{name}.json"));
+    let bytes = std::fs::read(&loro_path).unwrap_or_else(|e| {
+        panic!(
+            "missing frozen corpus {loro_path:?}: {e}\n(regenerate with SILVERWOOD_REGEN_CORPUS=1)"
+        )
+    });
+    let expected: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&json_path).unwrap()).unwrap();
+    (bytes, expected)
 }
 
 /// Every structure round-trips, is stamped at the latest version, and reports as
 /// already-latest (no migration needed).
 #[test]
-fn v1_round_trips_all_structures() {
+fn round_trips_all_structures() {
     for (name, body) in sample_bodies() {
         let doc = doc::build(PEER, &body).unwrap();
         let bytes = doc::snapshot(&doc).unwrap();
@@ -77,28 +96,19 @@ fn future_version_is_rejected() {
     ));
 }
 
-/// Frozen v1 bytes (produced by an earlier run and committed) hydrate to their
-/// committed projection. When these are still v1==latest this also guards model
-/// drift; once v2 lands it becomes the real read-old-bytes migration guard.
+/// Frozen current-version bytes hydrate to their committed projection, which must
+/// also match today's model (drift guard).
 #[test]
-fn frozen_v1_corpus_hydrates_to_projection() {
-    let dir = corpus_dir();
+fn frozen_current_corpus_hydrates_to_projection() {
+    let dir = corpus_dir(DOC_SCHEMA_VERSION);
     for (name, body) in sample_bodies() {
-        let loro_path = dir.join(format!("{name}.loro"));
-        let json_path = dir.join(format!("{name}.json"));
-        let bytes = std::fs::read(&loro_path).unwrap_or_else(|e| {
-            panic!("missing frozen corpus {loro_path:?}: {e}\n(regenerate with SILVERWOOD_REGEN_CORPUS=1)")
-        });
-        let expected: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&json_path).unwrap()).unwrap();
-
+        let (bytes, expected) = read_fixture(&dir, name);
         let ws = doc::hydrate(any_id(), &bytes).unwrap();
         assert_eq!(
             serde_json::to_value(&ws.body).unwrap(),
             expected,
             "{name}: frozen bytes → projection"
         );
-        // The committed projection must also match today's model (drift guard).
         assert_eq!(
             serde_json::to_value(&body).unwrap(),
             expected,
@@ -107,27 +117,94 @@ fn frozen_v1_corpus_hydrates_to_projection() {
     }
 }
 
-/// Regenerate the frozen corpus on disk. A no-op unless `SILVERWOOD_REGEN_CORPUS`
-/// is set, so normal test runs never write. Run it after intentionally changing a
-/// v1 sample, then commit the updated `corpus/v1/*` fixtures.
+/// The migration guard: frozen **v1** bytes (sessions stored inside the kind) are
+/// genuinely old. Reading them migrates v1→v2 — sessions relocate into the
+/// reserved kv namespace — and must yield the committed current projection (and
+/// today's model) on both the read-old-bytes and rewritten-bytes paths.
+#[test]
+fn frozen_v1_corpus_migrates_to_current_projection() {
+    let dir = corpus_dir(1);
+    for (name, body) in sample_bodies() {
+        let (bytes, expected) = read_fixture(&dir, name);
+
+        // The frozen bytes really are v1, and migrating rewrites them to latest.
+        assert_eq!(
+            doc::peek_version(any_id(), &bytes).unwrap(),
+            1,
+            "{name}: v1"
+        );
+        let rewritten = doc::migrate_bytes(any_id(), &bytes, PEER)
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name}: v1 must migrate to a rewrite"));
+        assert_eq!(
+            doc::peek_version(any_id(), &rewritten).unwrap(),
+            DOC_SCHEMA_VERSION,
+            "{name}: rewrite is stamped latest"
+        );
+
+        // Old bytes and rewritten bytes both hydrate to the current projection.
+        for (label, b) in [
+            ("old", bytes.as_slice()),
+            ("rewritten", rewritten.as_slice()),
+        ] {
+            let ws = doc::hydrate(any_id(), b).unwrap();
+            assert_eq!(
+                serde_json::to_value(&ws.body).unwrap(),
+                expected,
+                "{name} ({label}): migrated projection"
+            );
+        }
+        // The migrated model equals today's model (via the committed json).
+        assert_eq!(
+            serde_json::to_value(&body).unwrap(),
+            expected,
+            "{name}: model drift — regenerate the corpus"
+        );
+    }
+}
+
+/// Regenerate the corpus. A no-op unless `SILVERWOOD_REGEN_CORPUS` is set, so
+/// normal test runs never write. Writes the current version's `.loro` + `.json`
+/// fixtures from the live model, and refreshes older versions' `.json` projection
+/// sidecars from their **frozen** `.loro` bytes — never rewriting those bytes,
+/// which would defeat the read-old-bytes guard. Review + commit the diff.
 #[test]
 fn regenerate() {
     if std::env::var("SILVERWOOD_REGEN_CORPUS").is_err() {
         return;
     }
-    let dir = corpus_dir();
-    std::fs::create_dir_all(&dir).unwrap();
+
+    // Current version: (re)write both bytes and projection from the live model.
+    let cur = corpus_dir(DOC_SCHEMA_VERSION);
+    std::fs::create_dir_all(&cur).unwrap();
     for (name, body) in sample_bodies() {
         let doc = doc::build(PEER, &body).unwrap();
         std::fs::write(
-            dir.join(format!("{name}.loro")),
+            cur.join(format!("{name}.loro")),
             doc::snapshot(&doc).unwrap(),
         )
         .unwrap();
         std::fs::write(
-            dir.join(format!("{name}.json")),
+            cur.join(format!("{name}.json")),
             serde_json::to_string_pretty(&body).unwrap(),
         )
         .unwrap();
+    }
+
+    // Older versions: refresh only the projection sidecars from their frozen bytes
+    // (hydration migrates them up to the latest model).
+    for version in 1..DOC_SCHEMA_VERSION {
+        let dir = corpus_dir(version);
+        for (name, _) in sample_bodies() {
+            let Ok(bytes) = std::fs::read(dir.join(format!("{name}.loro"))) else {
+                continue;
+            };
+            let ws = doc::hydrate(any_id(), &bytes).unwrap();
+            std::fs::write(
+                dir.join(format!("{name}.json")),
+                serde_json::to_string_pretty(&ws.body).unwrap(),
+            )
+            .unwrap();
+        }
     }
 }

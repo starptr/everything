@@ -17,10 +17,10 @@ layer underneath them that lets you swap the frontend without migrating data.
   come and go; the checkout locations, agent-session associations, and workstream
   metadata are stable and outlive any one frontend.
 - **A kind, generalizable later.** A workstream has exactly one **kind**; today
-  the only kind is **basic** (a code-change, its checkouts, and zero or more agent
-  sessions). The design leaves room for other kinds — e.g. a **feature**
-  (potentially a nested, reparentable hierarchy) that relates to sessions
-  differently — without a rewrite. See §8.
+  the only kind is **basic** (a code-change and its checkouts). Agent sessions are
+  kind-agnostic — stored as reserved-namespace KV (§5) — so any kind has them. The
+  design leaves room for other kinds — e.g. a **feature** (potentially a nested,
+  reparentable hierarchy) — without a rewrite. See §8.
 - **CRDT-friendly from day one.** State is stored as CRDT documents so that
   multiple *forests* (e.g. laptop and a remote dev shell) can eventually
   synchronize in an eventually-consistent way. Actual sync is deferred (§7); the
@@ -53,9 +53,9 @@ layer underneath them that lets you swap the frontend without migrating data.
 | --- | --- |
 | **Forest** | One local instance of silverwood state — by default the directory `~/.silverwood`. Two machines = two forests. A forest is *not necessarily* a directory in the future; storage is abstracted (§4). |
 | **Workstream** | The unit a developer works on. Has a human name, common properties, exactly one **kind**, and open namespaced KV. One Loro document per workstream. |
-| **Kind** | What a workstream *is*. Today the only kind is **basic** (§3): a code-change, its checkouts, and agent sessions. Future kinds may hold different data and relate to sessions differently (§8). |
+| **Kind** | What a workstream *is*. Today the only kind is **basic** (§3): a code-change and its checkouts. Future kinds may hold different data (§8). |
 | **Code-change** | What a basic workstream is built around: a working copy provisioned by silverwood by cloning an HTTPS git endpoint in a specified **mode** (§3). |
-| **Agent session** | An **agent kind** (today only `claude-code`) + a session id + a human-friendly name, associated with a basic workstream (zero or more). |
+| **Agent session** | An **agent kind** (today only `claude-code`) + a session id + a human-friendly name. Stored as a special case of namespaced KV under the core-reserved `app.andref.silverwood.session` namespace, so sessions are kind-agnostic (§5). |
 | **Forest id / peer id** | The forest's stable identity, used as the Loro peer/actor id so edits are attributable. Local, never synced. |
 | **DocStore** | The trait abstracting where workstream documents are persisted (files by default). |
 | **CheckoutProvider** | The trait abstracting how a code-change is materialized on disk (jj-colocated clone today). |
@@ -100,15 +100,17 @@ root (LoroMap)
 │   ├─ code_change : LoroMap        # code-change config (see §3)
 │   │   ├─ source    : string       # https git url
 │   │   └─ mode      : "jj-colocated"
-│   ├─ checkouts   : LoroMap keyed by <forest-id>   # per-forest materialization
-│   │   └─ <forest-id> : { location, state, mode }  # keyed → concurrent creates never conflict
-│   └─ sessions    : LoroMap keyed by <agent-session-id>   # OR-Set by construction
-│       └─ <session-id> : { kind, name, created_at }        # kind = agent kind, e.g. "claude-code"
-└─ kv          : LoroMap (namespace → LoroMap(key → json-string))   # open frontend state (§5)
+│   └─ checkouts   : LoroMap keyed by <forest-id>   # per-forest materialization
+│       └─ <forest-id> : { location, state, mode }  # keyed → concurrent creates never conflict
+└─ kv          : LoroMap (namespace → key → json-string)   # open frontend state (§5)
+    └─ app.andref.silverwood.session → <session-id> : "{kind,name,created_at}"   # core-reserved: agent sessions
 ```
 
-Sessions live *inside* the kind, not at the workstream's top level, because a
-different future kind may relate to sessions differently (or not at all).
+Agent sessions are stored as `kv` under the core-reserved
+`app.andref.silverwood.session` namespace, **not** inside a kind, so they are
+kind-agnostic: any kind gains sessions for free, and adding one never needs a
+schema change (§5, §9.0). Core reserves the `app.andref.silverwood.*` prefix and
+rejects frontend writes to it.
 
 The **movable tree** (`get_tree`) container is intentionally unused in v1. It is
 the reason Loro was chosen and is reserved for a future nested kind hierarchy (§8).
@@ -125,9 +127,9 @@ the reason Loro was chosen and is reserved for a future nested kind hierarchy (�
   and the kind is immutable — so two forests never concurrently create the same
   container (which would LWW-drop one side's contents). See the merge-safety
   invariant in `doc.rs`.
-- **Collections** (sessions, kv, checkouts) are keyed maps — concurrent additions
-  union; the per-forest keying of `checkouts` means two forests independently
-  materializing the same workstream never conflict.
+- **Collections** (`kv` — which now includes sessions — and `checkouts`) are keyed
+  maps: concurrent additions union; the per-forest keying of `checkouts` means two
+  forests independently materializing the same workstream never conflict.
 - **Peer id** is derived from / stored alongside the forest id (§4) so all local
   edits are attributable to this forest.
 
@@ -236,11 +238,12 @@ Provisional core surface (illustrative, not final):
 ```rust
 Forest::open(root: &Path) -> Result<Forest>          // locate/create ~/.silverwood, mint forest id
 Forest::create_workstream(NewWorkstream) -> Result<Workstream>
-Forest::list(opts) -> Result<Vec<WorkstreamSummary>> // filters archived unless requested
+Forest::list(include_archived: bool) -> Result<Vec<Workstream>>
 Forest::get(WorkstreamId) -> Result<Workstream>
 Forest::archive(WorkstreamId) -> Result<()>          // tombstone
-Forest::set_kv(WorkstreamId, namespace, key, json) -> Result<()>
-Forest::attach_session(WorkstreamId, session_id, agent_kind, name) -> Result<()>
+Forest::rename(WorkstreamId, name) -> Result<()>     // overwrite the name register
+Forest::{set,unset,get,list}_kv(WorkstreamId, namespace, ..) // reserved namespaces rejected
+Forest::{create,rename,remove}_session(WorkstreamId, session_id, ..)  // sessions = reserved-namespace kv
 ```
 
 - **Namespaced KV** is how frontends store their own per-workstream state. A
@@ -248,6 +251,13 @@ Forest::attach_session(WorkstreamId, session_id, agent_kind, name) -> Result<()>
   JSON-valued keys; core stores them opaquely and never interprets them. This is
   what keeps the backend genuinely frontend-agnostic: no frontend can force a core
   schema change.
+- **Namespaces under the reserved `app.andref.silverwood.*` prefix are core-owned**
+  and rejected by `set_kv`/`unset_kv`. **Agent sessions are exactly such a
+  reserved-namespace KV convention** — `app.andref.silverwood.session`, keyed by
+  session id → JSON `{kind,name,created_at}` — which the `Forest::*_session` API
+  (and the `silverwood session` CLI) read and write with agent-kind awareness.
+  Sessions being KV rather than a kind field is why any workstream kind gains them
+  and why adding a session needs no schema change (§9.0).
 - The domain types (`Workstream`, `WorkstreamKind`, `Checkout`, `AgentSession`) are
   plain idiomatic Rust structs. Because Loro has no derive layer, core owns the
   hand-written mapping between these structs and the Loro containers, keeping CRDT
@@ -309,10 +319,10 @@ Deferred, but the model is built for it:
 
 ## 8. Future: more workstream kinds (e.g. feature)
 
-New kinds are added as `WorkstreamKind` variants — the reason sessions live inside
-the kind rather than at the top level. A likely next kind is **feature**: a unit of
-work not tied to a single checkout, which may relate to agent sessions differently
-and may **nest and be reparented** (drag a sub-feature under a different parent).
+New kinds are added as `WorkstreamKind` variants. A likely next kind is
+**feature**: a unit of work not tied to a single checkout, which may **nest and be
+reparented** (drag a sub-feature under a different parent). (Agent sessions are
+kind-agnostic reserved-namespace KV (§5), so a new kind gets them for free.)
 Concurrent reparenting across forests is the classic hard CRDT problem (a naive
 merge yields cycles or duplicates). **Loro's movable-tree CRDT resolves it
 deterministically** — which is precisely why Loro is the engine even though v1 uses

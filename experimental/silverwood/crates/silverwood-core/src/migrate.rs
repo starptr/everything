@@ -23,11 +23,15 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 use crate::id::WorkstreamId;
 use crate::workstream::{
-    AgentSession, Checkout, CodeChange, Status, WorkstreamBody, WorkstreamKind, BASIC_KIND,
+    Checkout, CodeChange, Status, WorkstreamBody, WorkstreamKind, BASIC_KIND, SESSION_NS,
 };
 
 /// The document schema version this build reads and writes.
-pub const DOC_SCHEMA_VERSION: u32 = 1;
+///
+/// v1 stored agent sessions inside the `basic` kind container; v2 relocates them
+/// into the reserved `app.andref.silverwood.session` kv namespace (sessions are a
+/// special case of kv — see `DESIGN.md` §5).
+pub const DOC_SCHEMA_VERSION: u32 = 2;
 
 /// Root scalar key holding a document's schema version.
 pub(crate) const SCHEMA_VERSION_KEY: &str = "schema_version";
@@ -50,7 +54,8 @@ pub(crate) fn detect_version(root: &serde_json::Value) -> Result<u32> {
 pub(crate) fn to_latest_body(id: WorkstreamId, root: &serde_json::Value) -> Result<WorkstreamBody> {
     let version = detect_version(root)?;
     match version {
-        1 => decode_v1(id, root)?.into_body(id),
+        1 => decode_v1(id, root)?.into_v2().into_body(id),
+        2 => decode_v2(id, root)?.into_body(id),
         v if v > DOC_SCHEMA_VERSION => Err(Error::SchemaTooNew {
             found: v,
             supported: DOC_SCHEMA_VERSION,
@@ -66,11 +71,17 @@ fn decode_v1(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV1>
         .map_err(|e| Error::Corrupt(format!("workstream {id} (schema v1): {e}")))
 }
 
-// ---- v1 (current latest) ----------------------------------------------------
+fn decode_v2(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV2> {
+    serde_json::from_value(root.clone())
+        .map_err(|e| Error::Corrupt(format!("workstream {id} (schema v2): {e}")))
+}
 
-/// The v1 on-disk body shape — also the current latest. **Frozen.** Extra keys
-/// (e.g. `schema_version`) are ignored by serde, so a versioned or un-versioned
-/// v1 document decodes identically.
+// ---- v1 (frozen) ------------------------------------------------------------
+
+/// The v1 on-disk body shape. **Frozen.** Extra keys (e.g. `schema_version`) are
+/// ignored by serde, so a versioned or un-versioned v1 document decodes
+/// identically. v1 stored sessions *inside* the `basic` container; the v1→v2 step
+/// relocates them into the reserved kv namespace (see [`StoredBodyV1::into_v2`]).
 #[derive(Deserialize)]
 struct StoredBodyV1 {
     name: String,
@@ -97,9 +108,77 @@ struct StoredBasicV1 {
 }
 
 impl StoredBodyV1 {
-    /// Encode into the latest domain body. v1 is the latest, so this is the
-    /// `into_body` encoder; when v2 lands it moves onto the v2 struct and v1
-    /// instead gains a `migrate_to_v2`.
+    /// v1 → v2: relocate sessions from `basic.sessions` into the flat kv map under
+    /// the reserved [`SESSION_NS`] — each value carried over verbatim, since v1
+    /// already stored the JSON-encoded `AgentSession`. Destructive (it moves a
+    /// container; see `DESIGN.md` §9.2/§9.3). **Frozen** once v3 lands.
+    fn into_v2(self) -> StoredBodyV2 {
+        let StoredBodyV1 {
+            name,
+            status,
+            kind,
+            created_at,
+            basic,
+            mut kv,
+        } = self;
+        let basic = basic.map(|b| {
+            let StoredBasicV1 {
+                code_change,
+                checkouts,
+                sessions,
+            } = b;
+            for (session_id, encoded) in sessions {
+                let composite = serde_json::to_string(&[SESSION_NS, session_id.as_str()])
+                    .expect("json array of two strings is infallible");
+                kv.insert(composite, encoded);
+            }
+            StoredBasicV2 {
+                code_change,
+                checkouts,
+            }
+        });
+        StoredBodyV2 {
+            name,
+            status,
+            kind,
+            created_at,
+            basic,
+            kv,
+        }
+    }
+}
+
+// ---- v2 (current latest) ----------------------------------------------------
+
+/// The v2 on-disk body shape — the current latest. **Frozen** once v3 lands.
+/// Sessions are no longer a `basic` field; they are kv entries under the reserved
+/// [`SESSION_NS`], so v2's `basic` holds only the code-change and checkouts.
+#[derive(Deserialize)]
+struct StoredBodyV2 {
+    name: String,
+    status: Status,
+    kind: String,
+    created_at: String,
+    /// Present iff `kind == "basic"`.
+    #[serde(default)]
+    basic: Option<StoredBasicV2>,
+    /// JSON `["namespace","key"]` → value (sessions live here under SESSION_NS).
+    #[serde(default)]
+    kv: BTreeMap<String, String>,
+}
+
+/// The v2 stored shape of the `basic` kind container. **Frozen** once v3 lands.
+#[derive(Deserialize)]
+struct StoredBasicV2 {
+    code_change: CodeChange,
+    #[serde(default)]
+    checkouts: BTreeMap<String, Checkout>,
+}
+
+impl StoredBodyV2 {
+    /// Encode into the latest domain body. v2 is the latest, so this is the
+    /// `into_body` encoder; when v3 lands it moves onto the v3 struct and v2
+    /// instead keeps only decode + a `migrate_to_v3`.
     fn into_body(self, id: WorkstreamId) -> Result<WorkstreamBody> {
         let kind = match self.kind.as_str() {
             BASIC_KIND => {
@@ -108,17 +187,9 @@ impl StoredBodyV1 {
                         "workstream {id}: kind=basic but no `basic` container"
                     ))
                 })?;
-                let mut sessions = BTreeMap::new();
-                for (session_id, encoded) in basic.sessions {
-                    let session: AgentSession = serde_json::from_str(&encoded).map_err(|e| {
-                        Error::Corrupt(format!("workstream {id} session {session_id}: {e}"))
-                    })?;
-                    sessions.insert(session_id, session);
-                }
                 WorkstreamKind::Basic {
                     code_change: basic.code_change,
                     checkouts: basic.checkouts,
-                    sessions,
                 }
             }
             other => {

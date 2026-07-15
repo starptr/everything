@@ -100,3 +100,23 @@ fn show_rejects_bad_and_absent_ids() {
     // Well-formed but absent id → not-found failure.
     fails(&dir, &["show", "01999999-0000-7000-8000-000000000000"]);
 }
+
+#[test]
+fn kv_set_rejects_reserved_namespace() {
+    let dir = forest();
+
+    // The reserved-namespace guard fires before the workstream is loaded, so a
+    // well-formed (but absent) id still surfaces the reservation error — no clone.
+    let stderr = fails(
+        &dir,
+        &[
+            "kv",
+            "set",
+            "01999999-0000-7000-8000-000000000000",
+            "app.andref.silverwood.session",
+            "k",
+            "v",
+        ],
+    );
+    assert!(stderr.contains("reserved"), "got: {stderr}");
+}

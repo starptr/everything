@@ -8,6 +8,17 @@ use crate::source::HttpsGitUrl;
 /// The `kind` discriminant stored on a basic workstream.
 pub(crate) const BASIC_KIND: &str = "basic";
 
+/// The core-reserved KV namespace holding a workstream's agent sessions.
+/// Sessions are a special case of namespaced KV (see `DESIGN.md` §5): frontends
+/// must not write here directly — they go through the session API (`Forest::`
+/// `create_session`/`rename_session`/`remove_session`, i.e. `silverwood session`).
+pub(crate) const SESSION_NS: &str = "app.andref.silverwood.session";
+
+/// KV namespaces beginning with this prefix are reserved for silverwood core;
+/// the public `Forest::set_kv`/`unset_kv` reject writes to them so a frontend
+/// cannot corrupt core-owned state (today: [`SESSION_NS`]).
+pub(crate) const RESERVED_NS_PREFIX: &str = "app.andref.silverwood.";
+
 /// Lifecycle status of a workstream. Deletion is the `Archived` tombstone —
 /// documents are never removed, so archival merges under future sync.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,9 +120,12 @@ pub struct AgentSession {
 }
 
 /// The kind of a workstream — an open, tagged enum. Today the only kind is
-/// [`WorkstreamKind::Basic`]; future kinds may relate to agent sessions (and
-/// other data) differently, which is why sessions live inside the kind rather
-/// than at the workstream's top level.
+/// [`WorkstreamKind::Basic`]; future kinds may hold different data.
+///
+/// Agent sessions are **not** part of the kind: they are stored as namespaced KV
+/// under the core-reserved `app.andref.silverwood.session` namespace and are
+/// therefore kind-agnostic (see `DESIGN.md` §5). Read them with
+/// [`WorkstreamBody::sessions`].
 ///
 /// The kind is fixed at creation and never changes (see `doc.rs` for the
 /// merge-safety invariant that relies on this). Serialize-only + internally
@@ -121,14 +135,12 @@ pub struct AgentSession {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum WorkstreamKind {
-    /// A code-change, its per-forest checkouts, and zero or more agent sessions.
+    /// A code-change and its per-forest checkouts.
     Basic {
         /// The code-change this workstream is built around.
         code_change: CodeChange,
         /// Per-forest checkout materializations, keyed by forest id.
         checkouts: BTreeMap<String, Checkout>,
-        /// Associated agent sessions, keyed by session id.
-        sessions: BTreeMap<String, AgentSession>,
     },
 }
 
@@ -176,11 +188,24 @@ impl WorkstreamBody {
         }
     }
 
-    /// The agent sessions, if this workstream's kind supports them.
-    pub fn sessions(&self) -> Option<&BTreeMap<String, AgentSession>> {
-        match &self.kind {
-            WorkstreamKind::Basic { sessions, .. } => Some(sessions),
-        }
+    /// The agent sessions associated with this workstream, decoded from the
+    /// core-reserved `app.andref.silverwood.session` KV namespace (sessions are
+    /// stored as KV; this is the typed read view). Kind-agnostic; undecodable
+    /// entries are skipped.
+    pub fn sessions(&self) -> BTreeMap<String, AgentSession> {
+        self.kv
+            .get(SESSION_NS)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|(session_id, encoded)| {
+                        serde_json::from_str::<AgentSession>(encoded)
+                            .ok()
+                            .map(|session| (session_id.clone(), session))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -258,7 +283,6 @@ mod tests {
                 mode: CheckoutMode::JjColocated,
             },
             checkouts: BTreeMap::new(),
-            sessions: BTreeMap::new(),
         };
         let json = serde_json::to_value(&kind).unwrap();
         assert_eq!(json["kind"], serde_json::json!(kind.tag()));

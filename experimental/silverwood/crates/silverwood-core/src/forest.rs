@@ -17,7 +17,7 @@ use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
     AgentKind, Checkout, CheckoutState, CodeChange, NewKind, NewWorkstream, Status, Workstream,
-    WorkstreamBody, WorkstreamKind,
+    WorkstreamBody, WorkstreamKind, RESERVED_NS_PREFIX,
 };
 
 /// The outcome for one document in a [`Forest::upgrade_all`] pass.
@@ -141,7 +141,6 @@ impl Forest {
                     mode,
                 },
                 checkouts,
-                sessions: BTreeMap::new(),
             },
             kv: BTreeMap::new(),
         };
@@ -191,16 +190,27 @@ impl Forest {
         self.docs.save(id, &doc::snapshot(&doc)?)
     }
 
+    /// Rename a workstream (overwrite its `name`).
+    pub fn rename(&self, id: WorkstreamId, name: &str) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        doc::set_name(&doc, name)?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
     /// Set a namespaced key-value entry on a workstream. The value is an opaque
     /// JSON string; core never interprets it — it is a frontend's own state.
+    /// Namespaces under the core-reserved prefix (e.g. sessions) are rejected.
     pub fn set_kv(&self, id: WorkstreamId, namespace: &str, key: &str, value: &str) -> Result<()> {
+        reject_reserved(namespace)?;
         let doc = self.load_doc(id)?;
         doc::set_kv(&doc, namespace, key, value)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
     }
 
-    /// Remove a namespaced key-value entry (no-op if absent).
+    /// Remove a namespaced key-value entry (no-op if absent). Reserved namespaces
+    /// are rejected (they are core-owned; use the session API).
     pub fn unset_kv(&self, id: WorkstreamId, namespace: &str, key: &str) -> Result<()> {
+        reject_reserved(namespace)?;
         let doc = self.load_doc(id)?;
         doc::unset_kv(&doc, namespace, key)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
@@ -228,8 +238,9 @@ impl Forest {
             .unwrap_or_default())
     }
 
-    /// Attach an agent session to a workstream. Errors if already attached.
-    pub fn attach_session(
+    /// Create an agent session on a workstream (core mints `created_at`). Errors
+    /// if a session with this id already exists. Stored as reserved-namespace kv.
+    pub fn create_session(
         &self,
         id: WorkstreamId,
         session_id: &str,
@@ -237,21 +248,21 @@ impl Forest {
         name: &str,
     ) -> Result<()> {
         let doc = self.load_doc(id)?;
-        doc::attach_session(&doc, session_id, agent_kind, name, &now_rfc3339())?;
+        doc::create_session(&doc, session_id, agent_kind, name, &now_rfc3339())?;
         self.docs.save(id, &doc::snapshot(&doc)?)
     }
 
-    /// Rename an attached session. Errors if not attached.
+    /// Rename a session (preserving its kind + created_at). Errors if absent.
     pub fn rename_session(&self, id: WorkstreamId, session_id: &str, name: &str) -> Result<()> {
         let doc = self.load_doc(id)?;
         doc::rename_session(&doc, session_id, name)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
     }
 
-    /// Detach a session from a workstream (no-op if not attached).
-    pub fn detach_session(&self, id: WorkstreamId, session_id: &str) -> Result<()> {
+    /// Remove a session from a workstream (no-op if absent).
+    pub fn remove_session(&self, id: WorkstreamId, session_id: &str) -> Result<()> {
         let doc = self.load_doc(id)?;
-        doc::detach_session(&doc, session_id)?;
+        doc::remove_session(&doc, session_id)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
     }
 
@@ -317,6 +328,16 @@ impl Forest {
 /// Create `path` (and parents) if it does not already exist.
 fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).map_err(|e| Error::io(path, e))
+}
+
+/// Reject writes to a core-reserved kv namespace. Reserved namespaces
+/// (`app.andref.silverwood.*`) hold core-owned state such as sessions; frontends
+/// mutate them through the typed API, not raw `set_kv`/`unset_kv`.
+fn reject_reserved(namespace: &str) -> Result<()> {
+    if namespace.starts_with(RESERVED_NS_PREFIX) {
+        return Err(Error::ReservedNamespace(namespace.to_string()));
+    }
+    Ok(())
 }
 
 /// Load the forest config, or mint and persist a fresh one if none exists.

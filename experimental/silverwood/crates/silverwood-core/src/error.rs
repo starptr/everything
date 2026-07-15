@@ -53,6 +53,10 @@ pub enum Error {
     #[error("session not attached: {0}")]
     SessionNotFound(String),
 
+    /// A frontend tried to write a core-reserved kv namespace directly.
+    #[error("namespace {0:?} is reserved for silverwood core; use `silverwood session`")]
+    ReservedNamespace(String),
+
     /// A stored workstream document did not match the expected structure.
     #[error("corrupt workstream document: {0}")]
     Corrupt(String),

@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use crate::workstream::{
     AgentKind, AgentSession, Checkout, CheckoutMode, CheckoutState, CodeChange, Status,
-    WorkstreamBody, WorkstreamKind,
+    WorkstreamBody, WorkstreamKind, SESSION_NS,
 };
 
 /// A canonical set of v1 bodies covering the structures a document can hold:
@@ -110,7 +110,8 @@ pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
     ]
 }
 
-/// Build a basic-kind body. Sessions are all `claude-code` (the only agent kind).
+/// Build a basic-kind body. Sessions are all `claude-code` (the only agent kind)
+/// and, since v2, are stored as reserved-namespace kv entries (see [`SESSION_NS`]).
 fn basic(
     name: &str,
     checkouts: &[(&str, &str, CheckoutState)],
@@ -130,25 +131,23 @@ fn basic(
             )
         })
         .collect();
-    let sessions = sessions
-        .iter()
-        .map(|(id, nm)| {
-            (
-                id.to_string(),
-                AgentSession {
-                    kind: AgentKind::ClaudeCode,
-                    name: nm.to_string(),
-                    created_at: "1970-01-01T00:00:00Z".to_string(),
-                },
-            )
-        })
-        .collect();
     let mut kvmap: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for (ns, k, v) in kv {
         kvmap
             .entry(ns.to_string())
             .or_default()
             .insert(k.to_string(), v.to_string());
+    }
+    for (id, nm) in sessions {
+        let session = AgentSession {
+            kind: AgentKind::ClaudeCode,
+            name: nm.to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+        };
+        kvmap
+            .entry(SESSION_NS.to_string())
+            .or_default()
+            .insert(id.to_string(), serde_json::to_string(&session).unwrap());
     }
     WorkstreamBody {
         name: name.to_string(),
@@ -160,7 +159,6 @@ fn basic(
                 mode: CheckoutMode::JjColocated,
             },
             checkouts,
-            sessions,
         },
         kv: kvmap,
     }

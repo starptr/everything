@@ -64,11 +64,14 @@ enum Command {
     /// Archive a workstream (tombstone).
     Archive { id: String },
 
+    /// Rename a workstream.
+    Rename { id: String, name: String },
+
     /// Namespaced key-value state (frontend-owned).
     #[command(subcommand)]
     Kv(KvCommand),
 
-    /// Agent session associations.
+    /// Agent sessions (a kind-aware wrapper over the reserved session kv).
     #[command(subcommand)]
     Session(SessionCommand),
 
@@ -107,25 +110,33 @@ enum KvCommand {
 
 #[derive(Subcommand)]
 enum SessionCommand {
-    /// Attach an agent session.
-    Attach {
-        id: String,
-        session_id: String,
-        /// Which agent the session belongs to.
-        #[arg(long, value_enum)]
-        agent: AgentArg,
-        name: String,
-    },
-    /// List attached sessions.
+    /// Create (record) a session of a given agent kind.
+    #[command(subcommand)]
+    Create(SessionCreate),
+    /// List sessions.
     Ls { id: String },
-    /// Rename an attached session.
+    /// Rename a session (preserving its kind + created_at).
     Rename {
         id: String,
         session_id: String,
         name: String,
     },
-    /// Detach a session.
-    Detach { id: String, session_id: String },
+    /// Remove a session.
+    Rm { id: String, session_id: String },
+}
+
+/// Per-kind session creation: each agent kind takes the parameters it needs, so
+/// the argument shape is not forced to be identical across kinds (today: one).
+#[derive(Subcommand)]
+enum SessionCreate {
+    /// A Claude Code session. `session_id` is the Claude session id; `name`
+    /// defaults to the session id when omitted.
+    ClaudeCode {
+        id: String,
+        session_id: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
 }
 
 /// CLI mirror of `CheckoutMode` (keeps `clap` out of `silverwood-core`).
@@ -139,21 +150,6 @@ impl ModeArg {
     fn to_core(self) -> CheckoutMode {
         match self {
             ModeArg::JjColocated => CheckoutMode::JjColocated,
-        }
-    }
-}
-
-/// CLI mirror of `AgentKind` (keeps `clap` out of `silverwood-core`).
-#[derive(Clone, Copy, ValueEnum)]
-enum AgentArg {
-    #[value(name = "claude-code")]
-    ClaudeCode,
-}
-
-impl AgentArg {
-    fn to_core(self) -> AgentKind {
-        match self {
-            AgentArg::ClaudeCode => AgentKind::ClaudeCode,
         }
     }
 }
@@ -224,6 +220,14 @@ fn run(cli: Cli) -> CliResult {
             Ok(())
         }
 
+        Command::Rename { id, name } => {
+            let id = parse_id(&id)?;
+            forest.rename(id, &name)?;
+            let ws = forest.get(id)?;
+            emit(json, &ws, || print_workstream(&ws));
+            Ok(())
+        }
+
         Command::Kv(cmd) => run_kv(&forest, json, cmd),
         Command::Session(cmd) => run_session(&forest, json, cmd),
 
@@ -272,27 +276,27 @@ fn run_kv(forest: &Forest, json: bool, cmd: KvCommand) -> CliResult {
 
 fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
     let id = match &cmd {
-        SessionCommand::Attach { id, .. }
+        SessionCommand::Create(SessionCreate::ClaudeCode { id, .. })
         | SessionCommand::Ls { id }
         | SessionCommand::Rename { id, .. }
-        | SessionCommand::Detach { id, .. } => parse_id(id)?,
+        | SessionCommand::Rm { id, .. } => parse_id(id)?,
     };
 
     match cmd {
-        SessionCommand::Attach {
-            session_id,
-            agent,
-            name,
-            ..
-        } => forest.attach_session(id, &session_id, agent.to_core(), &name)?,
+        SessionCommand::Create(SessionCreate::ClaudeCode {
+            session_id, name, ..
+        }) => {
+            let name = name.unwrap_or_else(|| session_id.clone());
+            forest.create_session(id, &session_id, AgentKind::ClaudeCode, &name)?;
+        }
         SessionCommand::Rename {
             session_id, name, ..
         } => forest.rename_session(id, &session_id, &name)?,
-        SessionCommand::Detach { session_id, .. } => forest.detach_session(id, &session_id)?,
+        SessionCommand::Rm { session_id, .. } => forest.remove_session(id, &session_id)?,
         SessionCommand::Ls { .. } => {}
     }
 
-    let sessions = forest.get(id)?.body.sessions().cloned().unwrap_or_default();
+    let sessions = forest.get(id)?.body.sessions();
     emit(json, &sessions, || print_sessions(&sessions));
     Ok(())
 }
@@ -376,8 +380,9 @@ fn print_workstream(ws: &Workstream) {
             checkout.location
         );
     }
-    if let Some(count) = ws.body.sessions().map(BTreeMap::len).filter(|n| *n > 0) {
-        println!("  sessions: {count}");
+    let session_count = ws.body.sessions().len();
+    if session_count > 0 {
+        println!("  sessions: {session_count}");
     }
     let kv_entries: usize = ws.body.kv.values().map(BTreeMap::len).sum();
     if kv_entries > 0 {

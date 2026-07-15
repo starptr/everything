@@ -130,17 +130,17 @@ fn kv_and_session_lifecycle() {
         1
     );
 
-    // sessions: attach (agent kind required), duplicate errors, rename preserves
-    // kind + created_at, absent rename errors, detach removes.
+    // sessions: create (per-kind subcommand), duplicate errors, rename preserves
+    // kind + created_at, absent rename errors, rm removes.
     ok(
         &dir,
         &[
             "session",
-            "attach",
+            "create",
+            "claude-code",
             &id,
             "sess-1",
-            "--agent",
-            "claude-code",
+            "--name",
             "planning",
         ],
     );
@@ -148,11 +148,11 @@ fn kv_and_session_lifecycle() {
         &dir,
         &[
             "session",
-            "attach",
+            "create",
+            "claude-code",
             &id,
             "sess-1",
-            "--agent",
-            "claude-code",
+            "--name",
             "dup",
         ],
     );
@@ -177,11 +177,26 @@ fn kv_and_session_lifecycle() {
 
     fails(&dir, &["session", "rename", &id, "absent", "x"]);
 
-    ok(&dir, &["session", "detach", &id, "sess-1"]);
+    ok(&dir, &["session", "rm", &id, "sess-1"]);
     assert_eq!(
         json(&dir, &["--json", "session", "ls", &id]),
         serde_json::json!({})
     );
+
+    // Sessions live in the reserved kv namespace, not a top-level `sessions` field;
+    // and writing that namespace directly is rejected.
+    ok(&dir, &["session", "create", "claude-code", &id, "sess-2"]);
+    let ws = json(&dir, &["--json", "show", &id]);
+    assert!(ws.get("sessions").is_none(), "no top-level sessions field");
+    assert!(ws["kv"]["app.andref.silverwood.session"]["sess-2"].is_string());
+    fails(
+        &dir,
+        &["kv", "set", &id, "app.andref.silverwood.session", "x", "{}"],
+    );
+
+    // workstream rename.
+    ok(&dir, &["rename", &id, "renamed-work"]);
+    assert_eq!(json(&dir, &["--json", "show", &id])["name"], "renamed-work");
 }
 
 #[test]
