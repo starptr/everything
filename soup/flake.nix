@@ -63,6 +63,11 @@
     # soup's stale pin. (Absolute path ⇒ only resolvable where the monorepo lives
     # at this path — i.e. keep this input out of the github:starptr/soup mirror.)
     silverwood.url = "git+file:///Users/yuto/src/everything?dir=experimental/silverwood";
+
+    # papyrus GUI, also monorepo-only (experimental/papyrus). Same git+file
+    # rationale as silverwood above: absolute path, .gitignore-respecting, its
+    # own nixpkgs (no follows). Keep out of the github:starptr/soup mirror.
+    papyrus.url = "git+file:///Users/yuto/src/everything?dir=experimental/papyrus";
   };
 
   nixConfig = {
@@ -92,7 +97,7 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       # TODO: remove in favor of `exports`
       flake-inputs = {
-        inherit (inputs) love chaseln dark-notify-wrapped fenix check-gits jujutsu claude-code-overlay silverwood;
+        inherit (inputs) love chaseln dark-notify-wrapped fenix check-gits jujutsu claude-code-overlay silverwood papyrus;
       };
       # List of flake inputs that we want to transparently re-export (i.e. without custom packaging)
       exports = import ./exports.nix;

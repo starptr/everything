@@ -30,4 +30,5 @@ rec {
     natto-py = natto-py;
   };
   silverwood = callPackageWithMaybeFlakeInputs ./pkgs/silverwood.nix { };
+  papyrus = callPackageWithMaybeFlakeInputs ./pkgs/papyrus.nix { };
 }
