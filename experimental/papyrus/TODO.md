@@ -11,16 +11,28 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done
       `bun.nix` + `client/bun.nix`
 - [x] soup re-export (`git+file` input + `pkgs/papyrus.nix` + `extraPackages.nix`)
 
-## Part 1 — Deploy (deferred)
+## Part 1 — silverwood integration (the point of papyrus) — DONE
+- [x] A canvas node IS a silverwood workstream; `silverwood --json ls` drives the canvas
+- [x] All state in silverwood: coordinate/color/notes in `app.andref.papyrus` KV, name via
+      `silverwood rename`, agent runs as silverwood sessions
+- [x] Replace openui's `.openui/state.json` model — `server/services/silverwood.ts` is the
+      sole persistence boundary; papyrus writes **nothing** to disk
+- [x] silverwood-side: sessions refactored to reserved-namespace KV + kind-aware
+      `silverwood session` wrapper + `silverwood rename` (doc schema v2)
+- [x] Package: `silverwood` on papyrus's runtime PATH (flake `silverwood` input + PATH wrap)
+
+## Part 2 — Deploy (deferred)
 - [ ] Wire papyrus onto sodium's PATH (silverwood-style soup consumption)
 
-## Part 2 — silverwood integration (the point of papyrus)
-- [ ] Read silverwood workstreams via `silverwood --json`; render as canvas nodes
-- [ ] Map papyrus agent sessions ↔ silverwood agent sessions
-- [ ] Replace openui's `.openui/state.json` model with silverwood-backed state
-
-## Part 3 — Polish
-- [ ] Deep UI rebrand (in-app OpenUI branding/copy → papyrus)
+## Part 3 — Polish / follow-ups
+- [~] UI rebrand (header/modal/copy done; some upstream OpenUI strings + visuals remain)
+- [ ] silverwood "adopt existing local directory" checkout mode, so a node can wrap a repo
+      you already have (today a node must be an https URL silverwood clones)
+- [ ] Async provisioning UX: `silverwood new` clones synchronously; show a live
+      "provisioning" node instead of blocking the create request
+- [ ] Re-home dropped features if wanted: canvas categories (needs forest-global state),
+      terminal-scrollback persistence, Linear/worktree/ticket flow
+- [ ] Register silverwood sessions for non-`claude-code` agents once more kinds exist
 - [ ] Hermetic Claude-Code plugin (vendor `claude-code-plugin/` into the store; drop the
       runtime download in `bin/papyrus.ts`)
 - [ ] Linux runtime (`autoPatchelfHook` for `bun-pty`'s `.so`)

@@ -13,6 +13,15 @@
     # source unless its nix-community cachix cache is a trusted substituter.)
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.1";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
+
+    # silverwood — the backend papyrus shells out to at runtime. A RELATIVE path
+    # input (Nix 2.26+): because papyrus's flake is inside the monorepo git repo,
+    # Nix resolves `../silverwood` within that same git tree, so it respects
+    # .gitignore (excludes silverwood's ~1.5G target/) with no absolute path and no
+    # extra copy. NOT `git+file:../..` — a relative git+file URL misparses `file`
+    # as an ssh host. Unlike soup (mirrored to github, so it must use an absolute
+    # path), papyrus is only ever built in-tree. silverwood keeps its own nixpkgs.
+    silverwood.url = "path:../silverwood";
   };
 
   outputs =
@@ -21,6 +30,7 @@
       nixpkgs,
       flake-utils,
       bun2nix,
+      silverwood,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -31,6 +41,10 @@
         # bun2nix's builders (writeBunApplication / mkDerivation / fetchBunDeps /
         # hook) are exposed as passthru on its default package.
         b2n = bun2nix.packages.${system}.default;
+
+        # The silverwood CLI (wrapped with jj + git on PATH). papyrus's server
+        # shells out to it for all durable state.
+        silverwood-bin = silverwood.packages.${system}.default;
 
         # The Vite/React client, built to static `dist`. Pure JS (no native
         # modules); installed + built with bun from client/bun.nix.
@@ -72,15 +86,17 @@
 
           # writeBunApplication's wrapper --chdir's into $out/share/papyrus at
           # runtime, so server/index.ts's `serveStatic({ root: "./client/dist" })`
-          # resolves there — place the built client accordingly. Then re-wrap so
-          # the user's launch dir is captured into LAUNCH_CWD *before* that chdir
-          # (persistence writes `.openui/` under LAUNCH_CWD, which must be the
-          # user's pwd, not the read-only store). See VENDOR.md.
+          # resolves there — place the built client accordingly. Then re-wrap to
+          # (1) put `silverwood` on PATH — the server shells out to it for all
+          # durable state (it carries its own jj + git) — and (2) capture the
+          # user's launch dir into LAUNCH_CWD *before* that chdir (used for display
+          # + as the default cwd). papyrus itself writes nothing to disk.
           postInstall = ''
             cp -r ${client} "$out/share/papyrus/client/dist"
 
             mv "$out/bin/papyrus" "$out/bin/.papyrus-inner"
             makeWrapper "$out/bin/.papyrus-inner" "$out/bin/papyrus" \
+              --prefix PATH : ${silverwood-bin}/bin \
               --run 'export LAUNCH_CWD="''${LAUNCH_CWD:-$PWD}"'
           '';
         };

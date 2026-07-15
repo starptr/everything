@@ -10,13 +10,14 @@ papyrus is **vendored and rebranded from [Fallomai/openui]**; see `./VENDOR.md` 
 provenance and the list of local modifications. This document is the source of truth for
 papyrus's own direction.
 
-> Status: vendored + packaged (Nix, via bun2nix). Not yet wired to silverwood.
+> Status: silverwood-backed and **stateless** — papyrus writes nothing to disk; all
+> workstream state (including canvas coordinates) lives in silverwood.
 > Companion task list: `./TODO.md`.
 
 ## Goals
 
 - **Be silverwood's GUI.** Present silverwood workstreams (today the `basic` kind: a
-  code-change, its checkouts, and zero or more agent sessions) on a visual canvas. The
+  code-change and its checkouts, plus kv-backed agent sessions) on a visual canvas. The
   backend contract is `silverwood-core`, surfaced through the machine-readable
   `silverwood --json` CLI.
 - **Local-first.** 100% local; no cloud backend of its own. papyrus drives external agent
@@ -26,18 +27,20 @@ papyrus's own direction.
 
 ## Non-goals (for now)
 
-- **silverwood integration.** The canvas currently runs on openui's own session model
-  (in-memory + `.openui/state.json`); reading/writing silverwood workstreams is the next
-  milestone, not yet built (see `TODO.md` Part 2).
-- **Deep UI rebrand.** In-app "OpenUI" branding and copy are inherited from upstream and
-  not yet reskinned.
+- **Arbitrary local-folder agents.** A node is a silverwood workstream, so it is created
+  from an https git URL that silverwood clones — you cannot (yet) point an agent at an
+  existing local repo. That needs a silverwood "adopt existing directory" checkout mode.
+- **Deep UI rebrand.** Most in-app copy is now papyrus, but some upstream openui strings
+  and visuals remain.
 - **Non-darwin runtime.** Validated on aarch64-darwin; Linux support (patchelf for
   `bun-pty`'s `.so`) is later.
 
 ## Architecture (inherited from upstream, to evolve)
 
 - **Server** (`server/`): Bun + Hono; a WebSocket endpoint bridges the browser to
-  `bun-pty` PTYs; on-disk persistence under `LAUNCH_CWD/.openui/`. Default port 6968.
+  `bun-pty` PTYs. **Stateless** — no `.openui/`; all durable state is read/written through
+  `server/services/silverwood.ts` (shells out to `silverwood --json`). Only live runtime
+  state (PTYs, WebSocket clients, terminal scrollback) is in-memory. Port 6968.
 - **Client** (`client/`): React + Vite + `@xyflow/react` (the node canvas) + xterm
   (terminals), built to `client/dist`.
 - **Packaging** (`flake.nix`): bun2nix `writeBunApplication` packages the server while
@@ -45,12 +48,25 @@ papyrus's own direction.
   `bun build --compile` single binary would break it — Bun #30717). The client is built
   separately and placed at `client/dist`. See `./VENDOR.md`.
 
-## The silverwood seam (future — the point of papyrus)
+## The silverwood seam (how papyrus works)
 
-silverwood owns workstream state as CRDT documents and exposes it via `silverwood --json`.
-papyrus will map its canvas nodes onto silverwood workstreams and agent sessions,
-replacing openui's ad-hoc `.openui/state.json` model. This is the reason papyrus exists;
-it is the next milestone (`TODO.md` Part 2).
+A canvas **node is a silverwood workstream** (1:1). `silverwood --json ls` drives the
+canvas; creating a node runs `silverwood new` (which clones the checkout); deleting it
+`archive`s the workstream. Every per-node property lives in silverwood — papyrus keeps
+no private state of its own:
+
+- **Canvas coordinate / color / notes** → the workstream's KV under papyrus's namespace
+  `app.andref.papyrus` (values are JSON strings). The coordinate is deliberately stored in
+  silverwood too — that is the whole point.
+- **Display name** → the workstream `name` (edited via `silverwood rename`).
+- **Working directory** → silverwood's per-forest checkout location.
+- **Agent runs** → silverwood sessions (themselves KV, under `app.andref.silverwood.session`),
+  recorded when Claude Code first reports its session id.
+
+`server/services/silverwood.ts` is the single persistence boundary; it serializes writes
+per workstream (silverwood does read-modify-overwrite with no locking). Dropped from the
+openui era (no silverwood home, or a poor CRDT fit): canvas categories, terminal-scrollback
+persistence, and the Linear/worktree/ticket flow.
 
 [silverwood]: ../silverwood/DESIGN.md
 [Fallomai/openui]: https://github.com/Fallomai/openui
