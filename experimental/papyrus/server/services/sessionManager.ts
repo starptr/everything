@@ -1,344 +1,123 @@
-import { spawnSync } from "bun";
 import { spawn as spawnPty } from "bun-pty";
-import { existsSync, mkdirSync } from "fs";
-import { join, basename } from "path";
+import { existsSync } from "fs";
+import { join } from "path";
 import { homedir } from "os";
 import type { Session } from "../types";
-import { loadBuffer } from "./persistence";
 
 const QUIET = !!process.env.OPENUI_QUIET;
 const log = QUIET ? () => {} : console.log.bind(console);
-const logError = QUIET ? () => {} : console.error.bind(console);
 
-// Get the OpenUI plugin directory path
+// Locate the Claude Code plugin dir (adds the status hooks that drive node
+// state). Installed under ~/.openui/claude-code-plugin, or vendored in-repo.
 function getPluginDir(): string | null {
-  // Check for plugin in ~/.openui/claude-code-plugin (installed via curl)
   const homePluginDir = join(homedir(), ".openui", "claude-code-plugin");
-  const homePluginJson = join(homePluginDir, ".claude-plugin", "plugin.json");
-  log(`\x1b[38;5;245m[plugin-check]\x1b[0m Checking home: ${homePluginJson} exists=${existsSync(homePluginJson)}`);
-  if (existsSync(homePluginJson)) {
+  if (existsSync(join(homePluginDir, ".claude-plugin", "plugin.json"))) {
     return homePluginDir;
   }
-
-  // Check for plugin in the openui repo (for development)
-  // Use import.meta.dir for ESM compatibility
-  const currentDir = import.meta.dir || __dirname;
-  const repoPluginDir = join(currentDir, "..", "..", "claude-code-plugin");
-  const repoPluginJson = join(repoPluginDir, ".claude-plugin", "plugin.json");
-  log(`\x1b[38;5;245m[plugin-check]\x1b[0m Checking repo: ${repoPluginJson} exists=${existsSync(repoPluginJson)}`);
-  if (existsSync(repoPluginJson)) {
+  const repoPluginDir = join(import.meta.dir || __dirname, "..", "..", "claude-code-plugin");
+  if (existsSync(join(repoPluginDir, ".claude-plugin", "plugin.json"))) {
     return repoPluginDir;
   }
-
-  log(`\x1b[38;5;245m[plugin-check]\x1b[0m No plugin found`);
   return null;
 }
 
-// Inject --plugin-dir flag for Claude commands if plugin is available
+// Inject `--plugin-dir` into a `claude` command so the plugin's hooks fire.
 export function injectPluginDir(command: string, agentId: string): string {
   if (agentId !== "claude") return command;
-
   const pluginDir = getPluginDir();
   if (!pluginDir) return command;
-
-  // Check if command already has --plugin-dir
   if (command.includes("--plugin-dir")) return command;
-
-  // Insert --plugin-dir after 'claude'
   const parts = command.split(/\s+/);
   if (parts[0] === "claude") {
-    // Use the path directly without quotes - shell will handle it
-    parts.splice(1, 0, `--plugin-dir`, pluginDir);
-    const finalCmd = parts.join(" ");
-    log(`\x1b[38;5;141m[plugin]\x1b[0m Injecting plugin-dir: ${pluginDir}`);
-    log(`\x1b[38;5;141m[plugin]\x1b[0m Final command: ${finalCmd}`);
-    return finalCmd;
+    parts.splice(1, 0, "--plugin-dir", pluginDir);
+    return parts.join(" ");
   }
-
   return command;
 }
 
-// Get git branch for a directory
-function getGitBranch(cwd: string): string | null {
-  try {
-    const result = spawnSync(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    if (result.exitCode === 0) {
-      return result.stdout.toString().trim();
-    }
-  } catch {
-    // Not a git repo or git not available
-  }
-  return null;
-}
-
-// Get git root directory (returns worktree path if in a worktree)
-function getGitRoot(cwd: string): string | null {
-  try {
-    const result = spawnSync(["git", "rev-parse", "--show-toplevel"], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    if (result.exitCode === 0) {
-      return result.stdout.toString().trim();
-    }
-  } catch {
-    // Not a git repo
-  }
-  return null;
-}
-
-// Get the main worktree (mother repo) path - works from any worktree
-function getMainWorktree(cwd: string): string | null {
-  try {
-    // git worktree list shows all worktrees, first one is always the main
-    const result = spawnSync(["git", "worktree", "list", "--porcelain"], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    if (result.exitCode === 0) {
-      const output = result.stdout.toString();
-      // First "worktree" line is the main repo
-      const match = output.match(/^worktree (.+)$/m);
-      if (match) {
-        return match[1];
-      }
-    }
-  } catch {
-    // Not a git repo or worktree command failed
-  }
-  return null;
-}
-
-// Create a git worktree for a branch
-export function createWorktree(params: {
-  cwd: string;
-  branchName: string;
-  baseBranch: string;
-}): { success: boolean; worktreePath?: string; error?: string } {
-  const { cwd, branchName, baseBranch } = params;
-  const gitRoot = getGitRoot(cwd);
-
-  if (!gitRoot) {
-    return { success: false, error: "Not a git repository" };
-  }
-
-  // Create worktrees directory beside the main repo
-  const repoName = basename(gitRoot);
-  const worktreesDir = join(gitRoot, "..", `${repoName}-worktrees`);
-
-  if (!existsSync(worktreesDir)) {
-    mkdirSync(worktreesDir, { recursive: true });
-  }
-
-  // Sanitize branch name for directory
-  const dirName = branchName.replace(/\//g, "-");
-  const worktreePath = join(worktreesDir, dirName);
-
-  // Check if worktree already exists
-  if (existsSync(worktreePath)) {
-    log(`\x1b[38;5;141m[worktree]\x1b[0m Worktree already exists: ${worktreePath}`);
-    return { success: true, worktreePath };
-  }
-
-  // Fetch latest from remote first
-  log(`\x1b[38;5;141m[worktree]\x1b[0m Fetching from remote...`);
-  spawnSync(["git", "fetch", "origin"], { cwd: gitRoot, stdout: "pipe", stderr: "pipe" });
-
-  // Check if branch exists locally or remotely
-  const localBranch = spawnSync(["git", "rev-parse", "--verify", branchName], {
-    cwd: gitRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const remoteBranch = spawnSync(["git", "rev-parse", "--verify", `origin/${branchName}`], {
-    cwd: gitRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  let result;
-  if (localBranch.exitCode === 0) {
-    // Branch exists locally, just add worktree
-    log(`\x1b[38;5;141m[worktree]\x1b[0m Creating worktree for existing branch: ${branchName}`);
-    result = spawnSync(["git", "worktree", "add", worktreePath, branchName], {
-      cwd: gitRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-  } else if (remoteBranch.exitCode === 0) {
-    // Branch exists on remote, track it
-    log(`\x1b[38;5;141m[worktree]\x1b[0m Creating worktree tracking remote branch: ${branchName}`);
-    result = spawnSync(["git", "worktree", "add", "--track", "-b", branchName, worktreePath, `origin/${branchName}`], {
-      cwd: gitRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-  } else {
-    // Create new branch from base
-    log(`\x1b[38;5;141m[worktree]\x1b[0m Creating new worktree with branch: ${branchName} from ${baseBranch}`);
-    result = spawnSync(["git", "worktree", "add", "-b", branchName, worktreePath, `origin/${baseBranch}`], {
-      cwd: gitRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-  }
-
-  if (result.exitCode !== 0) {
-    const stderr = result.stderr.toString();
-    logError(`\x1b[38;5;141m[worktree]\x1b[0m Failed to create worktree:`, stderr);
-    return { success: false, error: stderr };
-  }
-
-  log(`\x1b[38;5;141m[worktree]\x1b[0m Created worktree at: ${worktreePath}`);
-  return { success: true, worktreePath };
-}
-
-
 const MAX_BUFFER_SIZE = 1000;
 
+// In-memory runtime state, keyed by silverwood workstream id. Purely ephemeral —
+// PTYs, connected WebSocket clients, live status, and terminal scrollback all live
+// here and are allowed to vanish on restart. All durable state is in silverwood.
 export const sessions = new Map<string, Session>();
 
-export function createSession(params: {
-  sessionId: string;
+/// Ensure a (dormant) runtime entry exists for a workstream, so the WebSocket and
+/// status endpoints can resolve it before its terminal is spawned. Records the
+/// checkout `cwd` so a later spawn runs in the right directory.
+export function ensureDormant(workstreamId: string, cwd = ""): Session {
+  let session = sessions.get(workstreamId);
+  if (!session) {
+    session = {
+      pty: null,
+      agentId: "claude",
+      agentName: "Claude Code",
+      command: "claude",
+      cwd,
+      createdAt: new Date().toISOString(),
+      clients: new Set(),
+      outputBuffer: [],
+      status: "disconnected",
+      lastOutputTime: 0,
+      lastInputTime: 0,
+      recentOutputSize: 0,
+      isRestored: true,
+    };
+    sessions.set(workstreamId, session);
+  } else if (cwd && !session.cwd) {
+    session.cwd = cwd;
+  }
+  return session;
+}
+
+/// Spawn a fresh terminal for a workstream: a bash PTY in the checkout dir that
+/// runs `command` (e.g. `claude`). Reuses/updates the runtime entry. Returns it.
+export function spawnTerminal(params: {
+  workstreamId: string;
+  cwd: string;
   agentId: string;
   agentName: string;
   command: string;
-  cwd: string;
-  nodeId: string;
-  customName?: string;
-  customColor?: string;
-  // Ticket and worktree options
-  ticketId?: string;
-  ticketTitle?: string;
-  ticketUrl?: string;
-  branchName?: string;
-  baseBranch?: string;
-  createWorktreeFlag?: boolean;
-  ticketPromptTemplate?: string;
-}): { session: Session; cwd: string; gitBranch?: string } {
-  const {
-    sessionId,
-    agentId,
-    agentName,
-    command,
-    cwd: originalCwd,
-    nodeId,
-    customName,
-    customColor,
-    ticketId,
-    ticketTitle,
-    ticketUrl,
-    branchName,
-    baseBranch,
-    createWorktreeFlag,
-    ticketPromptTemplate,
-  } = params;
-
-  let workingDir = originalCwd;
-  let worktreePath: string | undefined;
-  let mainRepoPath: string | undefined;
-  let gitBranch: string | null = null;
-
-  // If worktree requested, create it and use that path
-  if (createWorktreeFlag && branchName && baseBranch) {
-    const result = createWorktree({
-      cwd: originalCwd,
-      branchName,
-      baseBranch,
-    });
-    if (result.success && result.worktreePath) {
-      workingDir = result.worktreePath;
-      worktreePath = result.worktreePath;
-      mainRepoPath = originalCwd; // The original cwd is the main repo
-      gitBranch = branchName;
-      log(`\x1b[38;5;141m[session]\x1b[0m Using worktree: ${workingDir}, main repo: ${mainRepoPath}`);
-    } else {
-      logError(`\x1b[38;5;141m[session]\x1b[0m Failed to create worktree:`, result.error);
-    }
-  }
-
-  // If no explicit worktree but we're in a worktree, detect the main repo
-  if (!mainRepoPath) {
-    const detectedMainRepo = getMainWorktree(workingDir);
-    if (detectedMainRepo && detectedMainRepo !== workingDir) {
-      mainRepoPath = detectedMainRepo;
-      log(`\x1b[38;5;141m[session]\x1b[0m Detected main repo from worktree: ${mainRepoPath}`);
-    }
-  }
-
-  // Get git branch if not already set from worktree
-  if (!gitBranch) {
-    gitBranch = getGitBranch(workingDir);
-  }
+}): Session {
+  const { workstreamId, cwd, agentId, agentName, command } = params;
+  const session = ensureDormant(workstreamId, cwd);
 
   const ptyProcess = spawnPty("/bin/bash", [], {
     name: "xterm-256color",
-    cwd: workingDir,
+    cwd,
     env: {
       ...process.env,
       TERM: "xterm-256color",
-      // Pass our session ID so the plugin can include it in status updates
-      OPENUI_SESSION_ID: sessionId,
+      // The plugin echoes this back on status hooks so we can correlate.
+      OPENUI_SESSION_ID: workstreamId,
     },
     rows: 30,
     cols: 120,
   });
 
-  const now = Date.now();
-  const session: Session = {
-    pty: ptyProcess,
-    agentId,
-    agentName,
-    command,
-    cwd: workingDir,
-    originalCwd: mainRepoPath, // Store mother repo when using worktree
-    gitBranch: gitBranch || undefined,
-    worktreePath,
-    createdAt: new Date().toISOString(),
-    clients: new Set(),
-    outputBuffer: [],
-    status: "idle",
-    lastOutputTime: now,
-    lastInputTime: 0,
-    recentOutputSize: 0,
-    customName,
-    customColor,
-    nodeId,
-    isRestored: false,
-    ticketId,
-    ticketTitle,
-    ticketUrl,
-  };
+  session.pty = ptyProcess;
+  session.agentId = agentId;
+  session.agentName = agentName;
+  session.command = command;
+  session.cwd = cwd;
+  session.status = "running";
+  session.isRestored = false;
+  session.outputBuffer = [];
+  session.lastOutputTime = Date.now();
 
-  sessions.set(sessionId, session);
-
-  // Output decay
   const resetInterval = setInterval(() => {
-    if (!sessions.has(sessionId) || !session.pty) {
+    if (!sessions.has(workstreamId) || !session.pty) {
       clearInterval(resetInterval);
       return;
     }
     session.recentOutputSize = Math.max(0, session.recentOutputSize - 50);
   }, 500);
 
-  // PTY output handler
   ptyProcess.onData((data: string) => {
     session.outputBuffer.push(data);
-    if (session.outputBuffer.length > MAX_BUFFER_SIZE) {
-      session.outputBuffer.shift();
-    }
-
+    if (session.outputBuffer.length > MAX_BUFFER_SIZE) session.outputBuffer.shift();
     session.lastOutputTime = Date.now();
     session.recentOutputSize += data.length;
-
-    // Just broadcast output - status comes from plugin hooks
     for (const client of session.clients) {
       if (client.readyState === 1) {
         client.send(JSON.stringify({ type: "output", data }));
@@ -346,74 +125,20 @@ export function createSession(params: {
     }
   });
 
-  // Run the command (inject plugin-dir for Claude if available)
   const finalCommand = injectPluginDir(command, agentId);
-  log(`\x1b[38;5;82m[pty-write]\x1b[0m Writing command: ${finalCommand}`);
-  setTimeout(() => {
-    ptyProcess.write(`${finalCommand}\r`);
+  setTimeout(() => ptyProcess.write(`${finalCommand}\r`), 300);
 
-    // If there's a ticket URL, send it to the agent after a delay
-    if (ticketUrl) {
-      setTimeout(() => {
-        // Use custom template or default
-        const defaultTemplate = "Here is the ticket for this session: {{url}}\n\nPlease use the Linear MCP tool or fetch the URL to read the full ticket details before starting work.";
-        const template = ticketPromptTemplate || defaultTemplate;
-        const ticketPrompt = template
-          .replace(/\{\{url\}\}/g, ticketUrl)
-          .replace(/\{\{id\}\}/g, ticketId || "")
-          .replace(/\{\{title\}\}/g, ticketTitle || "");
-        ptyProcess.write(ticketPrompt + "\r");
-      }, 2000);
-    }
-  }, 300);
-
-  log(`\x1b[38;5;141m[session]\x1b[0m Created ${sessionId} for ${agentName}${ticketId ? ` (ticket: ${ticketId})` : ""}`);
-  return { session, cwd: workingDir, gitBranch: gitBranch || undefined };
+  log(`\x1b[38;5;141m[terminal]\x1b[0m spawned ${workstreamId} in ${cwd}`);
+  return session;
 }
 
-export function deleteSession(sessionId: string) {
-  const session = sessions.get(sessionId);
+/// Tear down a workstream's terminal + runtime entry. Does NOT touch silverwood.
+export function killTerminal(workstreamId: string): boolean {
+  const session = sessions.get(workstreamId);
   if (!session) return false;
-
   if (session.pty) session.pty.kill();
-
-  sessions.delete(sessionId);
-  log(`\x1b[38;5;141m[session]\x1b[0m Killed ${sessionId}`);
+  session.clients.clear();
+  sessions.delete(workstreamId);
+  log(`\x1b[38;5;141m[terminal]\x1b[0m killed ${workstreamId}`);
   return true;
-}
-
-export function restoreSessions() {
-  const { loadState } = require("./persistence");
-  const state = loadState();
-
-  log(`\x1b[38;5;245m[restore]\x1b[0m Found ${state.nodes.length} saved sessions`);
-
-  for (const node of state.nodes) {
-    const buffer = loadBuffer(node.sessionId);
-    const gitBranch = getGitBranch(node.cwd);
-
-    const session: Session = {
-      pty: null,
-      agentId: node.agentId,
-      agentName: node.agentName,
-      command: node.command,
-      cwd: node.cwd,
-      gitBranch: gitBranch || undefined,
-      createdAt: node.createdAt,
-      clients: new Set(),
-      outputBuffer: buffer,
-      status: "disconnected",
-      lastOutputTime: 0,
-      lastInputTime: 0,
-      recentOutputSize: 0,
-      customName: node.customName,
-      customColor: node.customColor,
-      notes: node.notes,
-      nodeId: node.nodeId,
-      isRestored: true,
-    };
-
-    sessions.set(node.sessionId, session);
-    log(`\x1b[38;5;245m[restore]\x1b[0m Restored ${node.sessionId} (${node.agentName}) branch: ${gitBranch || 'none'}`);
-  }
 }

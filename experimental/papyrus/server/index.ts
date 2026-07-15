@@ -3,8 +3,7 @@ import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
 import type { ServerWebSocket } from "bun";
 import { apiRoutes } from "./routes/api";
-import { sessions, restoreSessions } from "./services/sessionManager";
-import { saveState } from "./services/persistence";
+import { sessions } from "./services/sessionManager";
 import type { WebSocketData } from "./types";
 
 const app = new Hono();
@@ -107,24 +106,17 @@ Bun.serve<WebSocketData>({
   },
 });
 
-// Restore sessions on startup
-restoreSessions();
-
 log(`\x1b[38;5;141m[server]\x1b[0m Running on http://localhost:${PORT}`);
 log(`\x1b[38;5;245m[server]\x1b[0m Launch directory: ${process.env.LAUNCH_CWD || process.cwd()}`);
+log(`\x1b[38;5;245m[server]\x1b[0m Forest: ${process.env.SILVERWOOD_FOREST_PATH || "~/.silverwood"}`);
 
-// Periodic state save
-setInterval(() => {
-  saveState(sessions);
-}, 30000);
+// The canvas is rebuilt from silverwood on demand (GET /api/state); there is no
+// startup restore and nothing to autosave — all durable state lives in silverwood.
 
-// Cleanup on exit
+// Cleanup on exit: kill terminals (no disk state to flush).
 process.on("SIGINT", () => {
-  log("\n\x1b[38;5;245m[server]\x1b[0m Saving state before exit...");
-  saveState(sessions);
   for (const [, session] of sessions) {
     if (session.pty) session.pty.kill();
-    if (session.stateTrackerPty) session.stateTrackerPty.kill();
   }
   process.exit(0);
 });

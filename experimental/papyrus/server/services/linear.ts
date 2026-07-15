@@ -1,119 +1,14 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
 import type { LinearTicket, LinearConfig } from "../types";
 
-const LAUNCH_CWD = process.env.LAUNCH_CWD || process.cwd();
-const CONFIG_FILE = join(LAUNCH_CWD, ".openui", "config.json");
-const ENV_FILE = join(LAUNCH_CWD, ".openui", ".env");
-
-// Load .env file from .openui directory
-function loadEnvFile(): Record<string, string> {
-  try {
-    if (existsSync(ENV_FILE)) {
-      const content = readFileSync(ENV_FILE, "utf-8");
-      const vars: Record<string, string> = {};
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("#")) {
-          const [key, ...valueParts] = trimmed.split("=");
-          if (key && valueParts.length > 0) {
-            let value = valueParts.join("=");
-            // Remove quotes if present
-            if ((value.startsWith('"') && value.endsWith('"')) ||
-                (value.startsWith("'") && value.endsWith("'"))) {
-              value = value.slice(1, -1);
-            }
-            vars[key.trim()] = value;
-          }
-        }
-      }
-      return vars;
-    }
-  } catch (e) {
-    console.error("Failed to load .env file:", e);
-  }
-  return {};
-}
-
-// Save API key to .env file
-function saveEnvFile(apiKey: string): void {
-  try {
-    const dir = join(LAUNCH_CWD, ".openui");
-    if (!existsSync(dir)) {
-      require("fs").mkdirSync(dir, { recursive: true });
-    }
-
-    let content = "";
-    if (existsSync(ENV_FILE)) {
-      // Preserve other vars, update LINEAR_API_KEY
-      const existing = readFileSync(ENV_FILE, "utf-8");
-      const lines = existing.split("\n").filter(line => !line.trim().startsWith("LINEAR_API_KEY="));
-      content = lines.join("\n");
-      if (content && !content.endsWith("\n")) content += "\n";
-    }
-
-    if (apiKey) {
-      content += `LINEAR_API_KEY="${apiKey}"\n`;
-    }
-
-    writeFileSync(ENV_FILE, content);
-  } catch (e) {
-    console.error("Failed to save .env file:", e);
-  }
-}
-
-// Load config - API key from .env, other settings from config.json
+// Linear settings come from the environment only — papyrus writes nothing to
+// disk. Set LINEAR_API_KEY (and optionally LINEAR_DEFAULT_TEAM_ID) to enable the
+// read-only Linear ticket lookups; absent that, the Linear routes report
+// "not configured".
 export function loadConfig(): LinearConfig {
-  const envVars = loadEnvFile();
-  const config: LinearConfig = {};
-
-  // API key from .env file (or process.env as fallback)
-  config.apiKey = envVars.LINEAR_API_KEY || process.env.LINEAR_API_KEY;
-
-  console.log(`\x1b[38;5;141m[linear]\x1b[0m Loading config from:`, ENV_FILE);
-  console.log(`\x1b[38;5;141m[linear]\x1b[0m ENV file exists:`, existsSync(ENV_FILE));
-  console.log(`\x1b[38;5;141m[linear]\x1b[0m API key from env vars:`, !!envVars.LINEAR_API_KEY, envVars.LINEAR_API_KEY ? `(${envVars.LINEAR_API_KEY.substring(0, 10)}...)` : '');
-  console.log(`\x1b[38;5;141m[linear]\x1b[0m API key from process.env:`, !!process.env.LINEAR_API_KEY);
-
-  // Other settings from config.json
-  try {
-    if (existsSync(CONFIG_FILE)) {
-      const fileConfig = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
-      config.defaultTeamId = fileConfig.defaultTeamId;
-      config.defaultBaseBranch = fileConfig.defaultBaseBranch;
-      config.createWorktree = fileConfig.createWorktree;
-      config.ticketPromptTemplate = fileConfig.ticketPromptTemplate;
-    }
-  } catch (e) {
-    console.error("Failed to load config:", e);
-  }
-
-  return config;
-}
-
-// Save config - API key to .env, other settings to config.json
-export function saveConfig(config: LinearConfig): void {
-  // Save API key to .env file
-  if (config.apiKey !== undefined) {
-    saveEnvFile(config.apiKey);
-  }
-
-  // Save other settings to config.json (without the API key)
-  try {
-    const dir = join(LAUNCH_CWD, ".openui");
-    if (!existsSync(dir)) {
-      require("fs").mkdirSync(dir, { recursive: true });
-    }
-    const fileConfig = {
-      defaultTeamId: config.defaultTeamId,
-      defaultBaseBranch: config.defaultBaseBranch,
-      createWorktree: config.createWorktree,
-      ticketPromptTemplate: config.ticketPromptTemplate,
-    };
-    writeFileSync(CONFIG_FILE, JSON.stringify(fileConfig, null, 2));
-  } catch (e) {
-    console.error("Failed to save config:", e);
-  }
+  return {
+    apiKey: process.env.LINEAR_API_KEY,
+    defaultTeamId: process.env.LINEAR_DEFAULT_TEAM_ID,
+  };
 }
 
 // Linear GraphQL API

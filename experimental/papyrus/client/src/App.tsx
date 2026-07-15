@@ -14,7 +14,6 @@ import { Plus } from "lucide-react";
 
 import { useStore } from "./stores/useStore";
 import { AgentNode } from "./components/AgentNode/index";
-import { CategoryNode } from "./components/CategoryNode";
 import { Sidebar } from "./components/Sidebar";
 import { NewSessionModal } from "./components/NewSessionModal";
 import { Header } from "./components/Header";
@@ -22,7 +21,6 @@ import { CanvasControls } from "./components/CanvasControls";
 
 const nodeTypes = {
   agent: AgentNode,
-  category: CategoryNode,
 };
 
 function AppContent() {
@@ -109,27 +107,11 @@ function AppContent() {
     Promise.all([
       fetch("/api/sessions").then((res) => res.json()),
       fetch("/api/state").then((res) => res.json()),
-      fetch("/api/categories").then((res) => res.json()),
     ])
-      .then(([sessions, { nodes: savedNodes }, categories]) => {
+      .then(([sessions, { nodes: savedNodes }]) => {
         const restoredNodes: any[] = [];
 
-        // Restore categories first (they should be behind agents)
-        categories.forEach((cat: any) => {
-          restoredNodes.push({
-            id: cat.id,
-            type: "category",
-            position: cat.position,
-            style: { width: cat.width, height: cat.height },
-            data: {
-              label: cat.label,
-              color: cat.color,
-            },
-            zIndex: -1, // Behind agent nodes
-          });
-        });
-
-        // Restore agent sessions
+        // Restore workstream nodes (each canvas node is a silverwood workstream)
         sessions.forEach((session: any, index: number) => {
           const saved = savedNodes?.find((n: any) => n.sessionId === session.sessionId);
           const agent = agents.find((a) => a.id === session.agentId);
@@ -189,31 +171,12 @@ function AppContent() {
     const positions: Record<string, { x: number; y: number }> = {};
     const GRID_SIZE = 24;
     currentNodes.forEach((node) => {
-      // Only save agent positions to state/positions
+      // Each node is a workstream; its coordinate is saved to the workstream's KV.
       if (node.type === "agent") {
         positions[node.id] = {
           x: Math.round(node.position.x / GRID_SIZE) * GRID_SIZE,
           y: Math.round(node.position.y / GRID_SIZE) * GRID_SIZE,
         };
-      }
-      // Save category positions/sizes separately
-      if (node.type === "category") {
-        // Get dimensions - could be in style, measured, or width/height
-        const width = node.measured?.width || node.width || (typeof node.style?.width === 'number' ? node.style.width : parseInt(node.style?.width as string) || 250);
-        const height = node.measured?.height || node.height || (typeof node.style?.height === 'number' ? node.style.height : parseInt(node.style?.height as string) || 200);
-
-        fetch(`/api/categories/${node.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            position: {
-              x: Math.round(node.position.x / GRID_SIZE) * GRID_SIZE,
-              y: Math.round(node.position.y / GRID_SIZE) * GRID_SIZE,
-            },
-            width,
-            height,
-          }),
-        }).catch(console.error);
       }
     });
     if (Object.keys(positions).length > 0) {
