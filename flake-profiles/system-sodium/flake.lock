@@ -761,10 +761,10 @@
       },
       "locked": {
         "dir": "experimental/silverwood",
-        "lastModified": 1783930889,
-        "narHash": "sha256-1cri4Nxv2p13PibHnZ7IqNraxXuktbTMmlwJo6QfF9A=",
-        "rev": "f271ce6a3bf36166a96a9281017f417710a491a1",
-        "revCount": 680,
+        "lastModified": 1784021069,
+        "narHash": "sha256-8udU4NZ3iOyNRqB+CYZqEpROe8xcwLSOIzv94sQ3zrM=",
+        "rev": "40073c34514784e738d25e6db6eb86f163cfa632",
+        "revCount": 683,
         "type": "git",
         "url": "file:///Users/yuto/src/everything"
       },
