@@ -1038,10 +1038,10 @@
       },
       "locked": {
         "dir": "experimental/papyrus",
-        "lastModified": 1784102597,
-        "narHash": "sha256-nMIod8l9unbTJcqwP1KdKxYldhKj+H71ImbRgCJDbCc=",
-        "rev": "7b5c3cf89ae7323a1060420d70b49b4898d45dac",
-        "revCount": 692,
+        "lastModified": 1784182522,
+        "narHash": "sha256-Eps7a7OYvePP6AhHzCf0BBZJizeMXIhBSsr3fbA2sRM=",
+        "rev": "b40b9b68d00971797e3beeb610428f1916fc4206",
+        "revCount": 695,
         "type": "git",
         "url": "file:///Users/yuto/src/everything"
       },
@@ -1225,10 +1225,10 @@
       },
       "locked": {
         "dir": "experimental/silverwood",
-        "lastModified": 1783915894,
-        "narHash": "sha256-D9NMIEHCyWm6l3GudNhjSe58DVbYcPK8AaXuymoDAaI=",
-        "rev": "ed0339570edd7b4e244f8725e6bd338fdde77531",
-        "revCount": 678,
+        "lastModified": 1784182522,
+        "narHash": "sha256-Eps7a7OYvePP6AhHzCf0BBZJizeMXIhBSsr3fbA2sRM=",
+        "rev": "b40b9b68d00971797e3beeb610428f1916fc4206",
+        "revCount": 695,
         "type": "git",
         "url": "file:///Users/yuto/src/everything"
       },
