@@ -1038,10 +1038,10 @@
       },
       "locked": {
         "dir": "experimental/papyrus",
-        "lastModified": 1784182522,
-        "narHash": "sha256-Eps7a7OYvePP6AhHzCf0BBZJizeMXIhBSsr3fbA2sRM=",
-        "rev": "b40b9b68d00971797e3beeb610428f1916fc4206",
-        "revCount": 695,
+        "lastModified": 1784186835,
+        "narHash": "sha256-nehEVIDQsEQxnW2Cr6tKHCM4zV5uqnbiesemr79sqwc=",
+        "rev": "1f9eb3e974a33f274540e0b625cfdde8d3332760",
+        "revCount": 699,
         "type": "git",
         "url": "file:///Users/yuto/src/everything"
       },
