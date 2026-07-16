@@ -60,13 +60,24 @@ enum Command {
     },
 
     /// Show a workstream by id.
-    Show { id: String },
+    Show {
+        /// The workstream id (from `silverwood ls`).
+        id: String,
+    },
 
     /// Archive a workstream (tombstone).
-    Archive { id: String },
+    Archive {
+        /// The workstream id (from `silverwood ls`).
+        id: String,
+    },
 
     /// Rename a workstream.
-    Rename { id: String, name: String },
+    Rename {
+        /// The workstream id (from `silverwood ls`).
+        id: String,
+        /// The new display name.
+        name: String,
+    },
 
     /// Namespaced key-value state (frontend-owned).
     #[command(subcommand)]
@@ -84,27 +95,45 @@ enum Command {
     },
 }
 
+/// Positional args are shared across kv subcommands: `<ID> <NAMESPACE> [KEY] [VALUE]`.
+/// `id` is the workstream id; `namespace` is a reverse-DNS, frontend-owned prefix
+/// (the `app.andref.silverwood.*` prefix is reserved).
 #[derive(Subcommand)]
 enum KvCommand {
     /// Set a value (value is an opaque JSON string).
     Set {
+        /// The workstream id (from `silverwood ls`).
         id: String,
+        /// The namespace (reverse-DNS; `app.andref.silverwood.*` is reserved).
         namespace: String,
+        /// The key within the namespace.
         key: String,
+        /// The value; stored verbatim as an opaque JSON string.
         value: String,
     },
     /// Get a value.
     Get {
+        /// The workstream id (from `silverwood ls`).
         id: String,
+        /// The namespace the key lives in.
         namespace: String,
+        /// The key within the namespace.
         key: String,
     },
     /// List all entries in a namespace.
-    Ls { id: String, namespace: String },
+    Ls {
+        /// The workstream id (from `silverwood ls`).
+        id: String,
+        /// The namespace to list.
+        namespace: String,
+    },
     /// Remove a value.
     Unset {
+        /// The workstream id (from `silverwood ls`).
         id: String,
+        /// The namespace the key lives in.
         namespace: String,
+        /// The key to remove.
         key: String,
     },
 }
@@ -114,16 +143,27 @@ enum SessionCommand {
     /// Create (record) a session of a given agent kind.
     #[command(subcommand)]
     Create(SessionCreate),
-    /// List sessions.
-    Ls { id: String },
+    /// List the agent sessions recorded on a workstream.
+    Ls {
+        /// The workstream id whose sessions to list (from `silverwood ls`).
+        id: String,
+    },
     /// Rename a session (preserving its kind + created_at).
     Rename {
+        /// The workstream id the session belongs to (from `silverwood ls`).
         id: String,
+        /// The session id to rename.
         session_id: String,
+        /// The new session name.
         name: String,
     },
     /// Remove a session.
-    Rm { id: String, session_id: String },
+    Rm {
+        /// The workstream id the session belongs to (from `silverwood ls`).
+        id: String,
+        /// The session id to remove.
+        session_id: String,
+    },
 }
 
 /// Per-kind session creation: each agent kind takes the parameters it needs, so
@@ -133,8 +173,11 @@ enum SessionCreate {
     /// A Claude Code session. `session_id` is the Claude session id; `name`
     /// defaults to the session id when omitted.
     ClaudeCode {
+        /// The workstream id to attach the session to (from `silverwood ls`).
         id: String,
+        /// The Claude Code session id to record.
         session_id: String,
+        /// Display name for the session (defaults to the session id).
         #[arg(long)]
         name: Option<String>,
     },
