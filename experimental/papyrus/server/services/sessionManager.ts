@@ -2,6 +2,7 @@ import { spawn as spawnPty } from "bun-pty";
 import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { PORT, HOST } from "../config";
 import type { Session } from "../types";
 
 const QUIET = !!process.env.OPENUI_QUIET;
@@ -90,6 +91,13 @@ export function spawnTerminal(params: {
       TERM: "xterm-256color",
       // The plugin echoes this back on status hooks so we can correlate.
       OPENUI_SESSION_ID: workstreamId,
+      // Tell the plugin's status-reporter where the server actually is. Without
+      // this it falls back to its hardcoded 6969 while the server is on 6968, so
+      // every status POST (which carries the Claude session id we record) is
+      // silently dropped. Propagating the real port fixes it regardless of which
+      // plugin copy loads (in-store vendored or a stale ~/.openui one).
+      OPENUI_PORT: String(PORT),
+      OPENUI_HOST: HOST,
     },
     rows: 30,
     cols: 120,

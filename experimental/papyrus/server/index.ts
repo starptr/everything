@@ -4,10 +4,10 @@ import { serveStatic } from "hono/bun";
 import type { ServerWebSocket } from "bun";
 import { apiRoutes } from "./routes/api";
 import { sessions } from "./services/sessionManager";
+import { PORT } from "./config";
 import type { WebSocketData } from "./types";
 
 const app = new Hono();
-const PORT = Number(process.env.PORT) || 6968;
 const QUIET = !!process.env.OPENUI_QUIET;
 
 // Conditionally log only in dev mode

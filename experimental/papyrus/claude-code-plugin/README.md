@@ -29,12 +29,16 @@ The plugin uses Claude Code hooks to report status:
 
 ## Configuration
 
-The plugin sends status to `localhost:4242` by default. To change:
+The plugin sends status to `localhost:6968` by default (papyrus's server port). To
+change:
 
 ```bash
 export OPENUI_HOST=localhost
-export OPENUI_PORT=4242
+export OPENUI_PORT=6968
 ```
+
+(papyrus already injects `OPENUI_PORT`/`OPENUI_HOST` matching its actual server port when
+it spawns the agent, so you normally never need to set these by hand.)
 
 ## Verify Installation
 
@@ -48,8 +52,8 @@ You should see `openui-status` listed.
 ## Troubleshooting
 
 1. Check plugin is loaded: `/plugins`
-2. Check OpenUI is running on port 4242
-3. Check OpenUI server logs for `[plugin]` messages
+2. Check papyrus is running on port 6968
+3. Check papyrus server logs for `[plugin-hook]` messages
 
 ## Uninstall
 
