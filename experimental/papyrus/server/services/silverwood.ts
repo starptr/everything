@@ -14,10 +14,18 @@ const SILVERWOOD_BIN = process.env.SILVERWOOD_BIN || "silverwood";
 // (NOT under silverwood's reserved `app.andref.silverwood.*` prefix.)
 export const PAPYRUS_NS = "app.andref.papyrus";
 
-export interface Checkout {
-  location: string;
+// The basic kind's data-carrying checkout mode (silverwood schema v3): it owns the
+// materialization strategy's seed (`initial_source`) and its provisioning `state`.
+export interface CheckoutMode {
+  checkout_mode: string;
+  initial_source: string;
   state: "pending" | "ready" | "failed";
-  mode: string;
+}
+
+// Where the checkout physically lives: which forest, and (per forest kind) where.
+export interface Location {
+  forest_id: string;
+  within: { forest_kind: string; path: string };
 }
 
 export interface Workstream {
@@ -26,8 +34,8 @@ export interface Workstream {
   status: "active" | "archived";
   created_at: string;
   kind: string;
-  code_change?: { source: string; mode: string };
-  checkouts?: Record<string, Checkout>;
+  mode?: CheckoutMode;
+  location?: Location;
   kv?: Record<string, Record<string, string>>;
 }
 
@@ -151,23 +159,17 @@ function serialize<T>(id: string, fn: () => Promise<T>): Promise<T> {
 
 // ---- helpers ----
 
-/// This forest's ready checkout location for a workstream (the dir the agent
-/// runs in), or the first checkout if none are ready yet.
+/// The checkout location for a workstream (the dir the agent runs in). A basic
+/// workstream is single-forest, so there is exactly one location.
 export function checkoutLocation(ws: Workstream): string | undefined {
-  const checkouts = Object.values(ws.checkouts || {});
-  const ready = checkouts.find((c) => c.state === "ready");
-  return (ready ?? checkouts[0])?.location;
+  return ws.location?.within.path || undefined;
 }
 
-/// The provisioning state to surface to the canvas.
+/// The provisioning state to surface to the canvas (carried by the checkout mode).
 export function checkoutState(
   ws: Workstream,
 ): "ready" | "pending" | "failed" | "none" {
-  const checkouts = Object.values(ws.checkouts || {});
-  if (checkouts.some((c) => c.state === "ready")) return "ready";
-  if (checkouts.some((c) => c.state === "pending")) return "pending";
-  if (checkouts.some((c) => c.state === "failed")) return "failed";
-  return "none";
+  return ws.mode?.state ?? "none";
 }
 
 /// Read a papyrus KV value, JSON-decoded, or `undefined` if absent/garbage.

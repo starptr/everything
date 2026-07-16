@@ -78,7 +78,7 @@ function buildNode(ws: sw.Workstream) {
     isAlive: true,
     isRestored: !runtime?.pty,
     checkoutState: cstate,
-    source: ws.code_change?.source,
+    source: ws.mode?.initial_source,
   };
 }
 
