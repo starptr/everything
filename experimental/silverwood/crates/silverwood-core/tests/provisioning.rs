@@ -10,13 +10,14 @@ use std::path::Path;
 
 use common::{new_ws, temp_forest, FakeOk};
 use silverwood_core::{
-    CheckoutMode, CheckoutProvider, CheckoutState, Error, Forest, HttpsGitUrl, Result, Status,
+    CheckoutProvider, CheckoutState, Error, Forest, LocationWithinForest, NewCheckoutMode, Result,
+    Status,
 };
 
 /// A provider that always fails provisioning.
 struct FakeFail;
 impl CheckoutProvider for FakeFail {
-    fn provision(&self, _mode: CheckoutMode, _source: &HttpsGitUrl, _dest: &Path) -> Result<()> {
+    fn provision(&self, _mode: &NewCheckoutMode, _dest: &Path) -> Result<()> {
         Err(Error::Provision("boom".into()))
     }
 }
@@ -29,9 +30,7 @@ fn create_list_get_archive_round_trip() {
     let ws = forest.create_workstream(new_ws("demo")).unwrap();
     assert_eq!(ws.body.status, Status::Active);
     assert_eq!(ws.body.kind.tag(), "basic");
-    let checkouts = ws.body.checkouts().expect("basic kind has checkouts");
-    let checkout = checkouts.values().next().expect("one checkout");
-    assert_eq!(checkout.state, CheckoutState::Ready);
+    assert_eq!(ws.body.state(), Some(CheckoutState::Ready));
 
     // get reloads to an equal value.
     assert_eq!(forest.get(ws.id).unwrap(), ws);
@@ -61,8 +60,7 @@ fn failed_provision_is_recoverable() {
     // The workstream persists with its checkout marked Failed — recoverable.
     let all = forest.list(false).unwrap();
     assert_eq!(all.len(), 1);
-    let checkout = all[0].body.checkouts().unwrap().values().next().unwrap();
-    assert_eq!(checkout.state, CheckoutState::Failed);
+    assert_eq!(all[0].body.state(), Some(CheckoutState::Failed));
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -87,10 +85,12 @@ fn real_jj_colocated_clone() {
     let forest = Forest::open(&dir).unwrap(); // real JjColocated provider
 
     let ws = forest.create_workstream(new_ws("hello")).unwrap();
-    let checkout = ws.body.checkouts().unwrap().values().next().unwrap();
-    assert_eq!(checkout.state, CheckoutState::Ready);
+    assert_eq!(ws.body.state(), Some(CheckoutState::Ready));
 
-    let checkout_dir = Path::new(&checkout.location);
+    let LocationWithinForest::BasicForest { path } = &ws.body.location().unwrap().within else {
+        panic!("expected a basic-forest location");
+    };
+    let checkout_dir = Path::new(path);
     assert!(checkout_dir.join(".jj").exists(), ".jj must exist");
     assert!(
         checkout_dir.join(".git").exists(),

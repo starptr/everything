@@ -3,10 +3,17 @@
   "status": "active",
   "created_at": "1970-01-01T00:00:00Z",
   "kind": "basic",
-  "code_change": {
-    "source": "https://example.com/x.git",
-    "mode": "jj-colocated"
+  "mode": {
+    "checkout_mode": "jj-colocated",
+    "initial_source": "https://example.com/x.git",
+    "state": "pending"
   },
-  "checkouts": {},
+  "location": {
+    "forest_id": "00000000-0000-0000-0000-000000000000",
+    "within": {
+      "forest_kind": "basic-forest",
+      "path": ""
+    }
+  },
   "kv": {}
 }

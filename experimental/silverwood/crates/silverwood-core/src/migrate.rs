@@ -19,19 +19,22 @@
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::id::WorkstreamId;
+use crate::id::{ForestId, WorkstreamId};
 use crate::workstream::{
-    Checkout, CodeChange, Status, WorkstreamBody, WorkstreamKind, BASIC_KIND, SESSION_NS,
+    CheckoutMode, CheckoutState, Location, LocationWithinForest, Status, WorkstreamBody,
+    WorkstreamKind, BASIC_KIND, SESSION_NS,
 };
 
 /// The document schema version this build reads and writes.
 ///
-/// v1 stored agent sessions inside the `basic` kind container; v2 relocates them
-/// into the reserved `app.andref.silverwood.session` kv namespace (sessions are a
-/// special case of kv — see `DESIGN.md` §5).
-pub const DOC_SCHEMA_VERSION: u32 = 2;
+/// v1 stored agent sessions inside the `basic` kind container; v2 relocated them
+/// into the reserved `app.andref.silverwood.session` kv namespace (`DESIGN.md` §5);
+/// v3 collapses the basic kind's `code_change` + per-forest `checkouts` map into a
+/// single data-carrying `mode` (seed + state) and a single `location`.
+pub const DOC_SCHEMA_VERSION: u32 = 3;
 
 /// Root scalar key holding a document's schema version.
 pub(crate) const SCHEMA_VERSION_KEY: &str = "schema_version";
@@ -54,8 +57,9 @@ pub(crate) fn detect_version(root: &serde_json::Value) -> Result<u32> {
 pub(crate) fn to_latest_body(id: WorkstreamId, root: &serde_json::Value) -> Result<WorkstreamBody> {
     let version = detect_version(root)?;
     match version {
-        1 => decode_v1(id, root)?.into_v2().into_body(id),
-        2 => decode_v2(id, root)?.into_body(id),
+        1 => decode_v1(id, root)?.into_v2().into_v3().into_body(id),
+        2 => decode_v2(id, root)?.into_v3().into_body(id),
+        3 => decode_v3(id, root)?.into_body(id),
         v if v > DOC_SCHEMA_VERSION => Err(Error::SchemaTooNew {
             found: v,
             supported: DOC_SCHEMA_VERSION,
@@ -74,6 +78,30 @@ fn decode_v1(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV1>
 fn decode_v2(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV2> {
     serde_json::from_value(root.clone())
         .map_err(|e| Error::Corrupt(format!("workstream {id} (schema v2): {e}")))
+}
+
+fn decode_v3(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV3> {
+    serde_json::from_value(root.clone())
+        .map_err(|e| Error::Corrupt(format!("workstream {id} (schema v3): {e}")))
+}
+
+// ---- frozen decode types for the pre-v3 `basic` container -------------------
+
+/// The v1/v2 stored `code_change` shape. **Frozen.** The domain `CodeChange` type
+/// was removed in v3, so migration keeps its own decode copy. The `mode` field
+/// (always `"jj-colocated"`) is intentionally omitted — serde ignores it, and v3
+/// has a single mode.
+#[derive(Deserialize)]
+struct StoredCodeChange {
+    source: String,
+}
+
+/// The v1/v2 stored per-forest `checkout` shape. **Frozen.** Its `mode` field
+/// (redundant with `code_change.mode`) is omitted — serde ignores it.
+#[derive(Deserialize)]
+struct StoredCheckout {
+    location: String,
+    state: CheckoutState,
 }
 
 // ---- v1 (frozen) ------------------------------------------------------------
@@ -99,9 +127,9 @@ struct StoredBodyV1 {
 /// The v1 stored shape of the `basic` kind container. **Frozen.**
 #[derive(Deserialize)]
 struct StoredBasicV1 {
-    code_change: CodeChange,
+    code_change: StoredCodeChange,
     #[serde(default)]
-    checkouts: BTreeMap<String, Checkout>,
+    checkouts: BTreeMap<String, StoredCheckout>,
     /// session id → JSON-encoded `AgentSession`.
     #[serde(default)]
     sessions: BTreeMap<String, String>,
@@ -111,7 +139,7 @@ impl StoredBodyV1 {
     /// v1 → v2: relocate sessions from `basic.sessions` into the flat kv map under
     /// the reserved [`SESSION_NS`] — each value carried over verbatim, since v1
     /// already stored the JSON-encoded `AgentSession`. Destructive (it moves a
-    /// container; see `DESIGN.md` §9.2/§9.3). **Frozen** once v3 lands.
+    /// container; see `DESIGN.md` §9.2/§9.3). **Frozen.**
     fn into_v2(self) -> StoredBodyV2 {
         let StoredBodyV1 {
             name,
@@ -148,11 +176,11 @@ impl StoredBodyV1 {
     }
 }
 
-// ---- v2 (current latest) ----------------------------------------------------
+// ---- v2 (frozen) ------------------------------------------------------------
 
-/// The v2 on-disk body shape — the current latest. **Frozen** once v3 lands.
-/// Sessions are no longer a `basic` field; they are kv entries under the reserved
-/// [`SESSION_NS`], so v2's `basic` holds only the code-change and checkouts.
+/// The v2 on-disk body shape. **Frozen.** Sessions are kv entries under the
+/// reserved [`SESSION_NS`], so v2's `basic` holds only the code-change and the
+/// per-forest checkouts map.
 #[derive(Deserialize)]
 struct StoredBodyV2 {
     name: String,
@@ -167,18 +195,100 @@ struct StoredBodyV2 {
     kv: BTreeMap<String, String>,
 }
 
-/// The v2 stored shape of the `basic` kind container. **Frozen** once v3 lands.
+/// The v2 stored shape of the `basic` kind container. **Frozen.**
 #[derive(Deserialize)]
 struct StoredBasicV2 {
-    code_change: CodeChange,
+    code_change: StoredCodeChange,
     #[serde(default)]
-    checkouts: BTreeMap<String, Checkout>,
+    checkouts: BTreeMap<String, StoredCheckout>,
 }
 
 impl StoredBodyV2 {
-    /// Encode into the latest domain body. v2 is the latest, so this is the
-    /// `into_body` encoder; when v3 lands it moves onto the v3 struct and v2
-    /// instead keeps only decode + a `migrate_to_v3`.
+    /// v2 → v3: collapse `code_change` + the per-forest `checkouts` map into a
+    /// single data-carrying `mode` (owning the seed + provisioning state) and a
+    /// single `location`. **Destructive/compacting** (`DESIGN.md` §9.2/§9.3): a
+    /// basic workstream is single-forest, so only the first checkout (by forest-id
+    /// order) survives and the rest are dropped; real docs have exactly one. A
+    /// document with zero checkouts (only synthetic pre-v3 corpus) degrades to a
+    /// never-provisioned `pending` location with a nil forest id. **Frozen** once
+    /// v4 lands.
+    fn into_v3(self) -> StoredBodyV3 {
+        let StoredBodyV2 {
+            name,
+            status,
+            kind,
+            created_at,
+            basic,
+            kv,
+        } = self;
+        let basic = basic.map(|b| {
+            let StoredBasicV2 {
+                code_change,
+                checkouts,
+            } = b;
+            // The single materialization: first checkout (deterministic BTreeMap
+            // order), or a degenerate never-provisioned one if there were none.
+            let (forest_key, path, state) = checkouts
+                .into_iter()
+                .next()
+                .map(|(fid, c)| (fid, c.location, c.state))
+                .unwrap_or_else(|| (String::new(), String::new(), CheckoutState::Pending));
+            let forest_id = forest_key
+                .parse::<Uuid>()
+                .map(ForestId)
+                .unwrap_or(ForestId(Uuid::nil()));
+            StoredBasicV3 {
+                mode: CheckoutMode::JjColocated {
+                    initial_source: code_change.source,
+                    state,
+                },
+                location: Location {
+                    forest_id,
+                    within: LocationWithinForest::BasicForest { path },
+                },
+            }
+        });
+        StoredBodyV3 {
+            name,
+            status,
+            kind,
+            created_at,
+            basic,
+            kv,
+        }
+    }
+}
+
+// ---- v3 (current latest) ----------------------------------------------------
+
+/// The v3 on-disk body shape — the current latest. **Frozen** once v4 lands.
+/// The `basic` container holds a data-carrying `mode` and a single `location`
+/// (decoded straight into the domain types, which are `Deserialize`).
+#[derive(Deserialize)]
+struct StoredBodyV3 {
+    name: String,
+    status: Status,
+    kind: String,
+    created_at: String,
+    /// Present iff `kind == "basic"`.
+    #[serde(default)]
+    basic: Option<StoredBasicV3>,
+    /// JSON `["namespace","key"]` → value (sessions live here under SESSION_NS).
+    #[serde(default)]
+    kv: BTreeMap<String, String>,
+}
+
+/// The v3 stored shape of the `basic` kind container. **Frozen** once v4 lands.
+#[derive(Deserialize)]
+struct StoredBasicV3 {
+    mode: CheckoutMode,
+    location: Location,
+}
+
+impl StoredBodyV3 {
+    /// Encode into the latest domain body. v3 is the latest, so this is the
+    /// `into_body` encoder; when v4 lands it moves onto the v4 struct and v3
+    /// instead keeps only decode + a `migrate_to_v4`.
     fn into_body(self, id: WorkstreamId) -> Result<WorkstreamBody> {
         let kind = match self.kind.as_str() {
             BASIC_KIND => {
@@ -188,8 +298,8 @@ impl StoredBodyV2 {
                     ))
                 })?;
                 WorkstreamKind::Basic {
-                    code_change: basic.code_change,
-                    checkouts: basic.checkouts,
+                    mode: basic.mode,
+                    location: basic.location,
                 }
             }
             other => {

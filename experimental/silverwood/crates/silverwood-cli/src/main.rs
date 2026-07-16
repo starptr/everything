@@ -12,8 +12,9 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    AgentKind, AgentSession, CheckoutMode, Forest, HttpsGitUrl, NewKind, NewWorkstream,
-    UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
+    AgentKind, AgentSession, CheckoutMode, Forest, HttpsGitUrl, LocationWithinForest,
+    NewCheckoutMode, NewKind, NewWorkstream, UpgradeReport, Workstream, WorkstreamId,
+    DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -139,7 +140,7 @@ enum SessionCreate {
     },
 }
 
-/// CLI mirror of `CheckoutMode` (keeps `clap` out of `silverwood-core`).
+/// CLI mirror of the checkout-mode selector (keeps `clap` out of `silverwood-core`).
 #[derive(Clone, Copy, ValueEnum)]
 enum ModeArg {
     #[value(name = "jj-colocated")]
@@ -147,9 +148,10 @@ enum ModeArg {
 }
 
 impl ModeArg {
-    fn to_core(self) -> CheckoutMode {
+    /// Build the creation-side mode from the selector + its seed (the source url).
+    fn to_new_mode(self, initial_source: HttpsGitUrl) -> NewCheckoutMode {
         match self {
-            ModeArg::JjColocated => CheckoutMode::JjColocated,
+            ModeArg::JjColocated => NewCheckoutMode::JjColocated { initial_source },
         }
     }
 }
@@ -183,8 +185,7 @@ fn run(cli: Cli) -> CliResult {
             let ws = forest.create_workstream(NewWorkstream {
                 name,
                 kind: NewKind::Basic {
-                    source,
-                    mode: mode.to_core(),
+                    mode: mode.to_new_mode(source),
                 },
             })?;
             emit(json, &ws, || print_workstream(&ws));
@@ -365,20 +366,17 @@ fn print_workstream(ws: &Workstream) {
         ws.body.name
     );
     println!("  kind:     {}", ws.body.kind.tag());
-    if let Some(code_change) = ws.body.code_change() {
-        println!(
-            "  source:   {} ({})",
-            code_change.source,
-            enum_str(code_change.mode)
-        );
+    if let Some(mode) = ws.body.mode() {
+        println!("  mode:     {} [{}]", mode.tag(), enum_str(mode.state()));
+        if let CheckoutMode::JjColocated { initial_source, .. } = mode {
+            println!("  source:   {initial_source}");
+        }
     }
     println!("  created:  {}", ws.body.created_at);
-    for (forest_id, checkout) in ws.body.checkouts().into_iter().flatten() {
-        println!(
-            "  checkout: [{}] {} (forest {forest_id})",
-            enum_str(checkout.state),
-            checkout.location
-        );
+    if let Some(location) = ws.body.location() {
+        if let LocationWithinForest::BasicForest { path } = &location.within {
+            println!("  checkout: {path} (forest {})", location.forest_id);
+        }
     }
     let session_count = ws.body.sessions().len();
     if session_count > 0 {

@@ -16,8 +16,8 @@ use crate::id::{ForestId, WorkstreamId};
 use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
-    AgentKind, Checkout, CheckoutState, CodeChange, NewKind, NewWorkstream, Status, Workstream,
-    WorkstreamBody, WorkstreamKind, RESERVED_NS_PREFIX,
+    AgentKind, CheckoutMode, CheckoutState, Location, LocationWithinForest, NewCheckoutMode,
+    NewKind, NewWorkstream, Status, Workstream, WorkstreamBody, WorkstreamKind, RESERVED_NS_PREFIX,
 };
 
 /// The outcome for one document in a [`Forest::upgrade_all`] pass.
@@ -114,33 +114,29 @@ impl Forest {
     /// in place. A failed provision leaves a recoverable workstream (its
     /// document persists with state `Failed`) and surfaces the error.
     pub fn create_workstream(&self, new: NewWorkstream) -> Result<Workstream> {
-        let (source, mode) = match &new.kind {
-            NewKind::Basic { source, mode } => (source, *mode),
-        };
+        let NewKind::Basic { mode: new_mode } = &new.kind;
+        let NewCheckoutMode::JjColocated { initial_source } = new_mode;
 
         let id = WorkstreamId::generate();
-        let forest_id = self.id().to_string();
         let dest = self.root.join(WORKING_COPIES_DIR).join(id.to_string());
 
-        let mut checkouts = BTreeMap::new();
-        checkouts.insert(
-            forest_id.clone(),
-            Checkout {
-                location: dest.display().to_string(),
-                state: CheckoutState::Pending,
-                mode,
-            },
-        );
+        // The stored mode starts `pending`; core flips it after provisioning. The
+        // location records this forest as the single materialization site.
         let body = WorkstreamBody {
             name: new.name,
             status: Status::Active,
             created_at: now_rfc3339(),
             kind: WorkstreamKind::Basic {
-                code_change: CodeChange {
-                    source: source.as_str().to_string(),
-                    mode,
+                mode: CheckoutMode::JjColocated {
+                    initial_source: initial_source.as_str().to_string(),
+                    state: CheckoutState::Pending,
                 },
-                checkouts,
+                location: Location {
+                    forest_id: self.id(),
+                    within: LocationWithinForest::BasicForest {
+                        path: dest.display().to_string(),
+                    },
+                },
             },
             kv: BTreeMap::new(),
         };
@@ -150,13 +146,13 @@ impl Forest {
         let doc = doc::build(self.peer_id(), &body)?;
         self.docs.save(id, &doc::snapshot(&doc)?)?;
 
-        let provisioned = self.provider.provision(mode, source, &dest);
+        let provisioned = self.provider.provision(new_mode, &dest);
         let state = if provisioned.is_ok() {
             CheckoutState::Ready
         } else {
             CheckoutState::Failed
         };
-        doc::set_checkout_state(&doc, &forest_id, state)?;
+        doc::set_state(&doc, state)?;
         self.docs.save(id, &doc::snapshot(&doc)?)?;
 
         provisioned?;

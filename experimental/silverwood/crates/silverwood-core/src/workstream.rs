@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::id::WorkstreamId;
+use crate::id::{ForestId, WorkstreamId};
 use crate::source::HttpsGitUrl;
 
 /// The `kind` discriminant stored on a basic workstream.
@@ -28,13 +28,22 @@ pub enum Status {
     Archived,
 }
 
-/// How a code-change is materialized on disk. Open enum: one mode today.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+/// How a workstream's code-change is materialized on disk, together with the data
+/// that is only meaningful *for that strategy* — its seed (`initial_source`) and its
+/// provisioning `state`. A future mode that adopts an existing local directory, for
+/// instance, would carry no source and be instantly ready; folding these fields into
+/// the variant keeps `Basic` honest. Open, internally-tagged enum: one mode today.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "checkout_mode", rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum CheckoutMode {
-    /// Clone into a jj/git colocated repository (`jj git clone --colocate`).
-    JjColocated,
+    /// A jj/git colocated clone (`jj git clone --colocate`) of `initial_source`.
+    JjColocated {
+        /// The HTTPS git url the checkout was cloned from.
+        initial_source: String,
+        /// Provisioning state of the clone (core-owned lifecycle).
+        state: CheckoutState,
+    },
 }
 
 /// Provisioning state of a per-forest checkout.
@@ -68,9 +77,17 @@ impl Status {
 }
 
 impl CheckoutMode {
-    pub(crate) fn as_str(self) -> &'static str {
+    /// The stored `checkout_mode` discriminant for this variant (matches its serde tag).
+    pub fn tag(&self) -> &'static str {
         match self {
-            CheckoutMode::JjColocated => "jj-colocated",
+            CheckoutMode::JjColocated { .. } => "jj-colocated",
+        }
+    }
+
+    /// The provisioning state of this checkout.
+    pub fn state(&self) -> CheckoutState {
+        match self {
+            CheckoutMode::JjColocated { state, .. } => *state,
         }
     }
 }
@@ -85,27 +102,39 @@ impl CheckoutState {
     }
 }
 
-/// A code-change's stored configuration: the source it clones and the mode it is
-/// materialized in.
+/// Where a workstream's checkout physically lives: which forest materialized it,
+/// and — polymorphic over forest kind — where inside that forest. A basic
+/// workstream is materialized in a single forest, so this is one value, not a
+/// per-forest map.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CodeChange {
-    /// The HTTPS source the checkout is cloned from.
-    pub source: String,
-    /// The mode the checkout is materialized in.
-    pub mode: CheckoutMode,
+pub struct Location {
+    /// The forest that materialized this checkout.
+    pub forest_id: ForestId,
+    /// The forest-kind-specific location within that forest.
+    pub within: LocationWithinForest,
 }
 
-/// A per-forest materialization of a workstream's code-change. Keyed by forest
-/// id in the document, so two forests provisioning the same workstream never
-/// conflict.
+/// A checkout's location within a forest, polymorphic over *forest kind* (an axis
+/// independent of [`CheckoutMode`]'s materialization-strategy axis). Open,
+/// internally-tagged enum: one forest kind today.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Checkout {
-    /// Absolute path to the working copy on the owning forest.
-    pub location: String,
-    /// Provisioning state.
-    pub state: CheckoutState,
-    /// The mode this checkout was provisioned with.
-    pub mode: CheckoutMode,
+#[serde(tag = "forest_kind", rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum LocationWithinForest {
+    /// A basic forest: an absolute path to the checked-out working copy.
+    BasicForest {
+        /// Absolute path to the working copy.
+        path: String,
+    },
+}
+
+impl LocationWithinForest {
+    /// The stored `forest_kind` discriminant for this variant (matches its serde tag).
+    pub fn tag(&self) -> &'static str {
+        match self {
+            LocationWithinForest::BasicForest { .. } => "basic-forest",
+        }
+    }
 }
 
 /// A generic agent session associated with a workstream kind that supports them.
@@ -135,12 +164,13 @@ pub struct AgentSession {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum WorkstreamKind {
-    /// A code-change and its per-forest checkouts.
+    /// A materialized code-change: how it is checked out (mode, carrying its seed +
+    /// provisioning state) and where it lives (location). Single-forest by design.
     Basic {
-        /// The code-change this workstream is built around.
-        code_change: CodeChange,
-        /// Per-forest checkout materializations, keyed by forest id.
-        checkouts: BTreeMap<String, Checkout>,
+        /// How the code-change is materialized, plus its seed + provisioning state.
+        mode: CheckoutMode,
+        /// Where the checkout physically lives.
+        location: Location,
     },
 }
 
@@ -174,18 +204,23 @@ pub struct WorkstreamBody {
 }
 
 impl WorkstreamBody {
-    /// The code-change, if this workstream's kind has one.
-    pub fn code_change(&self) -> Option<&CodeChange> {
+    /// The checkout mode (with its seed + state), if this workstream's kind has one.
+    pub fn mode(&self) -> Option<&CheckoutMode> {
         match &self.kind {
-            WorkstreamKind::Basic { code_change, .. } => Some(code_change),
+            WorkstreamKind::Basic { mode, .. } => Some(mode),
         }
     }
 
-    /// The per-forest checkouts, if this workstream's kind has them.
-    pub fn checkouts(&self) -> Option<&BTreeMap<String, Checkout>> {
+    /// The checkout location, if this workstream's kind has one.
+    pub fn location(&self) -> Option<&Location> {
         match &self.kind {
-            WorkstreamKind::Basic { checkouts, .. } => Some(checkouts),
+            WorkstreamKind::Basic { location, .. } => Some(location),
         }
+    }
+
+    /// The provisioning state, if this workstream's kind has a checkout.
+    pub fn state(&self) -> Option<CheckoutState> {
+        self.mode().map(CheckoutMode::state)
     }
 
     /// The agent sessions associated with this workstream, decoded from the
@@ -232,21 +267,32 @@ pub struct NewWorkstream {
 /// The kind to build a new workstream around.
 #[derive(Debug, Clone)]
 pub enum NewKind {
-    /// A basic workstream: a code-change cloned from an HTTPS source in a mode.
+    /// A basic workstream, materialized by a checkout mode.
     Basic {
-        source: HttpsGitUrl,
-        mode: CheckoutMode,
+        /// How to materialize the checkout (carries its seed; `state` is core-owned).
+        mode: NewCheckoutMode,
+    },
+}
+
+/// Creation-side counterpart to [`CheckoutMode`]: the caller supplies the
+/// mode-specific seed, but never the provisioning `state` (core owns that
+/// lifecycle — it mints `pending` then flips to `ready`/`failed`). Mirrors the
+/// [`NewKind`]/[`WorkstreamKind`] split.
+#[derive(Debug, Clone)]
+pub enum NewCheckoutMode {
+    /// A jj/git colocated clone from an HTTPS source.
+    JjColocated {
+        /// The HTTPS git url to clone.
+        initial_source: HttpsGitUrl,
     },
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use super::*;
 
-    /// The hand-written `as_str` forms must match the serde string forms, since
-    /// the document is written via `as_str` and read back via serde.
+    /// The hand-written `as_str`/`tag` forms must match the serde string forms,
+    /// since the document is written via them and read back via serde.
     #[test]
     fn as_str_matches_serde() {
         assert_eq!(
@@ -256,10 +302,6 @@ mod tests {
         assert_eq!(
             serde_json::to_value(Status::Archived).unwrap(),
             serde_json::json!(Status::Archived.as_str())
-        );
-        assert_eq!(
-            serde_json::to_value(CheckoutMode::JjColocated).unwrap(),
-            serde_json::json!(CheckoutMode::JjColocated.as_str())
         );
         for state in [
             CheckoutState::Pending,
@@ -271,6 +313,22 @@ mod tests {
                 serde_json::json!(state.as_str())
             );
         }
+        // Data-carrying enums: the internally-tagged discriminant must match tag().
+        let mode = CheckoutMode::JjColocated {
+            initial_source: "https://example.com/x.git".into(),
+            state: CheckoutState::Ready,
+        };
+        assert_eq!(
+            serde_json::to_value(&mode).unwrap()["checkout_mode"],
+            serde_json::json!(mode.tag())
+        );
+        let within = LocationWithinForest::BasicForest {
+            path: "/tmp/x".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&within).unwrap()["forest_kind"],
+            serde_json::json!(within.tag())
+        );
     }
 
     /// `WorkstreamKind::tag()` must match the serde `kind` discriminant, since
@@ -278,11 +336,16 @@ mod tests {
     #[test]
     fn kind_tag_matches_serde() {
         let kind = WorkstreamKind::Basic {
-            code_change: CodeChange {
-                source: "https://example.com/x.git".into(),
-                mode: CheckoutMode::JjColocated,
+            mode: CheckoutMode::JjColocated {
+                initial_source: "https://example.com/x.git".into(),
+                state: CheckoutState::Pending,
             },
-            checkouts: BTreeMap::new(),
+            location: Location {
+                forest_id: ForestId::generate(),
+                within: LocationWithinForest::BasicForest {
+                    path: "/tmp/x".into(),
+                },
+            },
         };
         let json = serde_json::to_value(&kind).unwrap();
         assert_eq!(json["kind"], serde_json::json!(kind.tag()));

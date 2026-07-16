@@ -6,8 +6,8 @@
 //!
 //! - [`loro_invariants`] — empirical probes of the two under-documented Loro
 //!   behaviours the migration design assumes.
-//! - [`corpus`] — v1 round-trip over every document structure, plus a frozen
-//!   byte corpus (real old bytes) — see `corpus/README.md`.
+//! - [`corpus`] — round-trip over every document structure, plus a frozen byte
+//!   corpus (real old bytes) that guards the migration path — see `corpus/README.md`.
 //! - [`convergence`] — the real schema: K forests, random concurrent ops, all
 //!   sync orderings converge to the union (no loss).
 //! - [`synthetic`] — a self-contained two-version toy schema proving migration +
@@ -20,45 +20,45 @@ mod synthetic;
 
 use std::collections::BTreeMap;
 
+use uuid::Uuid;
+
+use crate::id::ForestId;
 use crate::workstream::{
-    AgentKind, AgentSession, Checkout, CheckoutMode, CheckoutState, CodeChange, Status,
+    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest, Status,
     WorkstreamBody, WorkstreamKind, SESSION_NS,
 };
 
-/// A canonical set of v1 bodies covering the structures a document can hold:
-/// empty, multi-forest checkouts (each state), multiple sessions, multi-namespace
-/// kv, archived, and unicode/edge strings. The round-trip and frozen-corpus
-/// tests iterate this set.
+/// A canonical set of bodies covering the structures a document can hold:
+/// never-provisioned (pending, empty path), each ready/failed state, multiple
+/// sessions, multi-namespace kv, archived, and unicode/edge strings. The
+/// round-trip and frozen-corpus tests iterate this set.
+///
+/// Each body is authored to equal what the corresponding frozen **pre-v3** corpus
+/// entry migrates to: those entries had multiple per-forest checkouts keyed by
+/// non-UUID strings, so migration collapses them to the first checkout (by key
+/// order) with a nil `forest_id`. Hence every body here is single-location with a
+/// nil forest id — see [`basic`] and the migration in `migrate.rs`.
 pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
     vec![
-        ("minimal", basic("minimal", &[], &[], &[])),
         (
-            "one-checkout",
-            basic(
-                "one-checkout",
-                &[("forest-a", "/tmp/a", CheckoutState::Ready)],
-                &[],
-                &[],
-            ),
+            "minimal",
+            basic("minimal", "", CheckoutState::Pending, &[], &[]),
         ),
         (
+            "one-checkout",
+            basic("one-checkout", "/tmp/a", CheckoutState::Ready, &[], &[]),
+        ),
+        (
+            // Migrates from three checkouts → the first (forest-a: /tmp/a, ready).
             "multi-checkout",
-            basic(
-                "multi-checkout",
-                &[
-                    ("forest-a", "/tmp/a", CheckoutState::Ready),
-                    ("forest-b", "/tmp/b", CheckoutState::Pending),
-                    ("forest-c", "/tmp/c", CheckoutState::Failed),
-                ],
-                &[],
-                &[],
-            ),
+            basic("multi-checkout", "/tmp/a", CheckoutState::Ready, &[], &[]),
         ),
         (
             "sessions",
             basic(
                 "sessions",
-                &[("forest-a", "/tmp/a", CheckoutState::Ready)],
+                "/tmp/a",
+                CheckoutState::Ready,
                 &[("sid-1", "planning"), ("sid-2", "impl")],
                 &[],
             ),
@@ -67,7 +67,8 @@ pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
             "kv",
             basic(
                 "kv",
-                &[],
+                "",
+                CheckoutState::Pending,
                 &[],
                 &[
                     ("com.example.a", "theme", "\"dark\""),
@@ -77,12 +78,7 @@ pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
             ),
         ),
         ("archived", {
-            let mut b = basic(
-                "archived",
-                &[("f", "/tmp/x", CheckoutState::Ready)],
-                &[],
-                &[],
-            );
+            let mut b = basic("archived", "/tmp/x", CheckoutState::Ready, &[], &[]);
             b.status = Status::Archived;
             b
         }),
@@ -90,7 +86,8 @@ pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
             "unicode",
             basic(
                 "苺ましまろ 🍓",
-                &[],
+                "",
+                CheckoutState::Pending,
                 &[("sid-α", "Frieren 葬送のフリーレン")],
                 &[("ns", "k", "\"日本語\"")],
             ),
@@ -99,10 +96,8 @@ pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
             "full",
             basic(
                 "full",
-                &[
-                    ("forest-a", "/tmp/a", CheckoutState::Ready),
-                    ("forest-b", "/tmp/b", CheckoutState::Failed),
-                ],
+                "/tmp/a",
+                CheckoutState::Ready,
                 &[("sid-1", "one"), ("sid-2", "two")],
                 &[("ns1", "a", "1"), ("ns2", "b", "\"two\"")],
             ),
@@ -110,27 +105,18 @@ pub(super) fn sample_bodies() -> Vec<(&'static str, WorkstreamBody)> {
     ]
 }
 
-/// Build a basic-kind body. Sessions are all `claude-code` (the only agent kind)
-/// and, since v2, are stored as reserved-namespace kv entries (see [`SESSION_NS`]).
+/// Build a single-location basic-kind body with a nil `forest_id` (matching what
+/// the frozen pre-v3 corpus, whose checkout keys are not UUIDs, migrates to).
+/// `path` is the checkout path (`""` for never-provisioned). Sessions are all
+/// `claude-code` (the only agent kind) and stored as reserved-namespace kv entries
+/// (see [`SESSION_NS`]).
 fn basic(
     name: &str,
-    checkouts: &[(&str, &str, CheckoutState)],
+    path: &str,
+    state: CheckoutState,
     sessions: &[(&str, &str)],
     kv: &[(&str, &str, &str)],
 ) -> WorkstreamBody {
-    let checkouts = checkouts
-        .iter()
-        .map(|(forest, loc, state)| {
-            (
-                forest.to_string(),
-                Checkout {
-                    location: loc.to_string(),
-                    state: *state,
-                    mode: CheckoutMode::JjColocated,
-                },
-            )
-        })
-        .collect();
     let mut kvmap: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for (ns, k, v) in kv {
         kvmap
@@ -154,11 +140,16 @@ fn basic(
         status: Status::Active,
         created_at: "1970-01-01T00:00:00Z".to_string(),
         kind: WorkstreamKind::Basic {
-            code_change: CodeChange {
-                source: "https://example.com/x.git".to_string(),
-                mode: CheckoutMode::JjColocated,
+            mode: CheckoutMode::JjColocated {
+                initial_source: "https://example.com/x.git".to_string(),
+                state,
             },
-            checkouts,
+            location: Location {
+                forest_id: ForestId(Uuid::nil()),
+                within: LocationWithinForest::BasicForest {
+                    path: path.to_string(),
+                },
+            },
         },
         kv: kvmap,
     }

@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use silverwood_core::{
-    CheckoutMode, CheckoutProvider, HttpsGitUrl, NewKind, NewWorkstream, Result,
+    CheckoutProvider, HttpsGitUrl, NewCheckoutMode, NewKind, NewWorkstream, Result,
 };
 
 /// A fresh, unique temp dir for an isolated forest.
@@ -19,7 +19,7 @@ pub fn temp_forest(tag: &str) -> PathBuf {
 pub struct FakeOk;
 
 impl CheckoutProvider for FakeOk {
-    fn provision(&self, _mode: CheckoutMode, _source: &HttpsGitUrl, dest: &Path) -> Result<()> {
+    fn provision(&self, _mode: &NewCheckoutMode, dest: &Path) -> Result<()> {
         std::fs::create_dir_all(dest).unwrap();
         Ok(())
     }
@@ -30,8 +30,10 @@ pub fn new_ws(name: &str) -> NewWorkstream {
     NewWorkstream {
         name: name.into(),
         kind: NewKind::Basic {
-            source: HttpsGitUrl::parse("https://github.com/octocat/Hello-World.git").unwrap(),
-            mode: CheckoutMode::JjColocated,
+            mode: NewCheckoutMode::JjColocated {
+                initial_source: HttpsGitUrl::parse("https://github.com/octocat/Hello-World.git")
+                    .unwrap(),
+            },
         },
     }
 }

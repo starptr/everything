@@ -37,8 +37,9 @@ fn new_creates_a_ready_colocated_checkout() {
     assert_eq!(ws["name"], "auth-refactor");
     assert_eq!(ws["status"], "active");
     assert_eq!(ws["kind"], "basic");
-    assert_eq!(ws["code_change"]["mode"], "jj-colocated");
-    assert!(ws["code_change"]["source"]
+    assert_eq!(ws["mode"]["checkout_mode"], "jj-colocated");
+    assert_eq!(ws["mode"]["state"], "ready");
+    assert!(ws["mode"]["initial_source"]
         .as_str()
         .unwrap()
         .contains("starptr/example"));
@@ -48,13 +49,9 @@ fn new_creates_a_ready_colocated_checkout() {
         "created_at not RFC3339-ish: {created}"
     );
 
-    // Exactly one checkout, ready, located under this forest's working-copies.
-    let checkouts = ws["checkouts"].as_object().unwrap();
-    assert_eq!(checkouts.len(), 1);
-    let checkout = checkouts.values().next().unwrap();
-    assert_eq!(checkout["state"], "ready");
-    assert_eq!(checkout["mode"], "jj-colocated");
-    let location = checkout["location"].as_str().unwrap();
+    // The single checkout location, under this forest's working-copies.
+    assert_eq!(ws["location"]["within"]["forest_kind"], "basic-forest");
+    let location = ws["location"]["within"]["path"].as_str().unwrap();
     let loc = Path::new(location);
     assert!(
         loc.starts_with(dir.path()),
@@ -217,12 +214,7 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
         ],
     );
     let id = ws["id"].as_str().unwrap().to_string();
-    let location = ws["checkouts"]
-        .as_object()
-        .unwrap()
-        .values()
-        .next()
-        .unwrap()["location"]
+    let location = ws["location"]["within"]["path"]
         .as_str()
         .unwrap()
         .to_string();

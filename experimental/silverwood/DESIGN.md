@@ -17,7 +17,8 @@ layer underneath them that lets you swap the frontend without migrating data.
   come and go; the checkout locations, agent-session associations, and workstream
   metadata are stable and outlive any one frontend.
 - **A kind, generalizable later.** A workstream has exactly one **kind**; today
-  the only kind is **basic** (a code-change and its checkouts). Agent sessions are
+  the only kind is **basic** (a materialized code-change: a checkout mode + a
+  single-forest location). Agent sessions are
   kind-agnostic — stored as reserved-namespace KV (§5) — so any kind has them. The
   design leaves room for other kinds — e.g. a **feature** (potentially a nested,
   reparentable hierarchy) — without a rewrite. See §8.
@@ -53,7 +54,7 @@ layer underneath them that lets you swap the frontend without migrating data.
 | --- | --- |
 | **Forest** | One local instance of silverwood state — by default the directory `~/.silverwood`. Two machines = two forests. A forest is *not necessarily* a directory in the future; storage is abstracted (§4). |
 | **Workstream** | The unit a developer works on. Has a human name, common properties, exactly one **kind**, and open namespaced KV. One Loro document per workstream. |
-| **Kind** | What a workstream *is*. Today the only kind is **basic** (§3): a code-change and its checkouts. Future kinds may hold different data (§8). |
+| **Kind** | What a workstream *is*. Today the only kind is **basic** (§3): a materialized code-change (a checkout mode carrying its seed + provisioning state, and a single-forest location). Future kinds may hold different data (§8). |
 | **Code-change** | What a basic workstream is built around: a working copy provisioned by silverwood by cloning an HTTPS git endpoint in a specified **mode** (§3). |
 | **Agent session** | An **agent kind** (today only `claude-code`) + a session id + a human-friendly name. Stored as a special case of namespaced KV under the core-reserved `app.andref.silverwood.session` namespace, so sessions are kind-agnostic (§5). |
 | **Forest id / peer id** | The forest's stable identity, used as the Loro peer/actor id so edits are attributable. Local, never synced. |
@@ -97,11 +98,13 @@ root (LoroMap)
 ├─ kind        : "basic"           # the workstream-kind discriminant
 ├─ created_at  : RFC3339 string    # minted by core
 ├─ basic       : LoroMap           # the "basic" kind's data — created once at genesis (§2.3)
-│   ├─ code_change : LoroMap        # code-change config (see §3)
-│   │   ├─ source    : string       # https git url
-│   │   └─ mode      : "jj-colocated"
-│   └─ checkouts   : LoroMap keyed by <forest-id>   # per-forest materialization
-│       └─ <forest-id> : { location, state, mode }  # keyed → concurrent creates never conflict
+│   ├─ mode       : LoroMap         # how it's materialized + its seed + state (see §3)
+│   │   ├─ checkout_mode  : "jj-colocated"
+│   │   ├─ initial_source : string  # https git url it was cloned from
+│   │   └─ state          : "pending" | "ready" | "failed"
+│   └─ location   : LoroMap         # where it lives — single-forest, so one value not a map
+│       ├─ forest_id : <forest-id>
+│       └─ within    : { forest_kind: "basic-forest", path }   # forest-kind-specific
 └─ kv          : LoroMap (namespace → key → json-string)   # open frontend state (§5)
     └─ app.andref.silverwood.session → <session-id> : "{kind,name,created_at}"   # core-reserved: agent sessions
 ```
@@ -122,14 +125,17 @@ the reason Loro was chosen and is reserved for a future nested kind hierarchy (�
   movable-tree CRDT that resolves concurrent moves without cycles/duplication —
   which Automerge does not (§8). Cost accepted: Loro has no autosurgeon-style
   derive, so core hand-writes the container⇄struct mapping (§5).
-- **Scalars** (name, status, code-change fields) are last-writer-wins registers.
-- **The kind container** (`basic`) and its child maps are created once, at genesis,
-  and the kind is immutable — so two forests never concurrently create the same
-  container (which would LWW-drop one side's contents). See the merge-safety
-  invariant in `doc.rs`.
-- **Collections** (`kv` — which now includes sessions — and `checkouts`) are keyed
-  maps: concurrent additions union; the per-forest keying of `checkouts` means two
-  forests independently materializing the same workstream never conflict.
+- **Scalars** (name, status, and the basic kind's `mode`/`location` fields) are
+  last-writer-wins registers.
+- **The kind container** (`basic`) and its child maps (`mode`, `location`, `within`)
+  are created once, at genesis, and the kind is immutable — so two forests never
+  concurrently create the same container (which would LWW-drop one side's contents).
+  See the merge-safety invariant in `doc.rs`.
+- **Collections** (`kv`, which now includes sessions) are keyed maps: concurrent
+  additions union. The basic kind's `mode.state` and `location` are plain LWW
+  registers — a basic workstream is materialized in a **single forest**, so there is
+  no concurrent-materialization case to key apart (a future multi-forest kind would
+  reintroduce per-forest keying).
 - **Peer id** is derived from / stored alongside the forest id (§4) so all local
   edits are attributable to this forest.
 
@@ -140,8 +146,9 @@ nothing user-facing.
 
 - Core **does** mint what a caller cannot meaningfully supply: the workstream
   UUID, `created_at`, and the initial `active` status (a lifecycle invariant).
-- Core **does not** invent policy: `name`, the code-change `source` and `mode`,
-  and a session's **agent kind** are always caller-specified. There is no default
+- Core **does not** invent policy: `name`, the checkout mode and its
+  `initial_source`, and a session's **agent kind** are always caller-specified.
+  There is no default
   mode, no default agent kind, no auto-created working branch, no ambient repo
   inference.
 - Defaults, inference, and UX belong in a frontend (the CLI is itself a frontend
@@ -149,36 +156,46 @@ nothing user-facing.
 
 ---
 
-## 3. The basic kind: a code-change (+ checkouts + agent sessions)
+## 3. The basic kind: a materialized code-change (+ agent sessions)
 
-The **basic** kind is the only workstream kind today. It is built around a
-**code-change** — a working copy silverwood provisions by cloning a remote — and
-also owns that code-change's per-forest checkouts and zero or more agent sessions.
-The `silverwood-core` constructor contract:
+The **basic** kind is the only workstream kind today. It is a **code-change**
+materialized in a single forest — a working copy silverwood provisions by cloning a
+remote — plus zero or more agent sessions. It has two fields on two independent
+axes: a **`mode`** (how it's materialized, owning the strategy-specific seed +
+provisioning state) and a **`location`** (where it lives). The `silverwood-core`
+constructor contract:
 
 ```rust
 Forest::create_workstream(NewWorkstream {
     name: String,                        // explicit — no default name
     kind: NewKind::Basic {
-        source: HttpsGitUrl,             // https:// clone URL; scheme validated → error otherwise
-        mode:   CheckoutMode::JjColocated,  // open enum; one variant today
+        mode: NewCheckoutMode::JjColocated {   // creation-side mode + its seed
+            initial_source: HttpsGitUrl,       // https:// clone URL; scheme validated
+        },
     },
 })
 ```
 
 - **`WorkstreamKind` is an open, tagged enum**, `Basic` its only variant today;
   the enum is where new kinds (with their own data and session relationships) land.
-- **`CheckoutMode` is an open enum**, `JjColocated` its only variant today. It is
-  the sole checkout mode to begin with.
+- **`CheckoutMode` is a data-carrying, internally-tagged open enum**, `JjColocated`
+  its only variant today. `source` and `state` are **inside** the variant
+  (`initial_source`, `state`) because they are meaningless without the strategy — a
+  future adopt-a-local-dir mode would carry no source and be instantly ready. The
+  creation-side **`NewCheckoutMode`** omits `state`: core owns that lifecycle.
+- **`Location` = `forest_id` + `LocationWithinForest`**, the latter an open enum over
+  *forest kind* (today `BasicForest { path }`, an absolute path). This axis is
+  independent of `CheckoutMode`. A basic workstream has exactly one location — it is
+  single-forest (§2.3).
 - **`JjColocated` means exactly:** run
-  `jj git clone --colocate <source> ~/.silverwood/working-copies/<uuid>` and
+  `jj git clone --colocate <initial_source> ~/.silverwood/working-copies/<uuid>` and
   nothing more. No auto-created branch/change (that is policy → a frontend's job),
   no base-ref parameter until explicitly wanted.
 - **Auth is ambient.** Cloning a private HTTPS repo relies on the caller's git
   credential helper / PAT. Core manages no secrets.
-- **Provisioning is fallible and slow**, so the checkout carries a state machine:
-  `create_workstream` writes the workstream document first with the checkout entry
-  in `state = "pending"`, runs the clone, then flips to `"ready"` or `"failed"`. A
+- **Provisioning is fallible and slow**, so the mode carries a state machine:
+  `create_workstream` writes the workstream document first with the mode's
+  `state = "pending"`, runs the clone, then flips to `"ready"` or `"failed"`. A
   failed clone leaves a recoverable workstream, not a half-created mess.
 - **`jj` and `git` are runtime dependencies** — the CLI shells out to them; the Nix
   package wraps the binary to put them on `PATH` (§6).

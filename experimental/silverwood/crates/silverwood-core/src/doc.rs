@@ -10,9 +10,12 @@
 //!
 //! The root map holds the scalars (`name`, `status`, `created_at`) plus the
 //! `kind` discriminant, one kind container named after the kind (today `basic`),
-//! and a root-level `kv` map. The `basic` container nests `code_change` and
-//! `checkouts` (keyed by forest id). Agent sessions are **not** a kind container:
-//! they are ordinary `kv` entries under the core-reserved [`SESSION_NS`].
+//! and a root-level `kv` map. The `basic` container nests `mode` (the checkout
+//! mode — `checkout_mode` tag + `initial_source` + `state`) and `location`
+//! (`forest_id` + a `within` map: `forest_kind` tag + `path`). A basic workstream
+//! is single-forest, so `location` is one value, not a per-forest map. Agent
+//! sessions are **not** a kind container: they are ordinary `kv` entries under the
+//! core-reserved [`SESSION_NS`].
 //!
 //! ## Merge-safety invariant
 //!
@@ -20,15 +23,17 @@
 //! unsafe: each forest makes a distinct container and the parent map LWW-picks
 //! one, silently dropping the other's contents. We avoid this by only ever
 //! creating containers **once, at genesis in [`build`]** — the `kind` is fixed
-//! at creation and the `basic`/`code_change`/`checkouts`/`kv` containers are
+//! at creation and the `basic`/`mode`/`location`/`within`/`kv` containers are
 //! never lazily re-created in a mutator (mutators fetch them with `child_map`,
 //! which errors if absent). Two forests derive from the same base snapshot, so
 //! they share those container ids.
 //!
 //! Within those genesis containers, `kv` stores *scalar string* values keyed by
 //! JSON `["namespace","key"]` so independent entries merge as ordinary LWW keys
-//! (sessions, living under [`SESSION_NS`], merge the same way); `checkouts` nests
-//! per-forest maps, safe because keyed by forest id.
+//! (sessions, living under [`SESSION_NS`], merge the same way). The basic kind's
+//! `mode.state` and `location` are plain LWW registers: since a basic workstream
+//! is materialized in a single forest, there is no concurrent-materialization case
+//! to key apart (a future multi-forest kind would reintroduce per-forest keying).
 
 use loro::{Container, ExportMode, LoroDoc, LoroMap, ValueOrContainer};
 
@@ -36,8 +41,8 @@ use crate::error::{Error, Result};
 use crate::id::WorkstreamId;
 use crate::migrate;
 use crate::workstream::{
-    AgentKind, AgentSession, Checkout, CheckoutState, Status, Workstream, WorkstreamBody,
-    WorkstreamKind, BASIC_KIND, SESSION_NS,
+    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest, Status,
+    Workstream, WorkstreamBody, WorkstreamKind, BASIC_KIND, SESSION_NS,
 };
 
 /// Name of the single root map container.
@@ -68,29 +73,12 @@ pub(crate) fn build(peer_id: u64, body: &WorkstreamBody) -> Result<LoroDoc> {
     // The kind container (named after the kind). Created once here — never in a
     // mutator — per the module's merge-safety invariant.
     match &body.kind {
-        WorkstreamKind::Basic {
-            code_change,
-            checkouts,
-        } => {
+        WorkstreamKind::Basic { mode, location } => {
             let basic = root
                 .insert_container(BASIC_KIND, LoroMap::new())
                 .map_err(loro_err)?;
-
-            let cc = basic
-                .insert_container("code_change", LoroMap::new())
-                .map_err(loro_err)?;
-            cc.insert("source", code_change.source.as_str())
-                .map_err(loro_err)?;
-            cc.insert("mode", code_change.mode.as_str())
-                .map_err(loro_err)?;
-
-            // checkouts: nested map-of-maps, safe because keyed by forest id.
-            let checkouts_map = basic
-                .insert_container("checkouts", LoroMap::new())
-                .map_err(loro_err)?;
-            for (forest_id, checkout) in checkouts {
-                write_checkout(&checkouts_map, forest_id, checkout)?;
-            }
+            write_mode(&basic, mode)?;
+            write_location(&basic, location)?;
         }
     }
 
@@ -192,15 +180,11 @@ pub(crate) fn set_name(doc: &LoroDoc, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Overwrite the `state` of an existing per-forest checkout entry, in place.
-pub(crate) fn set_checkout_state(
-    doc: &LoroDoc,
-    forest_id: &str,
-    state: CheckoutState,
-) -> Result<()> {
-    let checkouts = child_map(&basic_map(doc)?, "checkouts")?;
-    let entry = child_map(&checkouts, forest_id)?;
-    entry.insert("state", state.as_str()).map_err(loro_err)?;
+/// Overwrite the checkout `state` scalar inside the basic container's `mode` map,
+/// in place (the single per-workstream provisioning state).
+pub(crate) fn set_state(doc: &LoroDoc, state: CheckoutState) -> Result<()> {
+    let mode = child_map(&basic_map(doc)?, "mode")?;
+    mode.insert("state", state.as_str()).map_err(loro_err)?;
     doc.commit();
     Ok(())
 }
@@ -285,20 +269,46 @@ fn basic_map(doc: &LoroDoc) -> Result<LoroMap> {
     child_map(&doc.get_map(ROOT), BASIC_KIND)
 }
 
-/// Write a checkout entry as a fresh nested map under `checkouts`.
-fn write_checkout(checkouts: &LoroMap, forest_id: &str, checkout: &Checkout) -> Result<()> {
-    let entry = checkouts
-        .insert_container(forest_id, LoroMap::new())
+/// Write the checkout `mode` as a fresh nested map under the basic container
+/// (`checkout_mode` tag + the variant's fields).
+fn write_mode(basic: &LoroMap, mode: &CheckoutMode) -> Result<()> {
+    let map = basic
+        .insert_container("mode", LoroMap::new())
         .map_err(loro_err)?;
-    entry
-        .insert("location", checkout.location.as_str())
+    map.insert("checkout_mode", mode.tag()).map_err(loro_err)?;
+    match mode {
+        CheckoutMode::JjColocated {
+            initial_source,
+            state,
+        } => {
+            map.insert("initial_source", initial_source.as_str())
+                .map_err(loro_err)?;
+            map.insert("state", state.as_str()).map_err(loro_err)?;
+        }
+    }
+    Ok(())
+}
+
+/// Write the checkout `location` as a fresh nested map under the basic container
+/// (`forest_id` + a `within` child map carrying the forest-kind-specific fields).
+fn write_location(basic: &LoroMap, location: &Location) -> Result<()> {
+    let map = basic
+        .insert_container("location", LoroMap::new())
         .map_err(loro_err)?;
-    entry
-        .insert("state", checkout.state.as_str())
+    let forest_id = location.forest_id.to_string();
+    map.insert("forest_id", forest_id.as_str())
         .map_err(loro_err)?;
-    entry
-        .insert("mode", checkout.mode.as_str())
+    let within = map
+        .insert_container("within", LoroMap::new())
         .map_err(loro_err)?;
+    within
+        .insert("forest_kind", location.within.tag())
+        .map_err(loro_err)?;
+    match &location.within {
+        LocationWithinForest::BasicForest { path } => {
+            within.insert("path", path.as_str()).map_err(loro_err)?;
+        }
+    }
     Ok(())
 }
 
@@ -335,8 +345,8 @@ mod tests {
     use loro::ExportMode;
 
     use super::*;
-    use crate::id::WorkstreamId;
-    use crate::workstream::{AgentKind, AgentSession, CheckoutMode, CodeChange, WorkstreamKind};
+    use crate::id::{ForestId, WorkstreamId};
+    use crate::workstream::{AgentKind, AgentSession, CheckoutMode, WorkstreamKind};
 
     fn sample_body() -> WorkstreamBody {
         WorkstreamBody {
@@ -344,11 +354,16 @@ mod tests {
             status: Status::Active,
             created_at: "1970-01-01T00:00:00Z".into(),
             kind: WorkstreamKind::Basic {
-                code_change: CodeChange {
-                    source: "https://example.com/x.git".into(),
-                    mode: CheckoutMode::JjColocated,
+                mode: CheckoutMode::JjColocated {
+                    initial_source: "https://example.com/x.git".into(),
+                    state: CheckoutState::Ready,
                 },
-                checkouts: BTreeMap::new(),
+                location: Location {
+                    forest_id: ForestId::generate(),
+                    within: LocationWithinForest::BasicForest {
+                        path: "/tmp/x".into(),
+                    },
+                },
             },
             kv: BTreeMap::new(),
         }
@@ -416,9 +431,9 @@ mod tests {
     }
 
     /// The public `--json` contract is flat: `kind` is a string discriminant and
-    /// the basic kind's data (code_change/checkouts) plus kv sit at the top level
-    /// alongside the id. Sessions are *not* a top-level field — they are kv entries
-    /// under the reserved [`SESSION_NS`]. Frontends + the CLI e2e tests depend on it.
+    /// the basic kind's data (mode/location) plus kv sit at the top level alongside
+    /// the id. Sessions are *not* a top-level field — they are kv entries under the
+    /// reserved [`SESSION_NS`]. Frontends + the CLI e2e tests depend on it.
     #[test]
     fn public_json_shape_is_flat() {
         let mut body = sample_body();
@@ -438,8 +453,11 @@ mod tests {
         let json = serde_json::to_value(&ws).unwrap();
         assert!(json["id"].is_string());
         assert_eq!(json["kind"], "basic");
-        assert_eq!(json["code_change"]["mode"], "jj-colocated");
-        assert!(json["checkouts"].is_object());
+        assert_eq!(json["mode"]["checkout_mode"], "jj-colocated");
+        assert_eq!(json["mode"]["state"], "ready");
+        assert!(json["mode"]["initial_source"].is_string());
+        assert_eq!(json["location"]["within"]["forest_kind"], "basic-forest");
+        assert!(json["location"]["within"]["path"].is_string());
         assert!(json["kv"].is_object());
         // No top-level `sessions`; they live in the reserved kv namespace as
         // JSON-string values that decode back to an AgentSession.

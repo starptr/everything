@@ -7,8 +7,9 @@
 //! - **Frozen bytes**: real `.loro` snapshots committed under `corpus/vN/` (see
 //!   `corpus/README.md`). The current version's bytes guard model drift; older
 //!   versions' bytes are genuine *old* bytes that guard the migration path — the
-//!   `v1` snapshots stored sessions inside the kind, so reading them must migrate
-//!   the sessions into the reserved kv namespace.
+//!   `v1` snapshots stored sessions inside the kind (→ reserved kv namespace), and
+//!   the `v2` snapshots had a `code_change` + a per-forest `checkouts` map (→ a
+//!   single `mode` + `location`, collapsing to the first checkout).
 //!
 //! Regenerate the current version's fixtures — and refresh older versions' `.json`
 //! projections from their frozen `.loro` — with
@@ -136,6 +137,52 @@ fn frozen_v1_corpus_migrates_to_current_projection() {
         let rewritten = doc::migrate_bytes(any_id(), &bytes, PEER)
             .unwrap()
             .unwrap_or_else(|| panic!("{name}: v1 must migrate to a rewrite"));
+        assert_eq!(
+            doc::peek_version(any_id(), &rewritten).unwrap(),
+            DOC_SCHEMA_VERSION,
+            "{name}: rewrite is stamped latest"
+        );
+
+        // Old bytes and rewritten bytes both hydrate to the current projection.
+        for (label, b) in [
+            ("old", bytes.as_slice()),
+            ("rewritten", rewritten.as_slice()),
+        ] {
+            let ws = doc::hydrate(any_id(), b).unwrap();
+            assert_eq!(
+                serde_json::to_value(&ws.body).unwrap(),
+                expected,
+                "{name} ({label}): migrated projection"
+            );
+        }
+        // The migrated model equals today's model (via the committed json).
+        assert_eq!(
+            serde_json::to_value(&body).unwrap(),
+            expected,
+            "{name}: model drift — regenerate the corpus"
+        );
+    }
+}
+
+/// The migration guard for **v2** bytes (a `code_change` + a per-forest `checkouts`
+/// map). Reading them migrates v2→v3 — the checkouts collapse to a single `mode` +
+/// `location` (first checkout wins) — and must yield the committed current
+/// projection (and today's model) on both the old-bytes and rewritten-bytes paths.
+#[test]
+fn frozen_v2_corpus_migrates_to_current_projection() {
+    let dir = corpus_dir(2);
+    for (name, body) in sample_bodies() {
+        let (bytes, expected) = read_fixture(&dir, name);
+
+        // The frozen bytes really are v2, and migrating rewrites them to latest.
+        assert_eq!(
+            doc::peek_version(any_id(), &bytes).unwrap(),
+            2,
+            "{name}: v2"
+        );
+        let rewritten = doc::migrate_bytes(any_id(), &bytes, PEER)
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name}: v2 must migrate to a rewrite"));
         assert_eq!(
             doc::peek_version(any_id(), &rewritten).unwrap(),
             DOC_SCHEMA_VERSION,
