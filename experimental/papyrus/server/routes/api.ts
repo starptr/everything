@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Agent } from "../types";
+import type { Agent, Session } from "../types";
 import { randomUUID } from "crypto";
 import {
   sessions,
@@ -69,45 +69,31 @@ async function buildNode(ws: sw.Workstream) {
     logError(`\x1b[38;5;141m[sessions]\x1b[0m ${ws.id}: ${e.message}`);
   }
   const tabs: any[] = [];
-  const claimed = new Set<string>();
-  for (const [claudeId, rec] of Object.entries(durable)) {
-    const match = runtimes.find(([k, s]) => k === claudeId || s.claudeSessionId === claudeId);
-    if (match) claimed.add(match[0]);
+  for (const [sid, rec] of Object.entries(durable)) {
+    // The registry key IS the session id, so a live PTY is a direct lookup.
+    const live = runtimes.some(([k]) => k === sid);
     tabs.push({
-      sessionId: match ? match[0] : claudeId,
-      claudeSessionId: claudeId,
+      sessionId: sid,
       name: rec.name,
       createdAt: rec.created_at,
       kind: rec.kind,
-      connected: !!match,
-      status: match ? match[1].status : "disconnected",
+      connected: live,
       lock: rec.lock ? { holder: rec.lock.holder, mine: rec.lock.holder === HOLDER } : null,
     });
   }
-  // Fresh, live PTYs not yet recorded in silverwood (pre status-hook). Surfaced by
-  // the server (its own runtime truth), so the client never invents a tab.
-  for (const [key, s] of runtimes) {
-    if (claimed.has(key)) continue;
+  // A just-spawned fresh PTY whose `session create` hasn't landed yet (the tiny
+  // window between spawn and record). Surface it so the tab doesn't flicker.
+  for (const [key] of runtimes) {
+    if (durable[key]) continue;
     tabs.push({
       sessionId: key,
-      claudeSessionId: s.claudeSessionId,
       name: "claude",
       createdAt: ws.created_at,
       kind: "claude-code",
       connected: true,
-      status: s.status,
       lock: null,
     });
   }
-
-  const live = tabs.find((t) => t.connected);
-  const status = live
-    ? live.status
-    : cstate === "failed"
-      ? "error"
-      : cstate === "pending"
-        ? "idle"
-        : "disconnected";
 
   const position = sw.decodeKv<{ x: number; y: number }>(kv, "position");
   return {
@@ -122,7 +108,9 @@ async function buildNode(ws: sw.Workstream) {
     customColor: sw.decodeKv<string>(kv, "color"),
     notes: sw.decodeKv<string>(kv, "notes"),
     ...(position ? { position } : {}),
-    status,
+    // Node visuals: is any session connected in THIS papyrus instance, and the
+    // checkout state. No live agent-activity status (that needed the hook).
+    connected: tabs.some((t) => t.connected),
     checkoutState: cstate,
     source: ws.mode?.initial_source,
     sessions: tabs,
@@ -157,11 +145,24 @@ apiRoutes.get("/sessions", async (c) => {
   }
 });
 
-apiRoutes.get("/sessions/:sessionId/status", (c) => {
-  const r = resolveRuntime(c.req.param("sessionId"));
-  if (!r) return c.json({ status: "disconnected" });
-  return c.json({ status: r[1].status });
-});
+// Record a freshly-spawned session durably in silverwood (name "claude") and
+// acquire its advisory lock for this instance. papyrus mints the id and passes it
+// to `claude --session-id`, so this replaces what the plugin hook used to do —
+// no runtime callback. Best-effort: a failure is logged, not fatal (the live PTY
+// still runs; buildNode surfaces it as a transient tab until the record lands).
+async function recordFreshSession(
+  wsId: string,
+  sessionId: string,
+  session: Session,
+): Promise<void> {
+  try {
+    await sw.sessionCreate(wsId, sessionId, "claude");
+    await sw.sessionLock(wsId, sessionId, HOLDER);
+    session.holdsLock = true;
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[session-register]\x1b[0m ${sessionId}: ${e.message}`);
+  }
+}
 
 // Create a node = create a silverwood workstream (clones its checkout), then spawn
 // its Claude Code terminal. Blocks on the clone; the node comes up ready.
@@ -186,7 +187,13 @@ apiRoutes.post("/sessions", async (c) => {
   let initialSessionId: string | undefined;
   if (sw.checkoutState(ws) === "ready" && cwd) {
     initialSessionId = randomUUID();
-    spawnTerminal({ sessionKey: initialSessionId, workstreamId: ws.id, cwd, command: "claude" });
+    const session = spawnTerminal({
+      sessionKey: initialSessionId,
+      workstreamId: ws.id,
+      cwd,
+      command: `claude --session-id ${initialSessionId}`,
+    });
+    await recordFreshSession(ws.id, initialSessionId, session);
   }
 
   return c.json({
@@ -240,16 +247,14 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
     workstreamId: wsId,
     cwd,
     command: `claude --resume ${sessionId}`,
-    claudeSessionId: sessionId,
-    resumed: true,
   });
   session.holdsLock = holdsLock;
   log(`\x1b[38;5;141m[session]\x1b[0m connected ${sessionId}`);
   return c.json({ sessionId, connected: true });
 });
 
-// Add a fresh session tab: spawn a new `claude` PTY under a provisional id. Its
-// durable silverwood session + lock are recorded later by the status hook.
+// Add a fresh session tab: papyrus mints the id, spawns `claude --session-id <id>`,
+// and records the durable silverwood session + lock immediately (no hook).
 apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
   const wsId = c.req.param("wsId");
   let ws: sw.Workstream;
@@ -263,7 +268,13 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
     return c.json({ error: "checkout not ready" }, 400);
   }
   const sessionId = randomUUID();
-  spawnTerminal({ sessionKey: sessionId, workstreamId: wsId, cwd, command: "claude" });
+  const session = spawnTerminal({
+    sessionKey: sessionId,
+    workstreamId: wsId,
+    cwd,
+    command: `claude --session-id ${sessionId}`,
+  });
+  await recordFreshSession(wsId, sessionId, session);
   log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${sessionId}`);
   return c.json({ sessionId, connected: true });
 });
@@ -312,116 +323,6 @@ apiRoutes.delete("/sessions/:sessionId", async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 400);
   }
-  return c.json({ success: true });
-});
-
-// Status update endpoint for the Claude Code plugin. Purely in-memory, except
-// that the first time we learn a Claude session id we record a silverwood session.
-apiRoutes.post("/status-update", async (c) => {
-  const body = await c.req.json();
-  const { status, openuiSessionId, claudeSessionId, hookEvent, toolName } = body;
-
-  log(
-    `\x1b[38;5;82m[plugin-hook]\x1b[0m ${hookEvent || "unknown"}: status=${status} tool=${toolName || "none"} openui=${openuiSessionId || "none"}`,
-  );
-
-  if (!status) return c.json({ error: "status is required" }, 400);
-
-  let foundId: string | undefined;
-  let session = openuiSessionId ? sessions.get(openuiSessionId) : undefined;
-  if (session) foundId = openuiSessionId;
-  if (!session && claudeSessionId) {
-    for (const [id, s] of sessions) {
-      if (s.claudeSessionId === claudeSessionId) {
-        session = s;
-        foundId = id;
-        break;
-      }
-    }
-  }
-
-  if (!session || !foundId) {
-    return c.json({ success: true, warning: "No matching session found" });
-  }
-
-  if (claudeSessionId && !session.claudeSessionId) {
-    session.claudeSessionId = claudeSessionId;
-  }
-  // Record the agent session in silverwood once, under its WORKSTREAM id (the
-  // registry key is a provisional uuid), then acquire its advisory lock so other
-  // clients see it as in-use. Fire-and-forget.
-  if (claudeSessionId && !session.silverwoodSessionRecorded) {
-    session.silverwoodSessionRecorded = true;
-    const s = session;
-    sw.sessionCreate(s.workstreamId, claudeSessionId, "claude")
-      .then(() => sw.sessionLock(s.workstreamId, claudeSessionId, HOLDER))
-      .then(() => {
-        s.holdsLock = true;
-      })
-      .catch((e) => log(`\x1b[38;5;141m[session-register]\x1b[0m ${e.message}`));
-  }
-
-  // Permission detection: a PreToolUse with no matching PostToolUse within 2.5s
-  // means the agent is waiting for the user to grant permission.
-  let effectiveStatus = status;
-  if (status === "pre_tool") {
-    effectiveStatus = "running";
-    session.currentTool = toolName;
-    session.preToolTime = Date.now();
-    if (session.permissionTimeout) clearTimeout(session.permissionTimeout);
-    session.permissionTimeout = setTimeout(() => {
-      if (session!.preToolTime) {
-        session!.status = "waiting_input";
-        for (const client of session!.clients) {
-          if (client.readyState === 1) {
-            client.send(
-              JSON.stringify({
-                type: "status",
-                status: "waiting_input",
-                currentTool: session!.currentTool,
-                hookEvent: "permission_timeout",
-              }),
-            );
-          }
-        }
-      }
-    }, 2500);
-  } else if (status === "post_tool") {
-    effectiveStatus = "running";
-    session.preToolTime = undefined;
-    if (session.permissionTimeout) {
-      clearTimeout(session.permissionTimeout);
-      session.permissionTimeout = undefined;
-    }
-  } else {
-    if (status !== "tool_calling" && status !== "running") {
-      session.currentTool = undefined;
-    }
-    session.preToolTime = undefined;
-    if (session.permissionTimeout) {
-      clearTimeout(session.permissionTimeout);
-      session.permissionTimeout = undefined;
-    }
-  }
-
-  session.status = effectiveStatus;
-  session.pluginReportedStatus = true;
-  session.lastPluginStatusTime = Date.now();
-  session.lastHookEvent = hookEvent;
-
-  for (const client of session.clients) {
-    if (client.readyState === 1) {
-      client.send(
-        JSON.stringify({
-          type: "status",
-          status: session.status,
-          currentTool: session.currentTool,
-          hookEvent,
-        }),
-      );
-    }
-  }
-
   return c.json({ success: true });
 });
 

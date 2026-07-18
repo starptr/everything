@@ -36,8 +36,7 @@ Bun.serve<WebSocketData>({
       const r = resolveRuntime(sessionId);
       if (!r) return new Response("Session not found", { status: 404 });
 
-      // Key the socket by the resolved registry key (a fresh session is addressed
-      // by a provisional id but registered under it).
+      // The registry key is the claude session id; key the socket by it.
       const upgraded = server.upgrade(req, { data: { sessionId: r[0] } });
       if (upgraded) return undefined;
       return new Response("WebSocket upgrade failed", { status: 400 });
@@ -62,8 +61,6 @@ Bun.serve<WebSocketData>({
       if (session.outputBuffer.length > 0) {
         ws.send(JSON.stringify({ type: "output", data: session.outputBuffer.join("") }));
       }
-
-      ws.send(JSON.stringify({ type: "status", status: session.status }));
     },
     message(ws, message) {
       const { sessionId } = ws.data;
@@ -76,7 +73,6 @@ Bun.serve<WebSocketData>({
           case "input":
             if (session.pty) {
               session.pty.write(msg.data);
-              session.lastInputTime = Date.now();
             }
             break;
           case "resize":
@@ -110,9 +106,9 @@ log(`\x1b[38;5;245m[server]\x1b[0m Forest: ${process.env.SILVERWOOD_FOREST_PATH 
 // Cleanup on exit: release advisory locks this instance holds (best-effort), then
 // kill terminals. A hard crash skips this; a stuck lock is recovered via a force-steal.
 process.on("SIGINT", async () => {
-  const held = [...sessions.values()].filter((s) => s.holdsLock && s.claudeSessionId);
+  const held = [...sessions.entries()].filter(([, s]) => s.holdsLock);
   await Promise.allSettled(
-    held.map((s) => sw.sessionUnlock(s.workstreamId, s.claudeSessionId!, HOLDER)),
+    held.map(([key, s]) => sw.sessionUnlock(s.workstreamId, key, HOLDER)),
   );
   for (const [, session] of sessions) session.pty.kill();
   process.exit(0);

@@ -21,17 +21,8 @@ import {
   Wand2,
   GitBranch,
 } from "lucide-react";
-import { useStore, AgentStatus, SessionTab } from "../stores/useStore";
+import { useStore, SessionTab } from "../stores/useStore";
 import { Terminal } from "./Terminal";
-
-const statusConfig: Record<AgentStatus, { label: string; color: string }> = {
-  running: { label: "Running", color: "#22C55E" },
-  waiting_input: { label: "Waiting for input", color: "#FBBF24" },
-  tool_calling: { label: "Tool Calling", color: "#8B5CF6" },
-  idle: { label: "Idle", color: "#6B7280" },
-  disconnected: { label: "Disconnected", color: "#EF4444" },
-  error: { label: "Error", color: "#EF4444" },
-};
 
 const presetColors = [
   "#F97316", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#FBBF24", "#14B8A6"
@@ -48,11 +39,9 @@ const iconOptions = [
   { id: "wand2", icon: Wand2, label: "Wand" },
 ];
 
-// A short, human-legible label for a session tab.
+// The tab title is silverwood's session `name`, verbatim.
 function tabLabel(t: SessionTab): string {
-  if (t.name && t.name !== t.claudeSessionId && t.name !== "claude") return t.name;
-  const id = t.claudeSessionId || t.sessionId;
-  return id.length > 8 ? id.slice(0, 8) : id;
+  return t.name;
 }
 
 export function Sidebar() {
@@ -98,7 +87,6 @@ export function Sidebar() {
           createdAt: new Date().toISOString(),
           kind: "claude-code",
           connected: true,
-          status: "running",
           lock: null,
           ...ov,
         });
@@ -164,7 +152,7 @@ export function Sidebar() {
       const res = await fetch(`/api/sessions/${selectedNodeId}/sessions/connect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: tab.claudeSessionId ?? tab.sessionId, force }),
+        body: JSON.stringify({ sessionId: tab.sessionId, force }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 409) {
@@ -221,7 +209,15 @@ export function Sidebar() {
   };
 
   const displayColor = editColor || session?.customColor || session?.color || "#888";
-  const statusInfo = statusConfig[session?.status || "idle"];
+  // Workstream-level indicator: checkout problems first, then connection.
+  const headerStatus =
+    session?.checkoutState === "failed"
+      ? { label: "Checkout failed", color: "#EF4444" }
+      : session?.checkoutState === "pending"
+        ? { label: "Cloning…", color: "#FBBF24" }
+        : session?.connected
+          ? { label: "Connected", color: "#22C55E" }
+          : { label: "Disconnected", color: "#6B7280" };
 
   return (
     <AnimatePresence>
@@ -247,9 +243,9 @@ export function Sidebar() {
                 <div className="flex items-center gap-2 mt-0.5">
                   <div
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: statusInfo.color }}
+                    style={{ backgroundColor: headerStatus.color }}
                   />
-                  <span className="text-[10px] text-zinc-500">{statusInfo.label}</span>
+                  <span className="text-[10px] text-zinc-500">{headerStatus.label}</span>
                 </div>
               </div>
 
@@ -408,7 +404,7 @@ export function Sidebar() {
                 <button
                   key={t.sessionId}
                   onClick={() => setActiveTabId(t.sessionId)}
-                  title={t.claudeSessionId || t.sessionId}
+                  title={t.sessionId}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-xs whitespace-nowrap transition-colors ${
                     t.sessionId === activeTabId
                       ? "bg-[#0d0d0d] text-white border-b-2 border-white"
@@ -468,7 +464,6 @@ export function Sidebar() {
                     key={activeTab.sessionId}
                     sessionId={activeTab.sessionId}
                     color={displayColor}
-                    nodeId={selectedNodeId!}
                   />
                 </div>
               </>

@@ -10,19 +10,15 @@ export interface Agent {
   icon: string;
 }
 
-export type AgentStatus = "running" | "waiting_input" | "tool_calling" | "idle" | "disconnected" | "error";
-
 // One attached silverwood session = one tab. Projected from `session ls` + the
-// server's live-PTY overlay + the advisory lock. `sessionId` is the runtime key
-// used for the terminal WebSocket; `claudeSessionId` is the durable id to resume.
+// server's live-PTY overlay + the advisory lock. `sessionId` is the durable claude
+// session id — the WebSocket key and the id to resume.
 export interface SessionTab {
   sessionId: string;
-  claudeSessionId?: string;
   name: string;
   createdAt: string;
   kind: string;
   connected: boolean;
-  status: AgentStatus;
   lock?: { holder: string; mine: boolean } | null;
 }
 
@@ -37,7 +33,9 @@ export interface AgentSession {
   cwd: string;
   originalCwd?: string; // Mother repo path when using worktrees
   gitBranch?: string;
-  status: AgentStatus;
+  // Node visuals: any session connected in this papyrus instance, + checkout state.
+  connected: boolean;
+  checkoutState?: string;
   customName?: string;
   customColor?: string;
   notes?: string;
@@ -46,8 +44,6 @@ export interface AgentSession {
   // Linear ticket info
   ticketId?: string;
   ticketTitle?: string;
-  // Current tool being used (from plugin)
-  currentTool?: string;
 }
 
 interface AppState {

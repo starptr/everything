@@ -1,30 +1,17 @@
-import { MessageSquare, WifiOff, GitBranch, Folder, Wrench } from "lucide-react";
-import { AgentStatus } from "../../stores/useStore";
+import { GitBranch, Folder } from "lucide-react";
 
-// Status config with visual priority levels
-const statusConfig: Record<AgentStatus, { label: string; color: string; bgColor: string; isActive?: boolean; needsAttention?: boolean }> = {
-  running: { label: "Working", color: "#22C55E", bgColor: "#22C55E15", isActive: true },
-  tool_calling: { label: "Working", color: "#22C55E", bgColor: "#22C55E15", isActive: true },
-  waiting_input: { label: "Needs Input", color: "#F97316", bgColor: "#F9731620", needsAttention: true },
-  idle: { label: "Idle", color: "#FBBF24", bgColor: "#FBBF2415", needsAttention: true },
-  disconnected: { label: "Offline", color: "#6B7280", bgColor: "#6B728015" },
-  error: { label: "Error", color: "#EF4444", bgColor: "#EF444415", needsAttention: true },
-};
-
-// Tool name display mapping
-const toolDisplayNames: Record<string, string> = {
-  Read: "Reading",
-  Write: "Writing",
-  Edit: "Editing",
-  Bash: "Running",
-  Grep: "Searching",
-  Glob: "Finding",
-  Task: "Tasking",
-  WebFetch: "Fetching",
-  WebSearch: "Searching",
-  TodoWrite: "Planning",
-  AskUserQuestion: "Asking",
-};
+// A single node indicator folding connection + checkout state (no live agent
+// activity — that needed the plugin hook). Precedence: checkout problems first,
+// then whether a session is connected in this papyrus instance.
+function nodeIndicator(
+  connected: boolean,
+  checkoutState?: string,
+): { label: string; color: string } {
+  if (checkoutState === "failed") return { label: "Checkout failed", color: "#EF4444" };
+  if (checkoutState === "pending") return { label: "Cloning…", color: "#FBBF24" };
+  if (connected) return { label: "Connected", color: "#22C55E" };
+  return { label: "Disconnected", color: "#6B7280" };
+}
 
 interface AgentNodeCardProps {
   selected: boolean;
@@ -32,8 +19,8 @@ interface AgentNodeCardProps {
   displayName: string;
   Icon: any;
   agentId: string;
-  status: AgentStatus;
-  currentTool?: string;
+  connected: boolean;
+  checkoutState?: string;
   cwd?: string;
   originalCwd?: string; // Mother repo path when using worktrees
   gitBranch?: string;
@@ -47,8 +34,8 @@ export function AgentNodeCard({
   displayName,
   Icon,
   agentId,
-  status,
-  currentTool,
+  connected,
+  checkoutState,
   cwd,
   originalCwd,
   gitBranch,
@@ -57,17 +44,11 @@ export function AgentNodeCard({
 }: AgentNodeCardProps) {
   // agentId is available for future use if needed
   void agentId;
-  const statusInfo = statusConfig[status] || statusConfig.idle;
-  const isActive = statusInfo.isActive;
-  const isToolCalling = status === "tool_calling";
-  const needsAttention = statusInfo.needsAttention;
+  const indicator = nodeIndicator(connected, checkoutState);
 
   // Extract directory name - use originalCwd (mother repo) if available, otherwise cwd
   const displayCwd = originalCwd || cwd;
   const dirName = displayCwd ? displayCwd.split("/").pop() || displayCwd : null;
-
-  // Get display name for current tool
-  const toolDisplay = currentTool ? (toolDisplayNames[currentTool] || currentTool) : null;
 
   return (
     <div
@@ -76,85 +57,21 @@ export function AgentNodeCard({
       }`}
       style={{
         backgroundColor: "#1a1a1a",
-        border: needsAttention
-          ? `2px solid ${statusInfo.color}`
-          : isActive
-          ? `1px solid ${statusInfo.color}40`
-          : "1px solid #2a2a2a",
-        boxShadow: needsAttention
-          ? `0 0 16px ${statusInfo.color}40, 0 0 32px ${statusInfo.color}20, 0 4px 12px rgba(0, 0, 0, 0.4)`
-          : isActive
-          ? `0 0 12px ${statusInfo.color}15, 0 4px 12px rgba(0, 0, 0, 0.4)`
-          : selected
+        border: connected ? `1px solid ${indicator.color}40` : "1px solid #2a2a2a",
+        boxShadow: selected
           ? "0 8px 24px rgba(0, 0, 0, 0.6)"
           : "0 4px 12px rgba(0, 0, 0, 0.4)",
       }}
     >
-      {/* Animated effects for different states */}
-      {isActive && !needsAttention && (
-        <div
-          className="absolute inset-0 rounded-lg pointer-events-none"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${statusInfo.color}20, transparent)`,
-            backgroundSize: '200% 100%',
-            animation: 'shimmer 2s ease-in-out infinite',
-          }}
-        />
-      )}
-      {/* Pulsing border for attention states */}
-      {needsAttention && (
-        <div
-          className="absolute inset-0 rounded-lg pointer-events-none"
-          style={{
-            border: `2px solid ${statusInfo.color}`,
-            animation: 'attention-pulse 1.5s ease-in-out infinite',
-          }}
-        />
-      )}
-
       {/* Color bar at top */}
       <div className="h-1 rounded-t-lg" style={{ backgroundColor: displayColor }} />
 
-      {/* Status banner */}
-      <div
-        className="px-3 py-1.5 flex items-center justify-between relative"
-        style={{ backgroundColor: statusInfo.bgColor }}
-      >
-        <div className="flex items-center gap-2">
-          {/* Status indicator - animated ring for active */}
-          <div className="relative flex items-center justify-center">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: statusInfo.color }}
-            />
-            {isActive && (
-              <div
-                className="absolute w-3 h-3 rounded-full animate-ping"
-                style={{
-                  backgroundColor: statusInfo.color,
-                  opacity: 0.4,
-                  animationDuration: '1.5s'
-                }}
-              />
-            )}
-          </div>
-          <span className="text-xs font-medium" style={{ color: statusInfo.color }}>
-            {statusInfo.label}
-          </span>
-          {/* Show current tool when tool_calling */}
-          {isToolCalling && toolDisplay && (
-            <span className="text-[10px] text-zinc-400 flex items-center gap-1">
-              <Wrench className="w-2.5 h-2.5" />
-              {toolDisplay}
-            </span>
-          )}
-        </div>
-        {status === "waiting_input" && (
-          <MessageSquare className="w-3.5 h-3.5" style={{ color: statusInfo.color }} />
-        )}
-        {status === "disconnected" && (
-          <WifiOff className="w-3.5 h-3.5" style={{ color: statusInfo.color }} />
-        )}
+      {/* Indicator banner: connection + checkout */}
+      <div className="px-3 py-1.5 flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: indicator.color }} />
+        <span className="text-xs font-medium" style={{ color: indicator.color }}>
+          {indicator.label}
+        </span>
       </div>
 
       <div className="p-3 relative">
@@ -203,18 +120,6 @@ export function AgentNodeCard({
         )}
 
       </div>
-
-      {/* CSS for animations */}
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        @keyframes attention-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
     </div>
   );
 }

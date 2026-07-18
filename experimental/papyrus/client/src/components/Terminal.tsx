@@ -3,16 +3,13 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { useStore, AgentStatus } from "../stores/useStore";
 
 interface TerminalProps {
   sessionId: string;
   color: string;
-  nodeId: string;
 }
 
-export function Terminal({ sessionId, color, nodeId }: TerminalProps) {
-  const updateSession = useStore((state) => state.updateSession);
+export function Terminal({ sessionId, color }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -113,12 +110,6 @@ export function Terminal({ sessionId, color, nodeId }: TerminalProps) {
               term.write("\x1b[2J\x1b[H\x1b[0m");
             }
             term.write(msg.data);
-          } else if (msg.type === "status") {
-            // Handle status updates from plugin hooks
-            updateSession(nodeId, {
-              status: msg.status as AgentStatus,
-              currentTool: msg.currentTool,
-            });
           }
         } catch (e) {
           term.write(event.data);
@@ -167,7 +158,7 @@ export function Terminal({ sessionId, color, nodeId }: TerminalProps) {
       ws?.close();
       term.dispose();
     };
-  }, [sessionId, color, nodeId, updateSession]);
+  }, [sessionId, color]);
 
   return (
     <div

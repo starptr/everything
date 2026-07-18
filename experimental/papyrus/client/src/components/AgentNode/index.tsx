@@ -1,7 +1,7 @@
 import { NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
 import { Sparkles, Code, Cpu, Zap, Rocket, Bot, Brain, Wand2 } from "lucide-react";
-import { useStore, AgentStatus } from "../../stores/useStore";
+import { useStore } from "../../stores/useStore";
 import { AgentNodeCard } from "./AgentNodeCard";
 import { AgentNodeContextMenu } from "./AgentNodeContextMenu";
 import { useAgentNodeState } from "./useAgentNodeState";
@@ -28,9 +28,10 @@ interface AgentNodeData {
 export const AgentNode = ({ id, data, selected }: NodeProps) => {
   const nodeData = data as unknown as AgentNodeData;
 
-  // Subscribe directly to status and currentTool as primitive values - this guarantees re-render on change
-  const status: AgentStatus = useStore((state) => state.sessions.get(id)?.status) || "idle";
-  const currentTool = useStore((state) => state.sessions.get(id)?.currentTool);
+  // Subscribe to the node's connection + checkout state as primitives so the card
+  // re-renders when they change.
+  const connected = useStore((state) => state.sessions.get(id)?.connected) || false;
+  const checkoutState = useStore((state) => state.sessions.get(id)?.checkoutState);
 
   // Get the full session for other data
   const session = useStore((state) => state.sessions.get(id));
@@ -60,8 +61,8 @@ export const AgentNode = ({ id, data, selected }: NodeProps) => {
           displayName={displayName}
           Icon={Icon}
           agentId={nodeData.agentId}
-          status={status}
-          currentTool={currentTool}
+          connected={connected}
+          checkoutState={checkoutState}
           cwd={session?.cwd}
           originalCwd={session?.originalCwd}
           gitBranch={session?.gitBranch}
