@@ -58,13 +58,43 @@ pub enum CheckoutState {
     Failed,
 }
 
-/// Which agent an [`AgentSession`] belongs to. Open enum: one kind today.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+/// A best-effort advisory lock on a claude-code session: a cooperative flag
+/// recording who currently holds the session for resumption, so two considerate
+/// clients don't resume the same Claude Code conversation at once. Hold-until-
+/// released with force-steal; not hard enforcement (a non-cooperating process can
+/// still resume a "locked" session).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionLock {
+    /// Opaque holder token, chosen by the frontend (e.g. a papyrus instance id).
+    pub holder: String,
+    /// When the lock was acquired (RFC3339), minted by core.
+    pub acquired_at: String,
+}
+
+/// Which agent an [`AgentSession`] belongs to, carrying that kind's own state.
+/// Open, internally-tagged enum: one kind today. The claude-code kind carries an
+/// optional [`SessionLock`] (a Claude Code session can be resumed by only one
+/// client at a time); a future kind that already guarantees single-user access
+/// would carry no lock.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum AgentKind {
-    /// A Claude Code session.
-    ClaudeCode,
+    /// A Claude Code session, with its best-effort resumption lock (if held).
+    ClaudeCode {
+        /// The advisory resumption lock, if currently held.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lock: Option<SessionLock>,
+    },
+}
+
+impl AgentKind {
+    /// The stored `kind` discriminant for this variant (matches its serde tag).
+    pub fn tag(&self) -> &'static str {
+        match self {
+            AgentKind::ClaudeCode { .. } => "claude-code",
+        }
+    }
 }
 
 impl Status {
@@ -138,14 +168,32 @@ impl LocationWithinForest {
 }
 
 /// A generic agent session associated with a workstream kind that supports them.
+///
+/// The `kind` discriminant and its kind-specific fields (e.g. the claude-code
+/// [`SessionLock`]) flatten to the top level of the stored/`--json` shape:
+/// `{"kind":"claude-code","lock":{…}?,"name":…,"created_at":…}`. `kind` is declared
+/// first so an *unlocked* session serializes byte-for-byte as the pre-lock format
+/// (`{"kind":"claude-code","name":…,"created_at":…}`) — the `lock` field is purely
+/// additive, so existing records need no migration or rewrite.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSession {
-    /// Which agent this session belongs to.
+    /// Which agent this session belongs to, plus that kind's own state.
+    #[serde(flatten)]
     pub kind: AgentKind,
     /// Human-friendly name for the session.
     pub name: String,
     /// When the association was created (RFC3339).
     pub created_at: String,
+}
+
+impl AgentSession {
+    /// The advisory resumption lock, if this session's kind carries one and it is
+    /// currently held.
+    pub fn lock(&self) -> Option<&SessionLock> {
+        match &self.kind {
+            AgentKind::ClaudeCode { lock } => lock.as_ref(),
+        }
+    }
 }
 
 /// The kind of a workstream — an open, tagged enum. Today the only kind is

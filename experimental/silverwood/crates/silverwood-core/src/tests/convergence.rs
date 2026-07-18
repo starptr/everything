@@ -78,8 +78,14 @@ proptest! {
                 doc::set_kv(&d, &format!("f{i}"), &format!("k{ki}"), &format!("v{vi}")).unwrap();
             }
             for si in sess_ops.iter().copied().collect::<BTreeSet<u8>>() {
-                doc::create_session(&d, &format!("f{i}-s{si}"), AgentKind::ClaudeCode, "n", "t0")
-                    .unwrap();
+                doc::create_session(
+                    &d,
+                    &format!("f{i}-s{si}"),
+                    AgentKind::ClaudeCode { lock: None },
+                    "n",
+                    "t0",
+                )
+                .unwrap();
             }
             forests.push(d);
         }

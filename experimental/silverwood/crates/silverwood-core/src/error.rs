@@ -53,6 +53,12 @@ pub enum Error {
     #[error("session not attached: {0}")]
     SessionNotFound(String),
 
+    /// A session's advisory lock is held by a different holder (acquire/release
+    /// without `--force`). Best-effort: cooperative clients back off; `--force`
+    /// steals it.
+    #[error("session {session_id} is locked by {holder}")]
+    SessionLocked { session_id: String, holder: String },
+
     /// A frontend tried to write a core-reserved kv namespace directly.
     #[error("namespace {0:?} is reserved for silverwood core; use `silverwood session`")]
     ReservedNamespace(String),

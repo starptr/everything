@@ -41,8 +41,8 @@ use crate::error::{Error, Result};
 use crate::id::WorkstreamId;
 use crate::migrate;
 use crate::workstream::{
-    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest, Status,
-    Workstream, WorkstreamBody, WorkstreamKind, BASIC_KIND, SESSION_NS,
+    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest,
+    SessionLock, Status, Workstream, WorkstreamBody, WorkstreamKind, BASIC_KIND, SESSION_NS,
 };
 
 /// Name of the single root map container.
@@ -262,6 +262,43 @@ pub(crate) fn remove_session(doc: &LoroDoc, session_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Read a session's decoded record from the reserved [`SESSION_NS`], or `None`
+/// if it is not present.
+pub(crate) fn get_session(doc: &LoroDoc, session_id: &str) -> Result<Option<AgentSession>> {
+    let kv = child_map(&doc.get_map(ROOT), "kv")?;
+    let composite = kv_key(SESSION_NS, session_id);
+    match kv.get(&composite).and_then(value_as_string) {
+        None => Ok(None),
+        Some(encoded) => serde_json::from_str(&encoded)
+            .map(Some)
+            .map_err(|e| Error::Corrupt(format!("session {session_id}: {e}"))),
+    }
+}
+
+/// Set (or clear, with `None`) the advisory lock on a claude-code session,
+/// preserving its other fields. Errors [`Error::SessionNotFound`] if absent.
+pub(crate) fn set_session_lock(
+    doc: &LoroDoc,
+    session_id: &str,
+    lock: Option<SessionLock>,
+) -> Result<()> {
+    let kv = child_map(&doc.get_map(ROOT), "kv")?;
+    let composite = kv_key(SESSION_NS, session_id);
+    let existing = kv
+        .get(&composite)
+        .and_then(value_as_string)
+        .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
+    let mut session: AgentSession = serde_json::from_str(&existing)
+        .map_err(|e| Error::Corrupt(format!("session {session_id}: {e}")))?;
+    match &mut session.kind {
+        AgentKind::ClaudeCode { lock: slot } => *slot = lock,
+    }
+    kv.insert(composite.as_str(), agent_session_json(&session))
+        .map_err(loro_err)?;
+    doc.commit();
+    Ok(())
+}
+
 /// Fetch the genesis-created `basic` kind container for in-place mutation. It is
 /// created once in [`build`] and the kind is immutable, so it is always present
 /// for a basic workstream (see the merge-safety invariant).
@@ -380,7 +417,7 @@ mod tests {
         body.kv.entry(SESSION_NS.into()).or_default().insert(
             "sid-1".into(),
             agent_session_json(&AgentSession {
-                kind: AgentKind::ClaudeCode,
+                kind: AgentKind::ClaudeCode { lock: None },
                 name: "planning".into(),
                 created_at: "t0".into(),
             }),
@@ -407,9 +444,23 @@ mod tests {
 
         // Concurrent edits — crucially, the SAME kv namespace on both sides.
         set_kv(&a, "fe", "left", "1").unwrap();
-        create_session(&a, "sess-A", AgentKind::ClaudeCode, "from A", "t0").unwrap();
+        create_session(
+            &a,
+            "sess-A",
+            AgentKind::ClaudeCode { lock: None },
+            "from A",
+            "t0",
+        )
+        .unwrap();
         set_kv(&b, "fe", "right", "2").unwrap();
-        create_session(&b, "sess-B", AgentKind::ClaudeCode, "from B", "t0").unwrap();
+        create_session(
+            &b,
+            "sess-B",
+            AgentKind::ClaudeCode { lock: None },
+            "from B",
+            "t0",
+        )
+        .unwrap();
 
         // Exchange updates in both directions.
         let ua = a.export(ExportMode::all_updates()).unwrap();
@@ -440,7 +491,7 @@ mod tests {
         body.kv.entry(SESSION_NS.into()).or_default().insert(
             "sid-1".into(),
             agent_session_json(&AgentSession {
-                kind: AgentKind::ClaudeCode,
+                kind: AgentKind::ClaudeCode { lock: None },
                 name: "planning".into(),
                 created_at: "t0".into(),
             }),
@@ -464,7 +515,7 @@ mod tests {
         assert!(json.get("sessions").is_none());
         let encoded = json["kv"][SESSION_NS]["sid-1"].as_str().unwrap();
         let session: AgentSession = serde_json::from_str(encoded).unwrap();
-        assert_eq!(session.kind, AgentKind::ClaudeCode);
+        assert_eq!(session.kind, AgentKind::ClaudeCode { lock: None });
         assert_eq!(session.name, "planning");
     }
 }

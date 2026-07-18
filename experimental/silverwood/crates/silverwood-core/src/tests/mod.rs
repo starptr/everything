@@ -126,7 +126,7 @@ fn basic(
     }
     for (id, nm) in sessions {
         let session = AgentSession {
-            kind: AgentKind::ClaudeCode,
+            kind: AgentKind::ClaudeCode { lock: None },
             name: nm.to_string(),
             created_at: "1970-01-01T00:00:00Z".to_string(),
         };

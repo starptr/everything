@@ -191,6 +191,30 @@ fn kv_and_session_lifecycle() {
         &["kv", "set", &id, "app.andref.silverwood.session", "x", "{}"],
     );
 
+    // Advisory session lock: acquire surfaces in `session ls`, a second holder is
+    // blocked, --force steals, unlock clears (best-effort cooperative flag).
+    ok(&dir, &["session", "lock", &id, "sess-2", "--holder", "A"]);
+    assert_eq!(
+        json(&dir, &["--json", "session", "ls", &id])["sess-2"]["lock"]["holder"],
+        "A"
+    );
+    fails(&dir, &["session", "lock", &id, "sess-2", "--holder", "B"]);
+    ok(
+        &dir,
+        &["session", "lock", &id, "sess-2", "--holder", "B", "--force"],
+    );
+    assert_eq!(
+        json(&dir, &["--json", "session", "ls", &id])["sess-2"]["lock"]["holder"],
+        "B"
+    );
+    ok(&dir, &["session", "unlock", &id, "sess-2", "--holder", "B"]);
+    assert!(
+        json(&dir, &["--json", "session", "ls", &id])["sess-2"]
+            .get("lock")
+            .is_none(),
+        "unlock must clear the lock"
+    );
+
     // workstream rename.
     ok(&dir, &["rename", &id, "renamed-work"]);
     assert_eq!(json(&dir, &["--json", "show", &id])["name"], "renamed-work");

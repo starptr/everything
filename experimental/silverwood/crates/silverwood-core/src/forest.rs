@@ -17,7 +17,8 @@ use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
     AgentKind, CheckoutMode, CheckoutState, Location, LocationWithinForest, NewCheckoutMode,
-    NewKind, NewWorkstream, Status, Workstream, WorkstreamBody, WorkstreamKind, RESERVED_NS_PREFIX,
+    NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody, WorkstreamKind,
+    RESERVED_NS_PREFIX,
 };
 
 /// The outcome for one document in a [`Forest::upgrade_all`] pass.
@@ -260,6 +261,72 @@ impl Forest {
         let doc = self.load_doc(id)?;
         doc::remove_session(&doc, session_id)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Acquire the best-effort advisory lock on a session for `holder`. Succeeds
+    /// if the session is unlocked or already held by `holder` (refreshing
+    /// `acquired_at`). If held by someone else, errors [`Error::SessionLocked`]
+    /// unless `force` steals it. Errors [`Error::SessionNotFound`] if absent.
+    ///
+    /// The lock is cooperative, not enforced: it records who is currently
+    /// resuming a claude-code session so considerate clients back off.
+    pub fn lock_session(
+        &self,
+        id: WorkstreamId,
+        session_id: &str,
+        holder: &str,
+        force: bool,
+    ) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        let current = doc::get_session(&doc, session_id)?
+            .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?
+            .lock()
+            .cloned();
+        if let Some(existing) = current {
+            if existing.holder != holder && !force {
+                return Err(Error::SessionLocked {
+                    session_id: session_id.to_string(),
+                    holder: existing.holder,
+                });
+            }
+        }
+        doc::set_session_lock(
+            &doc,
+            session_id,
+            Some(SessionLock {
+                holder: holder.to_string(),
+                acquired_at: now_rfc3339(),
+            }),
+        )?;
+        self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Release the advisory lock on a session (no-op if already unlocked). If held
+    /// by a different holder, errors [`Error::SessionLocked`] unless `force`.
+    /// Errors [`Error::SessionNotFound`] if the session is absent.
+    pub fn unlock_session(
+        &self,
+        id: WorkstreamId,
+        session_id: &str,
+        holder: Option<&str>,
+        force: bool,
+    ) -> Result<()> {
+        let doc = self.load_doc(id)?;
+        let current = doc::get_session(&doc, session_id)?
+            .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?
+            .lock()
+            .cloned();
+        match current {
+            None => Ok(()),
+            Some(existing) if force || holder == Some(existing.holder.as_str()) => {
+                doc::set_session_lock(&doc, session_id, None)?;
+                self.docs.save(id, &doc::snapshot(&doc)?)
+            }
+            Some(existing) => Err(Error::SessionLocked {
+                session_id: session_id.to_string(),
+                holder: existing.holder,
+            }),
+        }
     }
 
     /// Load a workstream's document, ready to author under this forest's peer id.

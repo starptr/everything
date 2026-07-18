@@ -164,6 +164,33 @@ enum SessionCommand {
         /// The session id to remove.
         session_id: String,
     },
+    /// Acquire a session's best-effort advisory lock (cooperative; stops
+    /// considerate clients from resuming the same session at once).
+    Lock {
+        /// The workstream id the session belongs to (from `silverwood ls`).
+        id: String,
+        /// The session id to lock.
+        session_id: String,
+        /// Opaque holder token identifying who is taking the lock.
+        #[arg(long)]
+        holder: String,
+        /// Steal the lock even if another holder currently holds it.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Release a session's advisory lock (no-op if unlocked).
+    Unlock {
+        /// The workstream id the session belongs to (from `silverwood ls`).
+        id: String,
+        /// The session id to unlock.
+        session_id: String,
+        /// Only release if held by this holder (omit with `--force` to clear any).
+        #[arg(long)]
+        holder: Option<String>,
+        /// Release regardless of who holds it.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 /// Per-kind session creation: each agent kind takes the parameters it needs, so
@@ -323,7 +350,9 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
         SessionCommand::Create(SessionCreate::ClaudeCode { id, .. })
         | SessionCommand::Ls { id }
         | SessionCommand::Rename { id, .. }
-        | SessionCommand::Rm { id, .. } => parse_id(id)?,
+        | SessionCommand::Rm { id, .. }
+        | SessionCommand::Lock { id, .. }
+        | SessionCommand::Unlock { id, .. } => parse_id(id)?,
     };
 
     match cmd {
@@ -331,12 +360,24 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
             session_id, name, ..
         }) => {
             let name = name.unwrap_or_else(|| session_id.clone());
-            forest.create_session(id, &session_id, AgentKind::ClaudeCode, &name)?;
+            forest.create_session(id, &session_id, AgentKind::ClaudeCode { lock: None }, &name)?;
         }
         SessionCommand::Rename {
             session_id, name, ..
         } => forest.rename_session(id, &session_id, &name)?,
         SessionCommand::Rm { session_id, .. } => forest.remove_session(id, &session_id)?,
+        SessionCommand::Lock {
+            session_id,
+            holder,
+            force,
+            ..
+        } => forest.lock_session(id, &session_id, &holder, force)?,
+        SessionCommand::Unlock {
+            session_id,
+            holder,
+            force,
+            ..
+        } => forest.unlock_session(id, &session_id, holder.as_deref(), force)?,
         SessionCommand::Ls { .. } => {}
     }
 
@@ -443,10 +484,14 @@ fn print_kv(entries: &BTreeMap<String, String>) {
 
 fn print_sessions(sessions: &BTreeMap<String, AgentSession>) {
     for (session_id, session) in sessions {
+        let lock = match session.lock() {
+            Some(l) => format!("  🔒 {}", l.holder),
+            None => String::new(),
+        };
         println!(
-            "{session_id}  {}  [{}]  (since {})",
+            "{session_id}  {}  [{}]  (since {}){lock}",
             session.name,
-            enum_str(session.kind),
+            session.kind.tag(),
             session.created_at
         );
     }

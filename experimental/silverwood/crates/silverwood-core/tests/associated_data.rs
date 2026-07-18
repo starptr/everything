@@ -66,7 +66,7 @@ fn reserved_namespace_is_rejected() {
 
     // Sessions go through the typed API and land in the reserved namespace.
     forest
-        .create_session(ws.id, "s1", AgentKind::ClaudeCode, "n")
+        .create_session(ws.id, "s1", AgentKind::ClaudeCode { lock: None }, "n")
         .unwrap();
     assert_eq!(forest.get(ws.id).unwrap().body.sessions().len(), 1);
 
@@ -80,11 +80,21 @@ fn session_lifecycle() {
     let ws = forest.create_workstream(new_ws("sess-demo")).unwrap();
 
     forest
-        .create_session(ws.id, "abc-123", AgentKind::ClaudeCode, "planning")
+        .create_session(
+            ws.id,
+            "abc-123",
+            AgentKind::ClaudeCode { lock: None },
+            "planning",
+        )
         .unwrap();
     assert!(
         forest
-            .create_session(ws.id, "abc-123", AgentKind::ClaudeCode, "dup")
+            .create_session(
+                ws.id,
+                "abc-123",
+                AgentKind::ClaudeCode { lock: None },
+                "dup"
+            )
             .is_err(),
         "duplicate create must error"
     );
@@ -96,7 +106,7 @@ fn session_lifecycle() {
     let sessions = got.body.sessions();
     let session = &sessions["abc-123"];
     assert_eq!(session.name, "planning v2");
-    assert_eq!(session.kind, AgentKind::ClaudeCode);
+    assert_eq!(session.kind, AgentKind::ClaudeCode { lock: None });
     assert!(!session.created_at.is_empty());
 
     assert!(
@@ -109,6 +119,73 @@ fn session_lifecycle() {
 
     // Removing an absent session is a no-op.
     forest.remove_session(ws.id, "abc-123").unwrap();
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn session_lock_lifecycle() {
+    let dir = temp_forest("session-lock");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+    let ws = forest.create_workstream(new_ws("lock-demo")).unwrap();
+    forest
+        .create_session(
+            ws.id,
+            "s1",
+            AgentKind::ClaudeCode { lock: None },
+            "planning",
+        )
+        .unwrap();
+
+    // A fresh session is unlocked.
+    assert!(forest.get(ws.id).unwrap().body.sessions()["s1"]
+        .lock()
+        .is_none());
+
+    // Acquire for holder A (core mints acquired_at).
+    forest.lock_session(ws.id, "s1", "A", false).unwrap();
+    let lock = forest.get(ws.id).unwrap().body.sessions()["s1"]
+        .lock()
+        .cloned()
+        .unwrap();
+    assert_eq!(lock.holder, "A");
+    assert!(!lock.acquired_at.is_empty());
+
+    // Re-acquire by the same holder is idempotent.
+    forest.lock_session(ws.id, "s1", "A", false).unwrap();
+
+    // A different holder is blocked without --force, and so is a wrong-holder unlock.
+    assert!(
+        forest.lock_session(ws.id, "s1", "B", false).is_err(),
+        "a second holder must be blocked"
+    );
+    assert!(forest
+        .unlock_session(ws.id, "s1", Some("B"), false)
+        .is_err());
+
+    // --force steals the lock.
+    forest.lock_session(ws.id, "s1", "B", true).unwrap();
+    assert_eq!(
+        forest.get(ws.id).unwrap().body.sessions()["s1"]
+            .lock()
+            .unwrap()
+            .holder,
+        "B"
+    );
+
+    // Release; the session is unlocked again, and re-unlock is a no-op.
+    forest
+        .unlock_session(ws.id, "s1", Some("B"), false)
+        .unwrap();
+    assert!(forest.get(ws.id).unwrap().body.sessions()["s1"]
+        .lock()
+        .is_none());
+    forest
+        .unlock_session(ws.id, "s1", Some("B"), false)
+        .unwrap();
+
+    // Locking an absent session errors.
+    assert!(forest.lock_session(ws.id, "nope", "A", false).is_err());
 
     let _ = std::fs::remove_dir_all(&dir);
 }

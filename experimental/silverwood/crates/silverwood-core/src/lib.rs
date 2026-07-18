@@ -34,5 +34,6 @@ pub use provider::{CheckoutProvider, JjColocated};
 pub use source::HttpsGitUrl;
 pub use workstream::{
     AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest,
-    NewCheckoutMode, NewKind, NewWorkstream, Status, Workstream, WorkstreamBody, WorkstreamKind,
+    NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody,
+    WorkstreamKind,
 };
