@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Node } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
 
 export interface Agent {
   id: string;

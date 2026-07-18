@@ -1,0 +1,4 @@
+[test]
+# happydom.ts must come first: it registers the DOM before setup.ts imports
+# Testing Library (whose `screen` binds to `document` at import time).
+preload = ["./tests/happydom.ts", "./tests/setup.ts"]

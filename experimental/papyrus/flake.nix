@@ -61,6 +61,17 @@
           '';
         };
 
+        # `bun test` (happy-dom + Testing Library) — unit + behavioral tests. Runs
+        # in the bun-only sandbox; a red test fails `nix flake check`. See TESTING.md.
+        client-tests = b2n.mkDerivation {
+          pname = "papyrus-client-tests";
+          version = "1.2.1";
+          src = ./client;
+          bunDeps = b2n.fetchBunDeps { bunNix = ./client/bun.nix; };
+          buildPhase = "bun test";
+          installPhase = "touch $out";
+        };
+
         # The Bun server, packaged as a runnable app that keeps its real
         # node_modules (bun-pty's native .dylib must dlopen at runtime). There is
         # no bundle/compile step — Bun executes the TypeScript directly.
@@ -108,7 +119,7 @@
         };
 
         checks = {
-          inherit client;
+          inherit client client-tests;
           papyrus = papyrus;
         };
 

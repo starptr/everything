@@ -1,0 +1,12 @@
+{
+  // Editor/`tsc --noEmit` typechecking for tests. Not on the enforced path —
+  // `bun test` transpiles without typechecking; the shippable build
+  // (tsconfig.json) excludes test files. Adds the test-only global types.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun", "@testing-library/jest-dom"]
+  },
+  "include": ["src", "tests"],
+  "exclude": []
+}
