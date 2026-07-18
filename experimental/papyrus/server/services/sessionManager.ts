@@ -1,12 +1,20 @@
 import { spawn as spawnPty } from "bun-pty";
 import { existsSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { homedir, hostname } from "os";
+import { randomUUID } from "crypto";
 import { PORT, HOST } from "../config";
 import type { Session } from "../types";
+import * as sw from "./silverwood";
 
 const QUIET = !!process.env.OPENUI_QUIET;
 const log = QUIET ? () => {} : console.log.bind(console);
+
+// This papyrus instance's advisory-lock holder token, fixed for the server's
+// lifetime. The random suffix means a restarted papyrus (which may reuse a pid)
+// never mistakes a lock left by a previous run for its own — it would force-steal
+// deliberately instead.
+export const HOLDER = `papyrus:${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
 
 // Locate the Claude Code plugin dir (adds the status hooks that drive node
 // state). Installed under ~/.openui/claude-code-plugin, or vendored in-repo.
@@ -38,50 +46,35 @@ export function injectPluginDir(command: string, agentId: string): string {
 
 const MAX_BUFFER_SIZE = 1000;
 
-// In-memory runtime state, keyed by silverwood workstream id. Purely ephemeral —
-// PTYs, connected WebSocket clients, live status, and terminal scrollback all live
-// here and are allowed to vanish on restart. All durable state is in silverwood.
+// The in-memory live-PTY registry, keyed by runtime session key. An entry exists
+// iff a PTY is live. Purely ephemeral — PTYs, WebSocket clients, scrollback, and
+// live status all live here and vanish on restart. All durable state is in
+// silverwood; nothing here is cached from it.
 export const sessions = new Map<string, Session>();
 
-/// Ensure a (dormant) runtime entry exists for a workstream, so the WebSocket and
-/// status endpoints can resolve it before its terminal is spawned. Records the
-/// checkout `cwd` so a later spawn runs in the right directory.
-export function ensureDormant(workstreamId: string, cwd = ""): Session {
-  let session = sessions.get(workstreamId);
-  if (!session) {
-    session = {
-      pty: null,
-      agentId: "claude",
-      agentName: "Claude Code",
-      command: "claude",
-      cwd,
-      createdAt: new Date().toISOString(),
-      clients: new Set(),
-      outputBuffer: [],
-      status: "disconnected",
-      lastOutputTime: 0,
-      lastInputTime: 0,
-      recentOutputSize: 0,
-      isRestored: true,
-    };
-    sessions.set(workstreamId, session);
-  } else if (cwd && !session.cwd) {
-    session.cwd = cwd;
+// Release the advisory lock this instance holds for a session, if any
+// (best-effort; a crash skips it and the lock is recovered via a force-steal).
+function releaseLock(session: Session): void {
+  if (session.holdsLock && session.claudeSessionId) {
+    session.holdsLock = false;
+    sw.sessionUnlock(session.workstreamId, session.claudeSessionId, HOLDER).catch((e) =>
+      log(`\x1b[38;5;141m[lock]\x1b[0m release ${session.claudeSessionId}: ${e.message}`),
+    );
   }
-  return session;
 }
 
-/// Spawn a fresh terminal for a workstream: a bash PTY in the checkout dir that
-/// runs `command` (e.g. `claude`). Reuses/updates the runtime entry. Returns it.
+/// Spawn a terminal for a session: a bash PTY in the checkout dir that runs
+/// `command` (`claude` fresh, or `claude --resume <id>`). Registered under
+/// `sessionKey`. On process exit, releases the lock and drops the entry.
 export function spawnTerminal(params: {
+  sessionKey: string;
   workstreamId: string;
   cwd: string;
-  agentId: string;
-  agentName: string;
   command: string;
+  claudeSessionId?: string;
+  resumed?: boolean;
 }): Session {
-  const { workstreamId, cwd, agentId, agentName, command } = params;
-  const session = ensureDormant(workstreamId, cwd);
+  const { sessionKey, workstreamId, cwd, command, claudeSessionId, resumed } = params;
 
   const ptyProcess = spawnPty("/bin/bash", [], {
     name: "xterm-256color",
@@ -90,12 +83,10 @@ export function spawnTerminal(params: {
       ...process.env,
       TERM: "xterm-256color",
       // The plugin echoes this back on status hooks so we can correlate.
-      OPENUI_SESSION_ID: workstreamId,
-      // Tell the plugin's status-reporter where the server actually is. Without
-      // this it falls back to its hardcoded 6969 while the server is on 6968, so
-      // every status POST (which carries the Claude session id we record) is
-      // silently dropped. Propagating the real port fixes it regardless of which
-      // plugin copy loads (in-store vendored or a stale ~/.openui one).
+      OPENUI_SESSION_ID: sessionKey,
+      // Tell the plugin's status-reporter where the server actually is (its
+      // hardcoded fallback is a different port), so every status POST — which
+      // carries the Claude session id we record — is not silently dropped.
       OPENUI_PORT: String(PORT),
       OPENUI_HOST: HOST,
     },
@@ -103,18 +94,26 @@ export function spawnTerminal(params: {
     cols: 120,
   });
 
-  session.pty = ptyProcess;
-  session.agentId = agentId;
-  session.agentName = agentName;
-  session.command = command;
-  session.cwd = cwd;
-  session.status = "running";
-  session.isRestored = false;
-  session.outputBuffer = [];
-  session.lastOutputTime = Date.now();
+  const session: Session = {
+    pty: ptyProcess,
+    workstreamId,
+    cwd,
+    clients: new Set(),
+    outputBuffer: [],
+    status: "running",
+    lastOutputTime: Date.now(),
+    lastInputTime: 0,
+    recentOutputSize: 0,
+    claudeSessionId,
+    resumed: !!resumed,
+    // A resumed session's silverwood record + lock already exist, so the status
+    // hook must not re-record it.
+    silverwoodSessionRecorded: !!resumed,
+  };
+  sessions.set(sessionKey, session);
 
   const resetInterval = setInterval(() => {
-    if (!sessions.has(workstreamId) || !session.pty) {
+    if (sessions.get(sessionKey) !== session) {
       clearInterval(resetInterval);
       return;
     }
@@ -133,20 +132,52 @@ export function spawnTerminal(params: {
     }
   });
 
-  const finalCommand = injectPluginDir(command, agentId);
+  ptyProcess.onExit(() => {
+    clearInterval(resetInterval);
+    // Only tear down if this exact entry is still the live one for the key.
+    if (sessions.get(sessionKey) === session) {
+      releaseLock(session);
+      session.clients.clear();
+      sessions.delete(sessionKey);
+      log(`\x1b[38;5;141m[terminal]\x1b[0m exited ${sessionKey}`);
+    }
+  });
+
+  const finalCommand = injectPluginDir(command, "claude");
   setTimeout(() => ptyProcess.write(`${finalCommand}\r`), 300);
 
-  log(`\x1b[38;5;141m[terminal]\x1b[0m spawned ${workstreamId} in ${cwd}`);
+  log(`\x1b[38;5;141m[terminal]\x1b[0m spawned ${sessionKey} in ${cwd}`);
   return session;
 }
 
-/// Tear down a workstream's terminal + runtime entry. Does NOT touch silverwood.
-export function killTerminal(workstreamId: string): boolean {
-  const session = sessions.get(workstreamId);
+/// Resolve a runtime entry by its registry key, or by the claude session id it
+/// carries (a fresh PTY is keyed by a provisional id but learns its claude id).
+export function resolveRuntime(id: string): [string, Session] | undefined {
+  const direct = sessions.get(id);
+  if (direct) return [id, direct];
+  for (const [key, s] of sessions) {
+    if (s.claudeSessionId === id) return [key, s];
+  }
+  return undefined;
+}
+
+/// Tear down a session's terminal + registry entry, releasing its lock. Does NOT
+/// touch silverwood's durable session record.
+export function killTerminal(sessionKey: string): boolean {
+  const session = sessions.get(sessionKey);
   if (!session) return false;
-  if (session.pty) session.pty.kill();
+  releaseLock(session);
+  session.pty.kill();
   session.clients.clear();
-  sessions.delete(workstreamId);
-  log(`\x1b[38;5;141m[terminal]\x1b[0m killed ${workstreamId}`);
+  sessions.delete(sessionKey);
+  log(`\x1b[38;5;141m[terminal]\x1b[0m killed ${sessionKey}`);
   return true;
+}
+
+/// Kill runtime entries whose workstream no longer exists (archived/deleted
+/// elsewhere), releasing their locks — keeps the registry a projection of the forest.
+export function pruneWorkstreams(aliveWsIds: Set<string>): void {
+  for (const [key, s] of [...sessions]) {
+    if (!aliveWsIds.has(s.workstreamId)) killTerminal(key);
+  }
 }

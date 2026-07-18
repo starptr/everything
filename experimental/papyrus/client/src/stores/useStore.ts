@@ -12,6 +12,20 @@ export interface Agent {
 
 export type AgentStatus = "running" | "waiting_input" | "tool_calling" | "idle" | "disconnected" | "error";
 
+// One attached silverwood session = one tab. Projected from `session ls` + the
+// server's live-PTY overlay + the advisory lock. `sessionId` is the runtime key
+// used for the terminal WebSocket; `claudeSessionId` is the durable id to resume.
+export interface SessionTab {
+  sessionId: string;
+  claudeSessionId?: string;
+  name: string;
+  createdAt: string;
+  kind: string;
+  connected: boolean;
+  status: AgentStatus;
+  lock?: { holder: string; mine: boolean } | null;
+}
+
 export interface AgentSession {
   id: string;
   sessionId: string;
@@ -27,7 +41,8 @@ export interface AgentSession {
   customName?: string;
   customColor?: string;
   notes?: string;
-  isRestored?: boolean;
+  // The workstream's attached sessions, one tab each (server projection).
+  tabs?: SessionTab[];
   // Linear ticket info
   ticketId?: string;
   ticketTitle?: string;

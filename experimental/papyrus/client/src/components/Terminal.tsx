@@ -117,7 +117,6 @@ export function Terminal({ sessionId, color, nodeId }: TerminalProps) {
             // Handle status updates from plugin hooks
             updateSession(nodeId, {
               status: msg.status as AgentStatus,
-              isRestored: msg.isRestored,
               currentTool: msg.currentTool,
             });
           }

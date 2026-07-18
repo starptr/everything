@@ -43,6 +43,8 @@ export interface AgentSession {
   kind: string;
   name: string;
   created_at: string;
+  // The claude-code kind's best-effort advisory lock, if currently held.
+  lock?: { holder: string; acquired_at: string };
 }
 
 /// Run `silverwood --json <args>` and parse its stdout. Async (never blocks the
@@ -138,6 +140,39 @@ export function sessionCreate(
 
 export function sessionRemove(id: string, sessionId: string): Promise<void> {
   return serialize(id, () => run(["session", "rm", id, sessionId]));
+}
+
+/// Acquire the best-effort advisory lock on a session for `holder`. Rejects (the
+/// CLI exits non-zero) if held by another holder, unless `force` steals it.
+export function sessionLock(
+  id: string,
+  sessionId: string,
+  holder: string,
+  force = false,
+): Promise<void> {
+  return serialize(id, () =>
+    run(["session", "lock", id, sessionId, "--holder", holder, ...(force ? ["--force"] : [])]),
+  );
+}
+
+/// Release the advisory lock on a session (no-op if unlocked; rejects if held by
+/// a different holder without `force`).
+export function sessionUnlock(
+  id: string,
+  sessionId: string,
+  holder?: string,
+  force = false,
+): Promise<void> {
+  return serialize(id, () =>
+    run([
+      "session",
+      "unlock",
+      id,
+      sessionId,
+      ...(holder ? ["--holder", holder] : []),
+      ...(force ? ["--force"] : []),
+    ]),
+  );
 }
 
 // silverwood does read-modify-overwrite of the whole document with no file

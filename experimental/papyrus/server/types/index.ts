@@ -9,32 +9,39 @@ export type AgentStatus =
   | "disconnected"
   | "error";
 
-// Runtime-only state for a workstream's terminal. Ephemeral: everything here is
-// rebuilt or discarded on restart. Durable state lives in silverwood.
+// A live-PTY registry entry — the ONE thing papyrus owns that silverwood cannot
+// model (a running process, its clients, scrollback, and live status). Purely
+// ephemeral: an entry exists iff a PTY is live. All durable data (session list,
+// names, lock) is re-read from silverwood on demand — never cached here. Keyed in
+// the registry by the runtime session key (the claude session id for a resumed
+// session; a provisional uuid for a fresh one until the plugin reports its id).
 export interface Session {
-  pty: IPty | null;
-  agentId: string;
-  agentName: string;
-  command: string;
+  pty: IPty;
+  // The workstream this PTY belongs to (the registry is no longer keyed by it).
+  workstreamId: string;
   cwd: string;
-  createdAt: string;
   clients: Set<ServerWebSocket<WebSocketData>>;
   outputBuffer: string[];
   status: AgentStatus;
   lastOutputTime: number;
   lastInputTime: number;
   recentOutputSize: number;
-  isRestored?: boolean;
-  // Live status reported by the Claude Code plugin's hooks.
+  // The claude session id: known up front for a resumed session, learned from the
+  // plugin hook for a fresh one. Used for reconciliation, recording, and the lock.
   claudeSessionId?: string;
+  // Spawned via `--resume` (its silverwood session + lock already exist).
+  resumed: boolean;
+  // Whether a silverwood session has been recorded for claudeSessionId already.
+  silverwoodSessionRecorded: boolean;
+  // Whether this instance currently holds the advisory lock for claudeSessionId.
+  holdsLock?: boolean;
+  // Live status reported by the Claude Code plugin's hooks.
   currentTool?: string;
   preToolTime?: number;
   permissionTimeout?: ReturnType<typeof setTimeout>;
   pluginReportedStatus?: boolean;
   lastPluginStatusTime?: number;
   lastHookEvent?: string;
-  // Whether a silverwood session has been recorded for claudeSessionId already.
-  silverwoodSessionRecorded?: boolean;
 }
 
 export interface LinearTicket {

@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import type { Agent } from "../types";
+import { randomUUID } from "crypto";
 import {
   sessions,
   spawnTerminal,
   killTerminal,
-  ensureDormant,
+  resolveRuntime,
+  pruneWorkstreams,
+  HOLDER,
 } from "../services/sessionManager";
 import * as sw from "../services/silverwood";
 import {
@@ -46,28 +49,73 @@ apiRoutes.get("/agents", (c) => {
 
 // ---- node model: a canvas node IS a silverwood workstream ----
 
-// Project a workstream (+ its runtime terminal, if any) into the node shape the
-// client renders. Presentation state comes from papyrus's KV namespace; the
-// display name is the workstream name.
-function buildNode(ws: sw.Workstream) {
+// Project a workstream into the node the client renders. Every durable field is
+// read fresh from silverwood; a per-session `sessions[]` list overlays the live
+// PTY registry ("connected") and the advisory lock ("mine" = held by this
+// instance). papyrus caches no durable data — this is a pure projection.
+async function buildNode(ws: sw.Workstream) {
   const kv = ws.kv?.[sw.PAPYRUS_NS] || {};
-  const runtime = sessions.get(ws.id);
   const cwd = sw.checkoutLocation(ws) || "";
   const cstate = sw.checkoutState(ws);
-  const status = runtime?.pty
-    ? runtime.status
+
+  // Live PTYs belonging to this workstream, from the registry.
+  const runtimes = [...sessions].filter(([, s]) => s.workstreamId === ws.id);
+
+  // Durable sessions from silverwood, overlaid with liveness + lock.
+  let durable: Record<string, sw.AgentSession> = {};
+  try {
+    durable = await sw.sessionLs(ws.id);
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[sessions]\x1b[0m ${ws.id}: ${e.message}`);
+  }
+  const tabs: any[] = [];
+  const claimed = new Set<string>();
+  for (const [claudeId, rec] of Object.entries(durable)) {
+    const match = runtimes.find(([k, s]) => k === claudeId || s.claudeSessionId === claudeId);
+    if (match) claimed.add(match[0]);
+    tabs.push({
+      sessionId: match ? match[0] : claudeId,
+      claudeSessionId: claudeId,
+      name: rec.name,
+      createdAt: rec.created_at,
+      kind: rec.kind,
+      connected: !!match,
+      status: match ? match[1].status : "disconnected",
+      lock: rec.lock ? { holder: rec.lock.holder, mine: rec.lock.holder === HOLDER } : null,
+    });
+  }
+  // Fresh, live PTYs not yet recorded in silverwood (pre status-hook). Surfaced by
+  // the server (its own runtime truth), so the client never invents a tab.
+  for (const [key, s] of runtimes) {
+    if (claimed.has(key)) continue;
+    tabs.push({
+      sessionId: key,
+      claudeSessionId: s.claudeSessionId,
+      name: "claude",
+      createdAt: ws.created_at,
+      kind: "claude-code",
+      connected: true,
+      status: s.status,
+      lock: null,
+    });
+  }
+
+  const live = tabs.find((t) => t.connected);
+  const status = live
+    ? live.status
     : cstate === "failed"
       ? "error"
       : cstate === "pending"
         ? "idle"
         : "disconnected";
+
   const position = sw.decodeKv<{ x: number; y: number }>(kv, "position");
   return {
     nodeId: ws.id,
     sessionId: ws.id,
-    agentId: runtime?.agentId || "claude",
-    agentName: runtime?.agentName || "Claude Code",
-    command: runtime?.command || "claude",
+    agentId: "claude",
+    agentName: "Claude Code",
+    command: "claude",
     cwd,
     createdAt: ws.created_at,
     customName: ws.name,
@@ -75,23 +123,20 @@ function buildNode(ws: sw.Workstream) {
     notes: sw.decodeKv<string>(kv, "notes"),
     ...(position ? { position } : {}),
     status,
-    isAlive: true,
-    isRestored: !runtime?.pty,
     checkoutState: cstate,
     source: ws.mode?.initial_source,
+    sessions: tabs,
   };
 }
 
-// List active workstreams as nodes; ensure a dormant runtime entry per node; prune
-// runtime entries for workstreams that no longer exist (archived/deleted).
+// List active workstreams as nodes; prune runtime PTYs for workstreams that no
+// longer exist (archived/deleted, possibly by another process). Re-reads
+// silverwood fresh every call, so the projection tracks concurrent external
+// mutations. One `session ls` per workstream — fine at personal scale.
 async function hydrateNodes() {
   const wss = await sw.list();
-  const alive = new Set(wss.map((w) => w.id));
-  for (const id of [...sessions.keys()]) {
-    if (!alive.has(id)) killTerminal(id);
-  }
-  for (const ws of wss) ensureDormant(ws.id, sw.checkoutLocation(ws) || "");
-  return wss.map(buildNode);
+  pruneWorkstreams(new Set(wss.map((w) => w.id)));
+  return Promise.all(wss.map(buildNode));
 }
 
 apiRoutes.get("/state", async (c) => {
@@ -113,9 +158,9 @@ apiRoutes.get("/sessions", async (c) => {
 });
 
 apiRoutes.get("/sessions/:sessionId/status", (c) => {
-  const s = sessions.get(c.req.param("sessionId"));
-  if (!s) return c.json({ status: "disconnected", isRestored: true });
-  return c.json({ status: s.status, isRestored: s.isRestored });
+  const r = resolveRuntime(c.req.param("sessionId"));
+  if (!r) return c.json({ status: "disconnected" });
+  return c.json({ status: r[1].status });
 });
 
 // Create a node = create a silverwood workstream (clones its checkout), then spawn
@@ -138,16 +183,10 @@ apiRoutes.post("/sessions", async (c) => {
   if (position) await sw.setKv(ws.id, "position", position);
 
   const cwd = sw.checkoutLocation(ws) || "";
+  let initialSessionId: string | undefined;
   if (sw.checkoutState(ws) === "ready" && cwd) {
-    spawnTerminal({
-      workstreamId: ws.id,
-      cwd,
-      agentId: "claude",
-      agentName: "Claude Code",
-      command: "claude",
-    });
-  } else {
-    ensureDormant(ws.id, cwd);
+    initialSessionId = randomUUID();
+    spawnTerminal({ sessionKey: initialSessionId, workstreamId: ws.id, cwd, command: "claude" });
   }
 
   return c.json({
@@ -155,15 +194,26 @@ apiRoutes.post("/sessions", async (c) => {
     nodeId: ws.id,
     cwd,
     checkoutState: sw.checkoutState(ws),
+    initialSessionId,
   });
 });
 
-// Spawn (or respawn) a node's terminal — the "Spawn Fresh" action.
-apiRoutes.post("/sessions/:sessionId/restart", async (c) => {
-  const id = c.req.param("sessionId");
+// Connect (resume) an existing session: acquire its advisory lock, then spawn a
+// `claude --resume <id>` PTY in the checkout. `force` steals a lock held elsewhere.
+apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
+  const wsId = c.req.param("wsId");
+  const { sessionId, force } = await c.req.json();
+  if (!sessionId) return c.json({ error: "sessionId is required" }, 400);
+
+  // Already live in this process? Just report it.
+  const existing = resolveRuntime(sessionId);
+  if (existing && existing[1].workstreamId === wsId) {
+    return c.json({ sessionId: existing[0], connected: true });
+  }
+
   let ws: sw.Workstream;
   try {
-    ws = await sw.get(id);
+    ws = await sw.get(wsId);
   } catch (e: any) {
     return c.json({ error: e.message }, 404);
   }
@@ -171,15 +221,58 @@ apiRoutes.post("/sessions/:sessionId/restart", async (c) => {
   if (!cwd || sw.checkoutState(ws) !== "ready") {
     return c.json({ error: "checkout not ready" }, 400);
   }
-  const existing = sessions.get(id);
-  spawnTerminal({
-    workstreamId: id,
+
+  // Acquire the advisory lock. A contention failure → 409 so the UI can offer
+  // Force; any other silverwood error is logged and ignored (the lock is advisory,
+  // so it must never block a connect on its own).
+  let holdsLock = false;
+  try {
+    await sw.sessionLock(wsId, sessionId, HOLDER, !!force);
+    holdsLock = true;
+  } catch (e: any) {
+    const m = /is locked by (.+)$/.exec((e.message || "").trim());
+    if (m) return c.json({ error: e.message, locked: true, holder: m[1] }, 409);
+    log(`\x1b[38;5;141m[lock]\x1b[0m acquire ${sessionId}: ${e.message}`);
+  }
+
+  const session = spawnTerminal({
+    sessionKey: sessionId,
+    workstreamId: wsId,
     cwd,
-    agentId: existing?.agentId || "claude",
-    agentName: existing?.agentName || "Claude Code",
-    command: existing?.command || "claude",
+    command: `claude --resume ${sessionId}`,
+    claudeSessionId: sessionId,
+    resumed: true,
   });
-  log(`\x1b[38;5;141m[session]\x1b[0m spawned ${id}`);
+  session.holdsLock = holdsLock;
+  log(`\x1b[38;5;141m[session]\x1b[0m connected ${sessionId}`);
+  return c.json({ sessionId, connected: true });
+});
+
+// Add a fresh session tab: spawn a new `claude` PTY under a provisional id. Its
+// durable silverwood session + lock are recorded later by the status hook.
+apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
+  const wsId = c.req.param("wsId");
+  let ws: sw.Workstream;
+  try {
+    ws = await sw.get(wsId);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 404);
+  }
+  const cwd = sw.checkoutLocation(ws) || "";
+  if (!cwd || sw.checkoutState(ws) !== "ready") {
+    return c.json({ error: "checkout not ready" }, 400);
+  }
+  const sessionId = randomUUID();
+  spawnTerminal({ sessionKey: sessionId, workstreamId: wsId, cwd, command: "claude" });
+  log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${sessionId}`);
+  return c.json({ sessionId, connected: true });
+});
+
+// Disconnect a session: kill its live PTY (releasing the lock). The durable
+// silverwood session is untouched, so the tab remains (disconnected).
+apiRoutes.post("/sessions/:wsId/sessions/:sessionId/disconnect", (c) => {
+  const r = resolveRuntime(c.req.param("sessionId"));
+  if (r) killTerminal(r[0]);
   return c.json({ success: true });
 });
 
@@ -207,10 +300,13 @@ apiRoutes.patch("/sessions/:sessionId", async (c) => {
   return c.json({ success: true });
 });
 
-// Delete a node = kill its terminal + archive the workstream (tombstone).
+// Delete a node = kill all its terminals (releasing their locks) + archive the
+// workstream (tombstone).
 apiRoutes.delete("/sessions/:sessionId", async (c) => {
   const id = c.req.param("sessionId");
-  killTerminal(id);
+  for (const [key, s] of [...sessions]) {
+    if (s.workstreamId === id) killTerminal(key);
+  }
   try {
     await sw.archive(id);
   } catch (e: any) {
@@ -251,12 +347,18 @@ apiRoutes.post("/status-update", async (c) => {
   if (claudeSessionId && !session.claudeSessionId) {
     session.claudeSessionId = claudeSessionId;
   }
-  // Record the agent session in silverwood once (fire-and-forget).
+  // Record the agent session in silverwood once, under its WORKSTREAM id (the
+  // registry key is a provisional uuid), then acquire its advisory lock so other
+  // clients see it as in-use. Fire-and-forget.
   if (claudeSessionId && !session.silverwoodSessionRecorded) {
     session.silverwoodSessionRecorded = true;
-    sw.sessionCreate(foundId, claudeSessionId, session.agentName || "claude").catch((e) =>
-      log(`\x1b[38;5;141m[session-register]\x1b[0m ${e.message}`),
-    );
+    const s = session;
+    sw.sessionCreate(s.workstreamId, claudeSessionId, "claude")
+      .then(() => sw.sessionLock(s.workstreamId, claudeSessionId, HOLDER))
+      .then(() => {
+        s.holdsLock = true;
+      })
+      .catch((e) => log(`\x1b[38;5;141m[session-register]\x1b[0m ${e.message}`));
   }
 
   // Permission detection: a PreToolUse with no matching PostToolUse within 2.5s
@@ -276,7 +378,6 @@ apiRoutes.post("/status-update", async (c) => {
               JSON.stringify({
                 type: "status",
                 status: "waiting_input",
-                isRestored: session!.isRestored,
                 currentTool: session!.currentTool,
                 hookEvent: "permission_timeout",
               }),
@@ -314,7 +415,6 @@ apiRoutes.post("/status-update", async (c) => {
         JSON.stringify({
           type: "status",
           status: session.status,
-          isRestored: session.isRestored,
           currentTool: session.currentTool,
           hookEvent,
         }),
