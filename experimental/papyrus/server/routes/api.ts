@@ -287,6 +287,23 @@ apiRoutes.post("/sessions/:wsId/sessions/:sessionId/disconnect", (c) => {
   return c.json({ success: true });
 });
 
+// Rename a session (its silverwood `name`, shown as the tab title). Name required
+// and non-empty; the live PTY (if any) is untouched.
+apiRoutes.patch("/sessions/:wsId/sessions/:sessionId", async (c) => {
+  const wsId = c.req.param("wsId");
+  const sessionId = c.req.param("sessionId");
+  const { name } = await c.req.json();
+  if (typeof name !== "string" || !name.trim()) {
+    return c.json({ error: "name is required" }, 400);
+  }
+  try {
+    await sw.sessionRename(wsId, sessionId, name);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 400);
+  }
+  return c.json({ success: true });
+});
+
 // Persist canvas positions into each workstream's papyrus KV (serialized writes).
 apiRoutes.post("/state/positions", async (c) => {
   const { positions } = await c.req.json();

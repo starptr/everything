@@ -142,6 +142,11 @@ export function sessionRemove(id: string, sessionId: string): Promise<void> {
   return serialize(id, () => run(["session", "rm", id, sessionId]));
 }
 
+/// Rename a session (preserves its kind + created_at). `name` is positional.
+export function sessionRename(id: string, sessionId: string, name: string): Promise<void> {
+  return serialize(id, () => run(["session", "rename", id, sessionId, name]));
+}
+
 /// Acquire the best-effort advisory lock on a session for `holder`. Rejects (the
 /// CLI exits non-zero) if held by another holder, unless `force` steals it.
 export function sessionLock(

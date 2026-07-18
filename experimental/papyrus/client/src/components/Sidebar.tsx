@@ -66,6 +66,9 @@ export function Sidebar() {
   const [editIcon, setEditIcon] = useState("");
 
   const [activeTabId, setActiveTabId] = useState<string | undefined>(undefined);
+  // The session whose rename panel is open (its pencil was clicked), + its buffer.
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionName, setEditSessionName] = useState("");
   // Optimism: an action's server-confirmed result, shown until the ~1s reconcile
   // reflects it (mount-from-response). { sessionId -> partial tab override }.
   const [pending, setPending] = useState<Record<string, Partial<SessionTab>>>({});
@@ -104,6 +107,7 @@ export function Sidebar() {
       setEditIcon(typeof nodeIcon === "string" ? nodeIcon : "cpu");
     }
     setIsEditing(false);
+    setEditingSessionId(null);
     setConnectError(null);
   }, [selectedNodeId]);
 
@@ -118,6 +122,13 @@ export function Sidebar() {
     }
   }, [tabs, activeTabId]);
 
+  // Close the rename panel if its session's tab vanished.
+  useEffect(() => {
+    if (editingSessionId && !tabs.some((t) => t.sessionId === editingSessionId)) {
+      setEditingSessionId(null);
+    }
+  }, [tabs, editingSessionId]);
+
   // Drop optimism once the reconcile agrees (server truth caught up).
   useEffect(() => {
     setPending((p) => {
@@ -127,7 +138,10 @@ export function Sidebar() {
       const next: Record<string, Partial<SessionTab>> = {};
       for (const sid of keys) {
         const t = storeTabs.find((x) => x.sessionId === sid);
-        const settled = t && (p[sid].connected === undefined || t.connected === p[sid].connected);
+        const settled =
+          t &&
+          (p[sid].connected === undefined || t.connected === p[sid].connected) &&
+          (p[sid].name === undefined || t.name === p[sid].name);
         if (settled) changed = true;
         else next[sid] = p[sid];
       }
@@ -400,21 +414,51 @@ export function Sidebar() {
             {tabs.map((t) => {
               const lockedByOther = t.lock && !t.lock.mine;
               const dot = t.connected ? "#22C55E" : lockedByOther ? "#FBBF24" : "#6B7280";
+              const isActive = t.sessionId === activeTabId;
+              const isEditingTab = editingSessionId === t.sessionId;
               return (
-                <button
+                <div
                   key={t.sessionId}
-                  onClick={() => setActiveTabId(t.sessionId)}
-                  title={t.sessionId}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-xs whitespace-nowrap transition-colors ${
-                    t.sessionId === activeTabId
+                  className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-t-md text-xs whitespace-nowrap transition-colors ${
+                    isActive
                       ? "bg-[#0d0d0d] text-white border-b-2 border-white"
-                      : "text-zinc-400 hover:text-white hover:bg-surface-active"
+                      : "text-zinc-400 hover:bg-surface-active"
                   }`}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
-                  <span className="max-w-[120px] truncate">{tabLabel(t)}</span>
+                  <button
+                    onClick={() => {
+                      // Switching to a different tab closes an open rename pane.
+                      if (t.sessionId !== activeTabId) setEditingSessionId(null);
+                      setActiveTabId(t.sessionId);
+                    }}
+                    title={t.sessionId}
+                    className={`flex items-center gap-1.5 min-w-0 ${isActive ? "" : "hover:text-white"}`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
+                    <span className="max-w-[120px] truncate">{tabLabel(t)}</span>
+                  </button>
                   {lockedByOther && <Lock className="w-3 h-3 text-amber-400 flex-shrink-0" />}
-                </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTabId(t.sessionId);
+                      if (isEditingTab) {
+                        setEditingSessionId(null);
+                      } else {
+                        setEditingSessionId(t.sessionId);
+                        setEditSessionName(t.name);
+                      }
+                    }}
+                    title="Rename session"
+                    className={`flex-shrink-0 rounded p-0.5 transition-colors ${
+                      isEditingTab
+                        ? "text-white bg-surface-active"
+                        : "text-zinc-600 hover:text-white"
+                    }`}
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                </div>
               );
             })}
             <button
@@ -426,6 +470,47 @@ export function Sidebar() {
               <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Session rename panel (expands under the tab whose pencil was clicked) */}
+          <AnimatePresence>
+            {editingSessionId && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="flex-shrink-0 overflow-hidden border-b border-border"
+              >
+                <div className="p-4">
+                  <label className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                    Session title
+                  </label>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editSessionName}
+                    onChange={(e) => {
+                      const sid = editingSessionId;
+                      if (!sid) return;
+                      const v = e.target.value;
+                      setEditSessionName(v);
+                      setPending((p) => ({ ...p, [sid]: { ...p[sid], name: v } }));
+                      if (selectedNodeId && v.trim()) {
+                        fetch(`/api/sessions/${selectedNodeId}/sessions/${sid}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name: v }),
+                        }).catch(console.error);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape") setEditingSessionId(null);
+                    }}
+                    className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Active session pane */}
           <div className="flex-1 flex flex-col min-h-0">
