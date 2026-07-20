@@ -951,10 +951,10 @@
       },
       "locked": {
         "dir": "experimental/silverwood",
-        "lastModified": 1784182636,
-        "narHash": "sha256-Km6/0W13ngAUM5imZ5ZzbO4IvtCPoI1O5Oc9nTWFRe8=",
-        "rev": "098ab68cf1be87d791bb5c896c4708b090d400f0",
-        "revCount": 696,
+        "lastModified": 1784511223,
+        "narHash": "sha256-NnuI9RLZfJojwj03vG5ZHetZjBKfUXlFCLZysYnq+30=",
+        "rev": "dc38b8b0ef108b36176ab5758b3e746a6b764d77",
+        "revCount": 707,
         "type": "git",
         "url": "file:///Users/yuto/src/everything"
       },
