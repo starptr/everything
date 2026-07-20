@@ -32,13 +32,23 @@ pub enum Status {
 /// that is only meaningful *for that strategy* — its seed (`initial_source`) and its
 /// provisioning `state`. A future mode that adopts an existing local directory, for
 /// instance, would carry no source and be instantly ready; folding these fields into
-/// the variant keeps `Basic` honest. Open, internally-tagged enum: one mode today.
+/// the variant keeps `Basic` honest. Open, internally-tagged enum.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "checkout_mode", rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum CheckoutMode {
     /// A jj/git colocated clone (`jj git clone --colocate`) of `initial_source`.
     JjColocated {
+        /// The HTTPS git url the checkout was cloned from.
+        initial_source: String,
+        /// Provisioning state of the clone (core-owned lifecycle).
+        state: CheckoutState,
+    },
+    /// As [`CheckoutMode::JjColocated`], but after a successful clone `direnv allow`
+    /// is run on the checkout so its `.envrc` is pre-approved. "Unsafe": pre-approval
+    /// lets the `.envrc` run arbitrary shell on later direnv loads — the caller opts
+    /// into trusting the cloned repo.
+    JjColocatedDirenvUnsafe {
         /// The HTTPS git url the checkout was cloned from.
         initial_source: String,
         /// Provisioning state of the clone (core-owned lifecycle).
@@ -111,13 +121,23 @@ impl CheckoutMode {
     pub fn tag(&self) -> &'static str {
         match self {
             CheckoutMode::JjColocated { .. } => "jj-colocated",
+            CheckoutMode::JjColocatedDirenvUnsafe { .. } => "jj-colocated-direnv-unsafe",
         }
     }
 
     /// The provisioning state of this checkout.
     pub fn state(&self) -> CheckoutState {
         match self {
-            CheckoutMode::JjColocated { state, .. } => *state,
+            CheckoutMode::JjColocated { state, .. }
+            | CheckoutMode::JjColocatedDirenvUnsafe { state, .. } => *state,
+        }
+    }
+
+    /// The seed url this checkout was created from (every mode today carries one).
+    pub fn initial_source(&self) -> &str {
+        match self {
+            CheckoutMode::JjColocated { initial_source, .. }
+            | CheckoutMode::JjColocatedDirenvUnsafe { initial_source, .. } => initial_source,
         }
     }
 }
@@ -333,6 +353,12 @@ pub enum NewCheckoutMode {
         /// The HTTPS git url to clone.
         initial_source: HttpsGitUrl,
     },
+    /// As [`NewCheckoutMode::JjColocated`], plus `direnv allow` on the checkout after
+    /// a successful clone (pre-approves its `.envrc`; see [`CheckoutMode`] docs).
+    JjColocatedDirenvUnsafe {
+        /// The HTTPS git url to clone.
+        initial_source: HttpsGitUrl,
+    },
 }
 
 #[cfg(test)]
@@ -362,14 +388,21 @@ mod tests {
             );
         }
         // Data-carrying enums: the internally-tagged discriminant must match tag().
-        let mode = CheckoutMode::JjColocated {
-            initial_source: "https://example.com/x.git".into(),
-            state: CheckoutState::Ready,
-        };
-        assert_eq!(
-            serde_json::to_value(&mode).unwrap()["checkout_mode"],
-            serde_json::json!(mode.tag())
-        );
+        for mode in [
+            CheckoutMode::JjColocated {
+                initial_source: "https://example.com/x.git".into(),
+                state: CheckoutState::Ready,
+            },
+            CheckoutMode::JjColocatedDirenvUnsafe {
+                initial_source: "https://example.com/x.git".into(),
+                state: CheckoutState::Ready,
+            },
+        ] {
+            assert_eq!(
+                serde_json::to_value(&mode).unwrap()["checkout_mode"],
+                serde_json::json!(mode.tag())
+            );
+        }
         let within = LocationWithinForest::BasicForest {
             path: "/tmp/x".into(),
         };

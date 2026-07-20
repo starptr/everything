@@ -12,9 +12,8 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    AgentKind, AgentSession, CheckoutMode, Forest, HttpsGitUrl, LocationWithinForest,
-    NewCheckoutMode, NewKind, NewWorkstream, UpgradeReport, Workstream, WorkstreamId,
-    DOC_SCHEMA_VERSION,
+    AgentKind, AgentSession, Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode, NewKind,
+    NewWorkstream, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -93,6 +92,9 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+
+    /// List the available checkout modes for `new --mode`.
+    Modes,
 }
 
 /// Positional args are shared across kv subcommands: `<ID> <NAMESPACE> [KEY] [VALUE]`.
@@ -215,6 +217,19 @@ enum SessionCreate {
 enum ModeArg {
     #[value(name = "jj-colocated")]
     JjColocated,
+    #[value(name = "jj-colocated-direnv-unsafe")]
+    JjColocatedDirenvUnsafe,
+}
+
+/// A checkout mode's metadata, for `silverwood modes` (drives a frontend picker).
+#[derive(serde::Serialize)]
+struct ModeInfo {
+    /// The kebab tag passed to `new --mode` (matches the stored `checkout_mode`).
+    mode: String,
+    /// One-line human description.
+    description: &'static str,
+    /// Whether this mode requires `--source` (all modes today do).
+    requires_source: bool,
 }
 
 impl ModeArg {
@@ -222,7 +237,45 @@ impl ModeArg {
     fn to_new_mode(self, initial_source: HttpsGitUrl) -> NewCheckoutMode {
         match self {
             ModeArg::JjColocated => NewCheckoutMode::JjColocated { initial_source },
+            ModeArg::JjColocatedDirenvUnsafe => {
+                NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source }
+            }
         }
+    }
+
+    /// One-line description of the mode (kept in sync with the variants by the
+    /// exhaustive match — a new variant forces filling this in).
+    fn description(self) -> &'static str {
+        match self {
+            ModeArg::JjColocated => "jj/git colocated clone (`jj git clone --colocate`).",
+            ModeArg::JjColocatedDirenvUnsafe => {
+                "jj-colocated clone, then `direnv allow` on the checkout (pre-approves .envrc; unsafe)."
+            }
+        }
+    }
+
+    /// Whether `new --mode <this>` requires `--source` (all modes today do).
+    fn requires_source(self) -> bool {
+        match self {
+            ModeArg::JjColocated | ModeArg::JjColocatedDirenvUnsafe => true,
+        }
+    }
+
+    /// Metadata for every mode, in declaration order. The `mode` tag is sourced
+    /// from clap's `#[value(name=...)]` so it stays the single source of truth.
+    fn all_infos() -> Vec<ModeInfo> {
+        Self::value_variants()
+            .iter()
+            .map(|m| ModeInfo {
+                mode: m
+                    .to_possible_value()
+                    .expect("no ModeArg variant is value-skipped")
+                    .get_name()
+                    .to_string(),
+                description: m.description(),
+                requires_source: m.requires_source(),
+            })
+            .collect()
     }
 }
 
@@ -245,6 +298,19 @@ fn run(cli: Cli) -> CliResult {
         None => resolve_forest_dir()?,
     };
     let json = cli.json;
+
+    // `modes` is pure metadata — handle it before opening (and thereby creating)
+    // the forest, so listing modes never touches `$HOME/.silverwood`.
+    if let Command::Modes = cli.command {
+        let modes = ModeArg::all_infos();
+        emit(json, &modes, || {
+            for m in &modes {
+                println!("{:28}  {}", m.mode, m.description);
+            }
+        });
+        return Ok(());
+    }
+
     let forest = Forest::open(&root)?;
 
     match cli.command {
@@ -307,6 +373,9 @@ fn run(cli: Cli) -> CliResult {
             emit(json, &reports, || print_upgrade(&reports, dry_run));
             Ok(())
         }
+
+        // Handled above, before the forest is opened.
+        Command::Modes => unreachable!("modes is handled before Forest::open"),
     }
 }
 
@@ -452,9 +521,7 @@ fn print_workstream(ws: &Workstream) {
     println!("  kind:     {}", ws.body.kind.tag());
     if let Some(mode) = ws.body.mode() {
         println!("  mode:     {} [{}]", mode.tag(), enum_str(mode.state()));
-        if let CheckoutMode::JjColocated { initial_source, .. } = mode {
-            println!("  source:   {initial_source}");
-        }
+        println!("  source:   {}", mode.initial_source());
     }
     println!("  created:  {}", ws.body.created_at);
     if let Some(location) = ws.body.location() {

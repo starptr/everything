@@ -313,8 +313,13 @@ fn write_mode(basic: &LoroMap, mode: &CheckoutMode) -> Result<()> {
         .insert_container("mode", LoroMap::new())
         .map_err(loro_err)?;
     map.insert("checkout_mode", mode.tag()).map_err(loro_err)?;
+    // Both jj-colocated modes carry the same fields; only the tag (above) differs.
     match mode {
         CheckoutMode::JjColocated {
+            initial_source,
+            state,
+        }
+        | CheckoutMode::JjColocatedDirenvUnsafe {
             initial_source,
             state,
         } => {
@@ -428,6 +433,28 @@ mod tests {
         assert_eq!(ws.body, body);
         // The typed session view decodes the reserved namespace.
         assert_eq!(ws.body.sessions()["sid-1"].name, "planning");
+    }
+
+    /// The `jj-colocated-direnv-unsafe` mode round-trips through build → hydrate and
+    /// projects the expected flat `checkout_mode` tag (it carries the same fields as
+    /// `jj-colocated`, so `write_mode`/serde must distinguish it by tag alone).
+    #[test]
+    fn direnv_unsafe_mode_round_trips() {
+        let mut body = sample_body();
+        body.kind = WorkstreamKind::Basic {
+            mode: CheckoutMode::JjColocatedDirenvUnsafe {
+                initial_source: "https://example.com/x.git".into(),
+                state: CheckoutState::Ready,
+            },
+            location: body.location().unwrap().clone(),
+        };
+
+        let doc = build(7, &body).unwrap();
+        let ws = hydrate(WorkstreamId::generate(), &snapshot(&doc).unwrap()).unwrap();
+        assert_eq!(ws.body, body);
+        let json = serde_json::to_value(&ws).unwrap();
+        assert_eq!(json["mode"]["checkout_mode"], "jj-colocated-direnv-unsafe");
+        assert_eq!(json["mode"]["initial_source"], "https://example.com/x.git");
     }
 
     /// The heart of the CRDT model: two forests editing the same workstream

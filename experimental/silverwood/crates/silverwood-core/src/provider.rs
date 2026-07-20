@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::error::{Error, Result};
+use crate::source::HttpsGitUrl;
 use crate::workstream::NewCheckoutMode;
 
 /// Materializes a checkout on disk for a chosen [`NewCheckoutMode`].
@@ -21,25 +22,59 @@ pub struct JjColocated;
 
 impl CheckoutProvider for JjColocated {
     fn provision(&self, mode: &NewCheckoutMode, dest: &Path) -> Result<()> {
-        // Exhaustive today; a new mode forces this provider to handle it.
-        let NewCheckoutMode::JjColocated { initial_source } = mode;
-
-        let output = Command::new("jj")
-            .arg("git")
-            .arg("clone")
-            .arg("--colocate")
-            .arg(initial_source.as_str())
-            .arg(dest)
-            .output()
-            .map_err(|e| Error::Provision(format!("spawning jj: {e}")))?;
-
-        if !output.status.success() {
-            return Err(Error::Provision(format!(
-                "`jj git clone --colocate` exited {}: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr).trim()
-            )));
+        // The colocated clone is shared by both modes; the direnv-unsafe mode chains
+        // `direnv allow` after a successful clone.
+        match mode {
+            NewCheckoutMode::JjColocated { initial_source } => jj_git_clone(initial_source, dest),
+            NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source } => {
+                jj_git_clone(initial_source, dest)?;
+                direnv_allow(dest)
+            }
         }
-        Ok(())
     }
+}
+
+/// `jj git clone --colocate <initial_source> <dest>` (shared by both jj-colocated modes).
+fn jj_git_clone(initial_source: &HttpsGitUrl, dest: &Path) -> Result<()> {
+    let output = Command::new("jj")
+        .arg("git")
+        .arg("clone")
+        .arg("--colocate")
+        .arg(initial_source.as_str())
+        .arg(dest)
+        .output()
+        .map_err(|e| Error::Provision(format!("spawning jj: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Provision(format!(
+            "`jj git clone --colocate` exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+/// Pre-approve the checkout's `.envrc`: `direnv allow <dest>`. Marks approval only —
+/// it does not evaluate the `.envrc`. A no-op when the cloned repo has no `.envrc`
+/// (`direnv allow` errors on a missing file, and there is nothing to approve).
+fn direnv_allow(dest: &Path) -> Result<()> {
+    if !dest.join(".envrc").exists() {
+        return Ok(());
+    }
+
+    let output = Command::new("direnv")
+        .arg("allow")
+        .arg(dest)
+        .output()
+        .map_err(|e| Error::Provision(format!("spawning direnv: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Provision(format!(
+            "`direnv allow` exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
 }

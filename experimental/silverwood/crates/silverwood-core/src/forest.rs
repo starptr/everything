@@ -116,22 +116,33 @@ impl Forest {
     /// document persists with state `Failed`) and surfaces the error.
     pub fn create_workstream(&self, new: NewWorkstream) -> Result<Workstream> {
         let NewKind::Basic { mode: new_mode } = &new.kind;
-        let NewCheckoutMode::JjColocated { initial_source } = new_mode;
 
         let id = WorkstreamId::generate();
         let dest = self.root.join(WORKING_COPIES_DIR).join(id.to_string());
 
-        // The stored mode starts `pending`; core flips it after provisioning. The
-        // location records this forest as the single materialization site.
+        // The stored mode starts `pending`; core flips it after provisioning. Each
+        // NewCheckoutMode maps to its matching pending CheckoutMode (dest/location and
+        // the provision call below are mode-independent).
+        let mode = match new_mode {
+            NewCheckoutMode::JjColocated { initial_source } => CheckoutMode::JjColocated {
+                initial_source: initial_source.as_str().to_string(),
+                state: CheckoutState::Pending,
+            },
+            NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source } => {
+                CheckoutMode::JjColocatedDirenvUnsafe {
+                    initial_source: initial_source.as_str().to_string(),
+                    state: CheckoutState::Pending,
+                }
+            }
+        };
+
+        // The location records this forest as the single materialization site.
         let body = WorkstreamBody {
             name: new.name,
             status: Status::Active,
             created_at: now_rfc3339(),
             kind: WorkstreamKind::Basic {
-                mode: CheckoutMode::JjColocated {
-                    initial_source: initial_source.as_str().to_string(),
-                    state: CheckoutState::Pending,
-                },
+                mode,
                 location: Location {
                     forest_id: self.id(),
                     within: LocationWithinForest::BasicForest {

@@ -15,6 +15,32 @@ use std::path::Path;
 
 use common::{create, fails, forest, json, ok, EXAMPLE_SOURCE};
 
+/// `modes` is pure metadata (no network, no forest), so it runs in the sandbox.
+#[test]
+fn modes_lists_available_checkout_modes() {
+    let dir = forest();
+    let modes = json(&dir, &["--json", "modes"]);
+    let tags: Vec<&str> = modes
+        .as_array()
+        .expect("modes is an array")
+        .iter()
+        .map(|m| m["mode"].as_str().expect("mode tag is a string"))
+        .collect();
+    assert!(
+        tags.contains(&"jj-colocated"),
+        "missing jj-colocated: {tags:?}"
+    );
+    assert!(
+        tags.contains(&"jj-colocated-direnv-unsafe"),
+        "missing jj-colocated-direnv-unsafe: {tags:?}"
+    );
+    // Every entry carries a description + requires_source flag.
+    for m in modes.as_array().unwrap() {
+        assert!(m["description"].as_str().is_some_and(|d| !d.is_empty()));
+        assert!(m["requires_source"].is_boolean());
+    }
+}
+
 #[test]
 #[ignore = "network + jj; run via `cargo test -- --ignored`"]
 fn new_creates_a_ready_colocated_checkout() {
@@ -68,6 +94,33 @@ fn new_creates_a_ready_colocated_checkout() {
     let listed = json(&dir, &["--json", "ls"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(json(&dir, &["--json", "show", id]), listed[0]);
+}
+
+/// The direnv-unsafe mode produces a ready checkout too. The example repo has no
+/// `.envrc`, so `direnv allow` is a no-op and provisioning still succeeds; the
+/// stored `checkout_mode` reflects the chosen mode. (A repo WITH an `.envrc` is
+/// needed to observe the actual approval — see the manual E2E in the plan.)
+#[test]
+#[ignore = "network + jj; run via `cargo test -- --ignored`"]
+fn new_direnv_unsafe_mode_is_ready() {
+    let dir = forest();
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "--name",
+            "with-direnv",
+            "--source",
+            EXAMPLE_SOURCE,
+            "--mode",
+            "jj-colocated-direnv-unsafe",
+        ],
+    );
+    assert_eq!(ws["mode"]["checkout_mode"], "jj-colocated-direnv-unsafe");
+    assert_eq!(ws["mode"]["state"], "ready");
+    let loc = ws["location"]["within"]["path"].as_str().unwrap();
+    assert!(Path::new(loc).join(".jj").is_dir(), ".jj missing");
 }
 
 #[test]

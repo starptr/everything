@@ -64,8 +64,9 @@
           }
         );
 
-        # The shipped package: the binary with jujutsu + git on PATH, since
-        # checkout provisioning (`jj git clone --colocate`) shells out to them.
+        # The shipped package: the binary with jujutsu + git + direnv on PATH, since
+        # checkout provisioning shells out to them (`jj git clone --colocate`, and
+        # `direnv allow` for the jj-colocated-direnv-unsafe mode).
         silverwood = pkgs.runCommand "silverwood"
           {
             nativeBuildInputs = [ pkgs.makeWrapper ];
@@ -77,6 +78,7 @@
               --prefix PATH : ${lib.makeBinPath [
                 pkgs.jujutsu
                 pkgs.git
+                pkgs.direnv
               ]}
           '';
       in
@@ -132,11 +134,12 @@
         };
 
         devShells.default = craneLib.devShell {
-          # cargo + rustc + clippy + rustfmt come from craneLib; add jj/git (Part 1
-          # provisioning) and taplo (toml formatting used by the toml-fmt check).
+          # cargo + rustc + clippy + rustfmt come from craneLib; add jj/git + direnv
+          # (provisioning shells out to them) and taplo (toml formatting check).
           packages = [
             pkgs.jujutsu
             pkgs.git
+            pkgs.direnv
             pkgs.taplo
           ];
         };
