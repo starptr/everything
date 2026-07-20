@@ -102,6 +102,21 @@ fn show_rejects_bad_and_absent_ids() {
 }
 
 #[test]
+fn spawn_rejects_bad_and_absent_ids() {
+    let dir = forest();
+
+    // Bad id → parse error, before any forest work or exec.
+    let stderr = fails(&dir, &["spawn", "not-a-uuid", "sess-1"]);
+    assert!(stderr.contains("invalid workstream id"), "got: {stderr}");
+
+    // Well-formed but absent id → not-found (there is no checkout to spawn in).
+    fails(
+        &dir,
+        &["spawn", "01999999-0000-7000-8000-000000000000", "sess-1"],
+    );
+}
+
+#[test]
 fn kv_set_rejects_reserved_namespace() {
     let dir = forest();
 

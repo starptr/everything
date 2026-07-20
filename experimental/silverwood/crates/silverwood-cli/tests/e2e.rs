@@ -123,6 +123,69 @@ fn new_direnv_unsafe_mode_is_ready() {
     assert!(Path::new(loc).join(".jj").is_dir(), ".jj missing");
 }
 
+/// `spawn --json` resolves the interactive-shell plan from the workstream's
+/// stored checkout mode: plain `claude` for jj-colocated, `direnv exec <cwd>` for
+/// the direnv-unsafe mode; `--resume` flips the claude flag; and omitting the
+/// session id yields the base login shell. Needs a real (ready) checkout — hence
+/// ignored. (The pure mode→argv logic is unit-tested in `silverwood-core`.)
+#[test]
+#[ignore = "network + jj; run via `cargo test -- --ignored`"]
+fn spawn_plan_reflects_checkout_mode() {
+    let dir = forest();
+
+    // Plain jj-colocated → `claude --session-id <sid>`, run in the checkout.
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "--name",
+            "plain",
+            "--source",
+            EXAMPLE_SOURCE,
+            "--mode",
+            "jj-colocated",
+        ],
+    );
+    let id = ws["id"].as_str().unwrap();
+    let plan = json(&dir, &["--json", "spawn", id, "sess-1"]);
+    assert_eq!(plan["program"], "claude");
+    assert_eq!(plan["args"], serde_json::json!(["--session-id", "sess-1"]));
+    assert_eq!(plan["cwd"], ws["location"]["within"]["path"]);
+
+    // `--resume` flips the claude flag.
+    let resumed = json(&dir, &["--json", "spawn", id, "sess-1", "--resume"]);
+    assert_eq!(resumed["args"], serde_json::json!(["--resume", "sess-1"]));
+
+    // The base-shell variant (no session id) runs a login shell in the checkout.
+    let base = json(&dir, &["--json", "spawn", id]);
+    assert!(base["program"].as_str().is_some_and(|p| !p.is_empty()));
+    assert_eq!(base["args"], serde_json::json!(["-l"]));
+
+    // Direnv-unsafe → claude wrapped in `direnv exec <cwd>` (cwd is its own argv).
+    let ws2 = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "--name",
+            "with-direnv",
+            "--source",
+            EXAMPLE_SOURCE,
+            "--mode",
+            "jj-colocated-direnv-unsafe",
+        ],
+    );
+    let id2 = ws2["id"].as_str().unwrap();
+    let cwd2 = ws2["location"]["within"]["path"].as_str().unwrap();
+    let plan2 = json(&dir, &["--json", "spawn", id2, "sess-2"]);
+    assert_eq!(plan2["program"], "direnv");
+    assert_eq!(
+        plan2["args"],
+        serde_json::json!(["exec", cwd2, "claude", "--session-id", "sess-2"])
+    );
+}
+
 #[test]
 #[ignore = "network + jj; run via `cargo test -- --ignored`"]
 fn kv_and_session_lifecycle() {

@@ -6,14 +6,16 @@
 //! default forest location, `$HOME/.silverwood`.
 
 use std::collections::BTreeMap;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    AgentKind, AgentSession, Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode, NewKind,
-    NewWorkstream, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
+    agent_shell_plan, base_shell_plan, AgentKind, AgentSession, CheckoutState, Forest, HttpsGitUrl,
+    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SpawnSeed, UpgradeReport,
+    Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -95,6 +97,21 @@ enum Command {
 
     /// List the available checkout modes for `new --mode`.
     Modes,
+
+    /// Exec the interactive agent shell for a session in its checkout. The command
+    /// is chosen from the checkout mode (env-scrubbed; `direnv exec` for the
+    /// direnv-unsafe mode) — this replaces the process with the agent, so on
+    /// success it never returns. Omit `session_id` for a bare login shell.
+    Spawn {
+        /// The workstream id whose checkout to spawn in (from `silverwood ls`).
+        workstream_id: String,
+        /// The Claude session id to run (`claude --session-id`/`--resume`); omit
+        /// for a plain login shell in the checkout.
+        session_id: Option<String>,
+        /// Resume the session (`claude --resume`) instead of starting it fresh.
+        #[arg(long)]
+        resume: bool,
+    },
 }
 
 /// Positional args are shared across kv subcommands: `<ID> <NAMESPACE> [KEY] [VALUE]`.
@@ -368,6 +385,12 @@ fn run(cli: Cli) -> CliResult {
         Command::Kv(cmd) => run_kv(&forest, json, cmd),
         Command::Session(cmd) => run_session(&forest, json, cmd),
 
+        Command::Spawn {
+            workstream_id,
+            session_id,
+            resume,
+        } => run_spawn(&forest, json, &workstream_id, session_id.as_deref(), resume),
+
         Command::UpgradeForest { dry_run } => {
             let reports = forest.upgrade_all(dry_run)?;
             emit(json, &reports, || print_upgrade(&reports, dry_run));
@@ -453,6 +476,79 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
     let sessions = forest.get(id)?.body.sessions();
     emit(json, &sessions, || print_sessions(&sessions));
     Ok(())
+}
+
+/// Build the interactive-shell plan for a session (from the checkout mode) and
+/// `exec` it, replacing this process with the agent — so the caller's PTY tracks
+/// the agent's lifetime directly. `--json` prints the resolved plan instead of
+/// exec'ing (for inspection/tests). The env/command construction lives in
+/// `silverwood-core`; reading the seed vars from the environment is frontend
+/// policy (like [`resolve_forest_dir`]), so it stays here.
+fn run_spawn(
+    forest: &Forest,
+    json: bool,
+    id: &str,
+    session_id: Option<&str>,
+    resume: bool,
+) -> CliResult {
+    let ws = forest.get(parse_id(id)?)?;
+    let mode = ws
+        .body
+        .mode()
+        .ok_or("workstream has no checkout to spawn in")?;
+    if mode.state() != CheckoutState::Ready {
+        return Err(format!("checkout is not ready (state: {})", enum_str(mode.state())).into());
+    }
+    let Some(LocationWithinForest::BasicForest { path: cwd }) =
+        ws.body.location().map(|loc| &loc.within)
+    else {
+        return Err("workstream has no checkout location".into());
+    };
+
+    let seed = spawn_seed()?;
+    let plan = match session_id {
+        Some(session_id) => agent_shell_plan(mode, cwd, session_id, resume, &seed),
+        None => base_shell_plan(cwd, &seed),
+    };
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&plan)?);
+        return Ok(());
+    }
+
+    let program = plan
+        .resolve_program()
+        .ok_or_else(|| format!("{:?} not found on the login PATH", plan.program))?;
+    // Fully-qualified: the local `Command` is the clap subcommand enum.
+    let err = std::process::Command::new(&program)
+        .args(&plan.args)
+        .current_dir(&plan.cwd)
+        .env_clear()
+        .envs(&plan.env)
+        .exec();
+    // `exec` replaces the process image, so it only returns on failure.
+    Err(format!("exec {}: {err}", program.display()).into())
+}
+
+/// Gather the spawn's dynamic inputs from the environment — frontend policy, like
+/// [`resolve_forest_dir`] (`silverwood-core` never reads env). `HOME` is required
+/// to reconstruct a login environment; `SHELL` defaults if unset.
+fn spawn_seed() -> Result<SpawnSeed, Box<dyn std::error::Error>> {
+    let home =
+        std::env::var("HOME").map_err(|_| "no HOME: cannot reconstruct a login environment")?;
+    let user = std::env::var("USER")
+        .ok()
+        .or_else(|| std::env::var("LOGNAME").ok());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let term = std::env::var("TERM").ok();
+    let ssh_auth_sock = std::env::var("SSH_AUTH_SOCK").ok();
+    Ok(SpawnSeed {
+        home,
+        user,
+        shell,
+        term,
+        ssh_auth_sock,
+    })
 }
 
 fn info(forest: &Forest, json: bool) -> CliResult {

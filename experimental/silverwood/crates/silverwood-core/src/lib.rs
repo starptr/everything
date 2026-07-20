@@ -19,6 +19,7 @@ mod id;
 mod migrate;
 mod provider;
 mod source;
+mod spawn;
 mod workstream;
 
 #[cfg(test)]
@@ -32,6 +33,7 @@ pub use id::{ForestId, WorkstreamId};
 pub use migrate::DOC_SCHEMA_VERSION;
 pub use provider::{CheckoutProvider, JjColocated};
 pub use source::HttpsGitUrl;
+pub use spawn::{agent_shell_plan, base_shell_plan, ShellPlan, SpawnSeed};
 pub use workstream::{
     AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest,
     NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody,
