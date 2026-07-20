@@ -47,6 +47,17 @@ apiRoutes.get("/agents", (c) => {
   return c.json(agents);
 });
 
+// The checkout modes a new workstream can be created with (drives the New
+// Workstream picker) — pure metadata from `silverwood modes`.
+apiRoutes.get("/modes", async (c) => {
+  try {
+    return c.json(await sw.listModes());
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[modes]\x1b[0m ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // ---- node model: a canvas node IS a silverwood workstream ----
 
 // Project a workstream into the node the client renders. Every durable field is
@@ -191,7 +202,7 @@ apiRoutes.post("/sessions", async (c) => {
       sessionKey: initialSessionId,
       workstreamId: ws.id,
       cwd,
-      command: `claude --session-id ${initialSessionId}`,
+      resume: false,
     });
     await recordFreshSession(ws.id, initialSessionId, session);
   }
@@ -246,7 +257,7 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
     sessionKey: sessionId,
     workstreamId: wsId,
     cwd,
-    command: `claude --resume ${sessionId}`,
+    resume: true,
   });
   session.holdsLock = holdsLock;
   log(`\x1b[38;5;141m[session]\x1b[0m connected ${sessionId}`);
@@ -272,7 +283,7 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
     sessionKey: sessionId,
     workstreamId: wsId,
     cwd,
-    command: `claude --session-id ${sessionId}`,
+    resume: false,
   });
   await recordFreshSession(wsId, sessionId, session);
   log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${sessionId}`);

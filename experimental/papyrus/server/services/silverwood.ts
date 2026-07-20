@@ -8,7 +8,8 @@ const QUIET = !!process.env.OPENUI_QUIET;
 const log = QUIET ? () => {} : console.log.bind(console);
 
 // The `silverwood` binary (on PATH via the Nix wrapper; overridable for dev).
-const SILVERWOOD_BIN = process.env.SILVERWOOD_BIN || "silverwood";
+// Exported so the terminal spawner runs the same binary as a PTY program.
+export const SILVERWOOD_BIN = process.env.SILVERWOOD_BIN || "silverwood";
 
 // papyrus's own per-workstream KV namespace for canvas presentation state.
 // (NOT under silverwood's reserved `app.andref.silverwood.*` prefix.)
@@ -47,6 +48,14 @@ export interface AgentSession {
   lock?: { holder: string; acquired_at: string };
 }
 
+// A checkout mode available to `new --mode`, from `silverwood modes` (drives the
+// New Workstream picker). `mode` is the kebab tag passed back as `--mode`.
+export interface CheckoutModeInfo {
+  mode: string;
+  description: string;
+  requires_source: boolean;
+}
+
 /// Run `silverwood --json <args>` and parse its stdout. Async (never blocks the
 /// event loop) so a slow `new` clone does not freeze the server. Throws on a
 /// non-zero exit, surfacing silverwood's stderr.
@@ -78,6 +87,11 @@ export function list(includeArchived = false): Promise<Workstream[]> {
 
 export function get(id: string): Promise<Workstream> {
   return run(["show", id]);
+}
+
+/// The checkout modes available to `create` (kind-aware; pure metadata, no forest).
+export function listModes(): Promise<CheckoutModeInfo[]> {
+  return run(["modes"]);
 }
 
 export async function getPapyrusKv(id: string): Promise<Record<string, string>> {

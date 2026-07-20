@@ -10,6 +10,19 @@ interface NewSessionModalProps {
 }
 
 const GRID = 24;
+const DEFAULT_MODE = "jj-colocated";
+
+// A checkout mode offered in the picker (mirrors `silverwood modes`).
+interface ModeInfo {
+  mode: string;
+  description: string;
+  requires_source: boolean;
+}
+
+// Shown until GET /api/modes responds (and if it fails).
+const FALLBACK_MODES: ModeInfo[] = [
+  { mode: "jj-colocated", description: "jj/git colocated clone.", requires_source: true },
+];
 
 // Create a node = create a silverwood workstream from an https git URL (silverwood
 // clones its checkout). All durable state lives in silverwood; the canvas
@@ -20,6 +33,8 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
 
   const [name, setName] = useState("");
   const [source, setSource] = useState("");
+  const [mode, setMode] = useState(DEFAULT_MODE);
+  const [modes, setModes] = useState<ModeInfo[]>(FALLBACK_MODES);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +42,15 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
     if (open) {
       setName("");
       setSource("");
+      setMode(DEFAULT_MODE);
       setError(null);
       setIsBusy(false);
+      fetch("/api/modes")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) setModes(data);
+        })
+        .catch(() => {});
     }
   }, [open]);
 
@@ -53,7 +75,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), source: source.trim(), position }),
+        body: JSON.stringify({ name: name.trim(), source: source.trim(), mode, position }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create workstream");
@@ -123,6 +145,24 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                     <p className="text-[10px] text-zinc-600">
                       silverwood clones this into a jj-colocated checkout, then Claude Code
                       runs there. This can take a moment.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs text-zinc-500">Checkout mode</label>
+                    <select
+                      value={mode}
+                      onChange={(e) => setMode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                    >
+                      {modes.map((m) => (
+                        <option key={m.mode} value={m.mode}>
+                          {m.mode}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-zinc-600">
+                      {modes.find((m) => m.mode === mode)?.description}
                     </p>
                   </div>
 

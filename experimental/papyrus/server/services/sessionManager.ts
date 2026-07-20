@@ -7,6 +7,13 @@ import * as sw from "./silverwood";
 const QUIET = !!process.env.OPENUI_QUIET;
 const log = QUIET ? () => {} : console.log.bind(console);
 
+// Resolve the silverwood binary to an absolute path once, so the PTY can exec it
+// without a PATH in the minimal seed env below. A bare name is searched for on
+// PATH now; if that fails we fall back to the name and let the spawn surface it.
+const SILVERWOOD_EXE = sw.SILVERWOOD_BIN.includes("/")
+  ? sw.SILVERWOOD_BIN
+  : Bun.which(sw.SILVERWOOD_BIN) ?? sw.SILVERWOOD_BIN;
+
 // This papyrus instance's advisory-lock holder token, fixed for the server's
 // lifetime. The random suffix means a restarted papyrus (which may reuse a pid)
 // never mistakes a lock left by a previous run for its own — it would force-steal
@@ -33,25 +40,48 @@ function releaseLock(sessionKey: string, session: Session): void {
   }
 }
 
-/// Spawn a terminal for a session: a bash PTY in the checkout dir that runs
-/// `command` (`claude --session-id <id>` fresh, or `claude --resume <id>`).
-/// Registered under `sessionKey` (the claude session id). On process exit,
-/// releases the lock and drops the entry.
+// The minimal, explicit environment handed to `silverwood spawn`. NOT papyrus's
+// inherited devshell env (`{ ...process.env }`, which is polluted with
+// IN_NIX_SHELL/DEVENV_*/an augmented PATH): silverwood scrubs and rebuilds the
+// real login env from this seed before it execs the agent, so none of papyrus's
+// env reaches claude. HOME/USER/SHELL seed that reconstruction; SSH_AUTH_SOCK is
+// forwarded into it; SILVERWOOD_FOREST_PATH lets `spawn` resolve the same forest
+// papyrus's other silverwood calls do (all consumed by silverwood, then scrubbed).
+function seedEnv(): Record<string, string> {
+  const env: Record<string, string> = { TERM: "xterm-256color" };
+  for (const k of ["HOME", "USER", "LOGNAME", "SHELL", "SSH_AUTH_SOCK", "SILVERWOOD_FOREST_PATH"]) {
+    const v = process.env[k];
+    if (v) env[k] = v;
+  }
+  return env;
+}
+
+/// Spawn a terminal for a session: a PTY running `silverwood spawn <ws> <sid>
+/// [--resume]` in the checkout dir, registered under `sessionKey` (the claude
+/// session id). silverwood owns *how* the agent shell is created — it scrubs the
+/// environment and picks the command from the checkout mode (plain `claude`, or
+/// `direnv exec` for the direnv-unsafe mode) — and `exec`s the agent, so this PTY
+/// tracks the agent's lifetime directly: when claude exits the PTY exits and we
+/// tear down (releasing the lock, dropping the entry).
 export function spawnTerminal(params: {
   sessionKey: string;
   workstreamId: string;
   cwd: string;
-  command: string;
+  resume: boolean;
 }): Session {
-  const { sessionKey, workstreamId, cwd, command } = params;
+  const { sessionKey, workstreamId, cwd, resume } = params;
 
-  const ptyProcess = spawnPty("/bin/bash", [], {
-    name: "xterm-256color",
-    cwd,
-    env: { ...process.env, TERM: "xterm-256color" },
-    rows: 30,
-    cols: 120,
-  });
+  const ptyProcess = spawnPty(
+    SILVERWOOD_EXE,
+    ["spawn", workstreamId, sessionKey, ...(resume ? ["--resume"] : [])],
+    {
+      name: "xterm-256color",
+      cwd,
+      env: seedEnv(),
+      rows: 30,
+      cols: 120,
+    },
+  );
 
   const session: Session = {
     pty: ptyProcess,
@@ -81,8 +111,6 @@ export function spawnTerminal(params: {
       log(`\x1b[38;5;141m[terminal]\x1b[0m exited ${sessionKey}`);
     }
   });
-
-  setTimeout(() => ptyProcess.write(`${command}\r`), 300);
 
   log(`\x1b[38;5;141m[terminal]\x1b[0m spawned ${sessionKey} in ${cwd}`);
   return session;
