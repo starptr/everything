@@ -32,7 +32,6 @@
       pkgs.jellyfin-mpv-shim
       pkgs.devenv
       pkgs.chaseln
-      pkgs.silverwood # experimental/silverwood CLI, re-exported through soup
       #pkgs.cinny-desktop
       #pkgs.element-desktop # Build fails (unrelated issue)
       pkgs.neovim # Temporary until I figure out how to integrate ammonia into the sodium config
