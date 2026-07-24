@@ -50,12 +50,11 @@ fn new_creates_a_ready_colocated_checkout() {
         &[
             "--json",
             "new",
+            "basic",
+            "jj-colocated",
+            EXAMPLE_SOURCE,
             "--name",
             "auth-refactor",
-            "--source",
-            EXAMPLE_SOURCE,
-            "--mode",
-            "jj-colocated",
         ],
     );
 
@@ -109,12 +108,11 @@ fn new_direnv_unsafe_mode_is_ready() {
         &[
             "--json",
             "new",
+            "basic",
+            "jj-colocated-direnv-unsafe",
+            EXAMPLE_SOURCE,
             "--name",
             "with-direnv",
-            "--source",
-            EXAMPLE_SOURCE,
-            "--mode",
-            "jj-colocated-direnv-unsafe",
         ],
     );
     assert_eq!(ws["mode"]["checkout_mode"], "jj-colocated-direnv-unsafe");
@@ -139,12 +137,11 @@ fn spawn_plan_reflects_checkout_mode() {
         &[
             "--json",
             "new",
+            "basic",
+            "jj-colocated",
+            EXAMPLE_SOURCE,
             "--name",
             "plain",
-            "--source",
-            EXAMPLE_SOURCE,
-            "--mode",
-            "jj-colocated",
         ],
     );
     let id = ws["id"].as_str().unwrap();
@@ -168,12 +165,11 @@ fn spawn_plan_reflects_checkout_mode() {
         &[
             "--json",
             "new",
+            "basic",
+            "jj-colocated-direnv-unsafe",
+            EXAMPLE_SOURCE,
             "--name",
             "with-direnv",
-            "--source",
-            EXAMPLE_SOURCE,
-            "--mode",
-            "jj-colocated-direnv-unsafe",
         ],
     );
     let id2 = ws2["id"].as_str().unwrap();
@@ -345,12 +341,11 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
         &[
             "--json",
             "new",
+            "basic",
+            "jj-colocated",
+            EXAMPLE_SOURCE,
             "--name",
             "w",
-            "--source",
-            EXAMPLE_SOURCE,
-            "--mode",
-            "jj-colocated",
         ],
     );
     let id = ws["id"].as_str().unwrap().to_string();

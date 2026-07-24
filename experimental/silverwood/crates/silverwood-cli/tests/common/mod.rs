@@ -65,12 +65,11 @@ pub fn create(dir: &TempDir, name: &str) -> String {
         &[
             "--json",
             "new",
+            "basic",
+            "jj-colocated",
+            EXAMPLE_SOURCE,
             "--name",
             name,
-            "--source",
-            EXAMPLE_SOURCE,
-            "--mode",
-            "jj-colocated",
         ],
     );
     value["id"].as_str().expect("id field").to_string()

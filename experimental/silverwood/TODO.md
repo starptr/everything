@@ -75,7 +75,9 @@ Part 2 notes:
 ## Part 3 — CLI surface  (`--json`) — DONE
 - [x] **wrapped `packages.default` with `makeWrapper` (jujutsu + git on PATH)** — `packages.unwrapped` is the bare crane build; checks use unwrapped
 - [x] subcommands: `new`, `ls [--all]`, `show <id>`, `archive <id>`, `kv (set/get/ls/unset)`, `session (attach/ls/rename/detach)`
-- [x] all inputs explicit (no defaults): `new --name <n> --source <https-url> --mode jj-colocated`; `--mode` is a clap ValueEnum (`ModeArg`, keeps clap out of core)
+- [x] all inputs explicit (no defaults): the workstream variant → checkout mode → seed are nested subcommands mirroring the data
+      model — `new basic jj-colocated <SOURCE_HTTPS_URL>` (and `…jj-colocated-direnv-unsafe <SOURCE_HTTPS_URL>`); `--name` is a
+      global option accepted at any `new` level; `silverwood modes` metadata is derived from the `new basic` subcommand tree
 - [x] dual output: human-readable default + `--json` (global flag); mutating cmds print the affected object after the change
 - [x] verify (structural): `nix flake check` green + `cli.rs` smoke tests (info json, ls empty=`[]`, bad-id exits non-zero) — no network needed
 - [x] verify (behavioral): drove the WRAPPED binary (`nix build .#default`) new→ls→kv→session→show→archive with a real clone of

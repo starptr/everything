@@ -111,14 +111,14 @@ export function create(params: {
 }): Promise<Workstream> {
   // Blocks on `jj git clone --colocate`; the checkout carries a pending→ready
   // state machine, so the returned workstream is the finished (ready/failed) one.
+  // Nested subcommands mirror the data model: `new <variant> <mode> <seed…>`.
   return run([
     "new",
+    "basic",
+    params.mode || "jj-colocated",
+    params.source,
     "--name",
     params.name,
-    "--source",
-    params.source,
-    "--mode",
-    params.mode || "jj-colocated",
   ]);
 }
 

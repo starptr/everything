@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use silverwood_core::{
     agent_shell_plan, base_shell_plan, AgentKind, AgentSession, CheckoutState, Forest, HttpsGitUrl,
     LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SpawnSeed, UpgradeReport,
@@ -42,15 +42,11 @@ enum Command {
 
     /// Create a workstream, provisioning its checkout.
     New {
-        /// Human-friendly name.
-        #[arg(long)]
-        name: String,
-        /// HTTPS git endpoint to clone from.
-        #[arg(long, value_name = "HTTPS_URL")]
-        source: String,
-        /// How the checkout is materialized.
-        #[arg(long, value_enum)]
-        mode: ModeArg,
+        /// Human-friendly name (accepted at any `new` subcommand level).
+        #[arg(long, global = true)]
+        name: Option<String>,
+        #[command(subcommand)]
+        variant: NewVariant,
     },
 
     /// List workstreams.
@@ -95,7 +91,7 @@ enum Command {
         dry_run: bool,
     },
 
-    /// List the available checkout modes for `new --mode`.
+    /// List the available checkout modes for `new basic <MODE>`.
     Modes,
 
     /// Exec the interactive agent shell for a session in its checkout. The command
@@ -229,71 +225,83 @@ enum SessionCreate {
     },
 }
 
-/// CLI mirror of the checkout-mode selector (keeps `clap` out of `silverwood-core`).
-#[derive(Clone, Copy, ValueEnum)]
-enum ModeArg {
-    #[value(name = "jj-colocated")]
-    JjColocated,
-    #[value(name = "jj-colocated-direnv-unsafe")]
-    JjColocatedDirenvUnsafe,
+/// The workstream variant (kind) to create — the first `new` subcommand level. Only
+/// `basic` today (`WorkstreamKind` is `#[non_exhaustive]`); the kebab name matches the
+/// stored `kind` tag.
+#[derive(Subcommand)]
+enum NewVariant {
+    /// A basic workstream, materialized by a checkout mode.
+    Basic {
+        #[command(subcommand)]
+        mode: NewModeArg,
+    },
+}
+
+/// A `basic` workstream's checkout mode — the second `new` subcommand level. Each variant
+/// carries that mode's creation seed as positionals; the kebab name matches the stored
+/// `checkout_mode` tag.
+#[derive(Subcommand)]
+enum NewModeArg {
+    /// jj/git colocated clone (`jj git clone --colocate`).
+    JjColocated {
+        /// HTTPS git endpoint to clone from.
+        #[arg(value_name = "SOURCE_HTTPS_URL")]
+        source: String,
+    },
+    /// jj-colocated clone, then `direnv allow` on the checkout (pre-approves .envrc; unsafe).
+    JjColocatedDirenvUnsafe {
+        /// HTTPS git endpoint to clone from.
+        #[arg(value_name = "SOURCE_HTTPS_URL")]
+        source: String,
+    },
+}
+
+impl NewModeArg {
+    /// Build the creation-side mode from the selector + its seed, validating the seed.
+    /// Consumes `self` (the seed `String` moves into the returned mode).
+    fn into_new_mode(self) -> Result<NewCheckoutMode, Box<dyn std::error::Error>> {
+        Ok(match self {
+            NewModeArg::JjColocated { source } => NewCheckoutMode::JjColocated {
+                initial_source: HttpsGitUrl::parse(&source)?,
+            },
+            NewModeArg::JjColocatedDirenvUnsafe { source } => {
+                NewCheckoutMode::JjColocatedDirenvUnsafe {
+                    initial_source: HttpsGitUrl::parse(&source)?,
+                }
+            }
+        })
+    }
 }
 
 /// A checkout mode's metadata, for `silverwood modes` (drives a frontend picker).
 #[derive(serde::Serialize)]
 struct ModeInfo {
-    /// The kebab tag passed to `new --mode` (matches the stored `checkout_mode`).
+    /// The kebab tag naming the `new basic <MODE>` subcommand (matches the stored
+    /// `checkout_mode`).
     mode: String,
     /// One-line human description.
-    description: &'static str,
-    /// Whether this mode requires `--source` (all modes today do).
+    description: String,
+    /// Whether this mode takes a source seed (has a `source` positional).
     requires_source: bool,
 }
 
-impl ModeArg {
-    /// Build the creation-side mode from the selector + its seed (the source url).
-    fn to_new_mode(self, initial_source: HttpsGitUrl) -> NewCheckoutMode {
-        match self {
-            ModeArg::JjColocated => NewCheckoutMode::JjColocated { initial_source },
-            ModeArg::JjColocatedDirenvUnsafe => {
-                NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source }
-            }
-        }
-    }
-
-    /// One-line description of the mode (kept in sync with the variants by the
-    /// exhaustive match — a new variant forces filling this in).
-    fn description(self) -> &'static str {
-        match self {
-            ModeArg::JjColocated => "jj/git colocated clone (`jj git clone --colocate`).",
-            ModeArg::JjColocatedDirenvUnsafe => {
-                "jj-colocated clone, then `direnv allow` on the checkout (pre-approves .envrc; unsafe)."
-            }
-        }
-    }
-
-    /// Whether `new --mode <this>` requires `--source` (all modes today do).
-    fn requires_source(self) -> bool {
-        match self {
-            ModeArg::JjColocated | ModeArg::JjColocatedDirenvUnsafe => true,
-        }
-    }
-
-    /// Metadata for every mode, in declaration order. The `mode` tag is sourced
-    /// from clap's `#[value(name=...)]` so it stays the single source of truth.
-    fn all_infos() -> Vec<ModeInfo> {
-        Self::value_variants()
-            .iter()
-            .map(|m| ModeInfo {
-                mode: m
-                    .to_possible_value()
-                    .expect("no ModeArg variant is value-skipped")
-                    .get_name()
-                    .to_string(),
-                description: m.description(),
-                requires_source: m.requires_source(),
-            })
-            .collect()
-    }
+/// Metadata for every checkout mode, derived from the `new basic` subcommand tree so the
+/// clap definitions stay the single source of truth (tag = subcommand name, description =
+/// its help, `requires_source` = whether it has the `source` positional).
+fn mode_infos() -> Vec<ModeInfo> {
+    let basic = NewVariant::augment_subcommands(clap::Command::new("new"));
+    basic
+        .find_subcommand("basic")
+        .expect("basic subcommand exists")
+        .get_subcommands()
+        .map(|sc| ModeInfo {
+            mode: sc.get_name().to_string(),
+            description: sc.get_about().map(|a| a.to_string()).unwrap_or_default(),
+            requires_source: sc
+                .get_positionals()
+                .any(|a| a.get_id().as_str() == "source"),
+        })
+        .collect()
 }
 
 fn main() -> ExitCode {
@@ -319,7 +327,7 @@ fn run(cli: Cli) -> CliResult {
     // `modes` is pure metadata — handle it before opening (and thereby creating)
     // the forest, so listing modes never touches `$HOME/.silverwood`.
     if let Command::Modes = cli.command {
-        let modes = ModeArg::all_infos();
+        let modes = mode_infos();
         emit(json, &modes, || {
             for m in &modes {
                 println!("{:28}  {}", m.mode, m.description);
@@ -333,17 +341,7 @@ fn run(cli: Cli) -> CliResult {
     match cli.command {
         Command::Info => info(&forest, json),
 
-        Command::New { name, source, mode } => {
-            let source = HttpsGitUrl::parse(&source)?;
-            let ws = forest.create_workstream(NewWorkstream {
-                name,
-                kind: NewKind::Basic {
-                    mode: mode.to_new_mode(source),
-                },
-            })?;
-            emit(json, &ws, || print_workstream(&ws));
-            Ok(())
-        }
+        Command::New { name, variant } => run_new(&forest, json, name, variant),
 
         Command::Ls { all } => {
             let list = forest.list(all)?;
@@ -400,6 +398,19 @@ fn run(cli: Cli) -> CliResult {
         // Handled above, before the forest is opened.
         Command::Modes => unreachable!("modes is handled before Forest::open"),
     }
+}
+
+fn run_new(forest: &Forest, json: bool, name: Option<String>, variant: NewVariant) -> CliResult {
+    let name = name.ok_or("`--name <NAME>` is required")?;
+    let NewVariant::Basic { mode } = variant;
+    let ws = forest.create_workstream(NewWorkstream {
+        name,
+        kind: NewKind::Basic {
+            mode: mode.into_new_mode()?,
+        },
+    })?;
+    emit(json, &ws, || print_workstream(&ws));
+    Ok(())
 }
 
 fn run_kv(forest: &Forest, json: bool, cmd: KvCommand) -> CliResult {

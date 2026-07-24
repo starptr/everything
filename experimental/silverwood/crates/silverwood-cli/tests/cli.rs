@@ -65,28 +65,66 @@ fn new_with_non_https_source_is_rejected_without_cloning() {
         &dir,
         &[
             "new",
+            "basic",
+            "jj-colocated",
+            "git@github.com:a/b.git",
             "--name",
             "x",
-            "--source",
-            "git@github.com:a/b.git",
-            "--mode",
-            "jj-colocated",
         ],
     );
     fails(
         &dir,
         &[
             "new",
+            "basic",
+            "jj-colocated",
+            "http://github.com/a/b.git",
             "--name",
             "x",
-            "--source",
-            "http://github.com/a/b.git",
-            "--mode",
-            "jj-colocated",
         ],
     );
 
     // Nothing was created.
+    assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
+}
+
+#[test]
+fn new_subcommand_structure_mirrors_the_data_model() {
+    let dir = forest();
+
+    // Each level demands its child: `new` needs a variant, `basic` needs a mode.
+    // Both are clap parse errors (exit before the forest is touched).
+    fails(&dir, &["new"]);
+    fails(&dir, &["new", "basic"]);
+
+    // A mode leaf demands its seed: the `<SOURCE_HTTPS_URL>` positional.
+    let stderr = fails(&dir, &["new", "basic", "jj-colocated"]);
+    assert!(stderr.contains("SOURCE_HTTPS_URL"), "got: {stderr}");
+
+    // `--name` is required (enforced in the handler); omitting it fails before the
+    // source is ever validated.
+    let stderr = fails(
+        &dir,
+        &["new", "basic", "jj-colocated", "http://github.com/a/b.git"],
+    );
+    assert!(stderr.contains("--name"), "got: {stderr}");
+
+    // `--name` is global: placing it at the `new` level (before the mode) parses,
+    // and the command then reaches source validation (rejecting the non-https url).
+    let stderr = fails(
+        &dir,
+        &[
+            "new",
+            "--name",
+            "x",
+            "basic",
+            "jj-colocated",
+            "http://github.com/a/b.git",
+        ],
+    );
+    assert!(stderr.contains("scheme must be https"), "got: {stderr}");
+
+    // None of the above created anything.
     assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
 }
 
