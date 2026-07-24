@@ -13,6 +13,8 @@ mod common;
 
 use std::path::Path;
 
+use tempfile::TempDir;
+
 use common::{create, fails, forest, json, ok, EXAMPLE_SOURCE};
 
 /// `modes` is pure metadata (no network, no forest), so it runs in the sandbox.
@@ -34,6 +36,7 @@ fn modes_lists_available_checkout_modes() {
         tags.contains(&"jj-colocated-direnv-unsafe"),
         "missing jj-colocated-direnv-unsafe: {tags:?}"
     );
+    assert!(tags.contains(&"apfs-cow"), "missing apfs-cow: {tags:?}");
     // Every entry carries a description + requires_source flag.
     for m in modes.as_array().unwrap() {
         assert!(m["description"].as_str().is_some_and(|d| !d.is_empty()));
@@ -93,6 +96,53 @@ fn new_creates_a_ready_colocated_checkout() {
     let listed = json(&dir, &["--json", "ls"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(json(&dir, &["--json", "show", id]), listed[0]);
+}
+
+/// The apfs-cow mode copy-on-write clones a local directory into the checkout. No
+/// network, but it needs a real APFS volume (macOS temp dirs are APFS) and shells out
+/// to `/bin/cp -c`, so it is `#[ignore]`d like the rest and must run on macOS. The
+/// source temp dir shares the forest's temp volume, so the same-volume precheck passes.
+#[test]
+#[ignore = "macOS + apfs (cp -c); run via `cargo test -- --ignored`"]
+fn new_apfs_cow_creates_a_ready_checkout() {
+    let dir = forest();
+
+    // A source directory with a marker file.
+    let src = TempDir::new().expect("create source dir");
+    std::fs::write(src.path().join("marker.txt"), "hello").expect("write marker");
+    let src_path = src.path().to_str().unwrap();
+
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "basic",
+            "apfs-cow",
+            src_path,
+            "--name",
+            "cow-checkout",
+        ],
+    );
+
+    assert_eq!(ws["name"], "cow-checkout");
+    assert_eq!(ws["kind"], "basic");
+    assert_eq!(ws["mode"]["checkout_mode"], "apfs-cow");
+    assert_eq!(ws["mode"]["state"], "ready");
+    assert_eq!(ws["mode"]["initial_source"], src_path);
+
+    // The checkout is a copy-on-write clone: it lives under the forest and carries the
+    // source's marker file.
+    let location = ws["location"]["within"]["path"].as_str().unwrap();
+    let loc = Path::new(location);
+    assert!(
+        loc.starts_with(dir.path()),
+        "checkout not under forest: {location}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(loc.join("marker.txt")).expect("marker copied into checkout"),
+        "hello"
+    );
 }
 
 /// The direnv-unsafe mode produces a ready checkout too. The example repo has no

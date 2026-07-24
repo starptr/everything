@@ -78,6 +78,8 @@ Part 2 notes:
 - [x] all inputs explicit (no defaults): the workstream variant → checkout mode → seed are nested subcommands mirroring the data
       model — `new basic jj-colocated <SOURCE_HTTPS_URL>` (and `…jj-colocated-direnv-unsafe <SOURCE_HTTPS_URL>`); `--name` is a
       global option accepted at any `new` level; `silverwood modes` metadata is derived from the `new basic` subcommand tree
+- [x] `apfs-cow` checkout mode — `new basic apfs-cow <ABSOLUTE_PATH>` seeds a checkout from a local dir via an APFS copy-on-write
+      clone (`cp -c`); creation hard-fails up front unless the source and the forest's checkout location are both APFS on one volume
 - [x] dual output: human-readable default + `--json` (global flag); mutating cmds print the affected object after the change
 - [x] verify (structural): `nix flake check` green + `cli.rs` smoke tests (info json, ls empty=`[]`, bad-id exits non-zero) — no network needed
 - [x] verify (behavioral): drove the WRAPPED binary (`nix build .#default`) new→ls→kv→session→show→archive with a real clone of

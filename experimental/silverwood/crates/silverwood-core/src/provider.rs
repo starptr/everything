@@ -16,20 +16,21 @@ pub trait CheckoutProvider {
     fn provision(&self, mode: &NewCheckoutMode, dest: &Path) -> Result<()>;
 }
 
-/// The default provider: clones into a jj/git colocated repository via
-/// `jj git clone --colocate`.
+/// The default checkout provider, dispatching every [`NewCheckoutMode`]: the
+/// jj-colocated modes `jj git clone --colocate` (the direnv-unsafe one also
+/// `direnv allow`s the checkout), and `apfs-cow` makes an APFS copy-on-write clone of a
+/// local directory. (Named for its original, once-sole mode.)
 pub struct JjColocated;
 
 impl CheckoutProvider for JjColocated {
     fn provision(&self, mode: &NewCheckoutMode, dest: &Path) -> Result<()> {
-        // The colocated clone is shared by both modes; the direnv-unsafe mode chains
-        // `direnv allow` after a successful clone.
         match mode {
             NewCheckoutMode::JjColocated { initial_source } => jj_git_clone(initial_source, dest),
             NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source } => {
                 jj_git_clone(initial_source, dest)?;
                 direnv_allow(dest)
             }
+            NewCheckoutMode::ApfsCow { source_path } => apfs_clone(source_path.as_path(), dest),
         }
     }
 }
@@ -48,6 +49,28 @@ fn jj_git_clone(initial_source: &HttpsGitUrl, dest: &Path) -> Result<()> {
     if !output.status.success() {
         return Err(Error::Provision(format!(
             "`jj git clone --colocate` exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+/// APFS copy-on-write clone of `source_path` into `dest`: `/bin/cp -Rc <source> <dest>`
+/// (BSD `cp`; `-c` uses `clonefile(2)`). The absolute `/bin/cp` avoids a GNU `cp` on
+/// PATH, which lacks `-c`. The APFS + same-volume precondition is enforced before
+/// creation, so the clone is expected to succeed.
+fn apfs_clone(source_path: &Path, dest: &Path) -> Result<()> {
+    let output = Command::new("/bin/cp")
+        .arg("-Rc")
+        .arg(source_path)
+        .arg(dest)
+        .output()
+        .map_err(|e| Error::Provision(format!("spawning cp: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Provision(format!(
+            "`cp -Rc` exited {}: {}",
             output.status,
             String::from_utf8_lossy(&output.stderr).trim()
         )));

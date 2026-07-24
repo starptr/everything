@@ -1,4 +1,41 @@
+use std::path::Path;
+
 use crate::error::{Error, Result};
+
+/// An absolute local directory path a code-change is copy-on-write cloned from
+/// (the seed of the `apfs-cow` checkout mode). Validated at construction to be
+/// absolute; existence, filesystem type, and same-volume are checked later by the
+/// forest (they depend on the checkout's target location).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AbsolutePath(String);
+
+impl AbsolutePath {
+    /// Parse and validate an absolute path. Relative paths are rejected.
+    pub fn parse(input: &str) -> Result<Self> {
+        if !Path::new(input).is_absolute() {
+            return Err(Error::InvalidSource(format!(
+                "{input:?}: path must be absolute"
+            )));
+        }
+        Ok(AbsolutePath(input.to_string()))
+    }
+
+    /// The validated path as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The validated path as a [`Path`].
+    pub fn as_path(&self) -> &Path {
+        Path::new(&self.0)
+    }
+}
+
+impl std::fmt::Display for AbsolutePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// An HTTPS git endpoint a code-change is cloned from (e.g. a GitHub clone
 /// URL). Validated at construction: the scheme must be `https` and a host must
@@ -56,5 +93,19 @@ mod tests {
     fn rejects_http_and_garbage() {
         assert!(HttpsGitUrl::parse("http://github.com/x/y.git").is_err());
         assert!(HttpsGitUrl::parse("not a url").is_err());
+    }
+
+    #[test]
+    fn absolute_path_accepts_absolute() {
+        let p = AbsolutePath::parse("/Users/x/repo").unwrap();
+        assert_eq!(p.as_str(), "/Users/x/repo");
+        assert_eq!(p.as_path(), std::path::Path::new("/Users/x/repo"));
+    }
+
+    #[test]
+    fn absolute_path_rejects_relative() {
+        assert!(AbsolutePath::parse("repo").is_err());
+        assert!(AbsolutePath::parse("./repo").is_err());
+        assert!(AbsolutePath::parse("../repo").is_err());
     }
 }

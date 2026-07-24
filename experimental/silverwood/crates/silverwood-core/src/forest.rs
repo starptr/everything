@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 use serde::Serialize;
 
+use crate::apfs;
 use crate::config::ForestConfig;
 use crate::doc;
 use crate::docstore::{DocStore, FilesDocStore};
@@ -117,8 +118,15 @@ impl Forest {
     pub fn create_workstream(&self, new: NewWorkstream) -> Result<Workstream> {
         let NewKind::Basic { mode: new_mode } = &new.kind;
 
+        let working_copies = self.root.join(WORKING_COPIES_DIR);
+
+        // Mode-specific creation preconditions that must reject *before* anything is
+        // persisted (a hard failure, unlike a provisioning error, which leaves a
+        // recoverable `Failed` document). Today only apfs-cow has one.
+        precheck_new_mode(new_mode, &working_copies)?;
+
         let id = WorkstreamId::generate();
-        let dest = self.root.join(WORKING_COPIES_DIR).join(id.to_string());
+        let dest = working_copies.join(id.to_string());
 
         // The stored mode starts `pending`; core flips it after provisioning. Each
         // NewCheckoutMode maps to its matching pending CheckoutMode (dest/location and
@@ -134,6 +142,10 @@ impl Forest {
                     state: CheckoutState::Pending,
                 }
             }
+            NewCheckoutMode::ApfsCow { source_path } => CheckoutMode::ApfsCow {
+                initial_source: source_path.as_str().to_string(),
+                state: CheckoutState::Pending,
+            },
         };
 
         // The location records this forest as the single materialization site.
@@ -402,6 +414,44 @@ impl Forest {
 /// Create `path` (and parents) if it does not already exist.
 fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).map_err(|e| Error::io(path, e))
+}
+
+/// Validate a mode's creation preconditions that must reject *before* any document
+/// is persisted. A no-op for modes without one.
+///
+/// `apfs-cow` requires a native copy-on-write clone, which `clonefile(2)` can only
+/// perform within one APFS volume — so the source must be an existing directory, and
+/// both it and the forest's checkout location (`working_copies_dir`) must be APFS and
+/// share a volume. Any failure is an [`Error::InvalidSource`] (a hard rejection, not a
+/// recoverable `Failed` checkout).
+fn precheck_new_mode(mode: &NewCheckoutMode, working_copies_dir: &Path) -> Result<()> {
+    match mode {
+        NewCheckoutMode::JjColocated { .. } | NewCheckoutMode::JjColocatedDirenvUnsafe { .. } => {
+            Ok(())
+        }
+        NewCheckoutMode::ApfsCow { source_path } => {
+            let src = source_path.as_path();
+            if !src.is_dir() {
+                return Err(Error::InvalidSource(format!(
+                    "apfs-cow source {src:?} is not an existing directory"
+                )));
+            }
+            for path in [src, working_copies_dir] {
+                if !apfs::is_apfs(path)? {
+                    return Err(Error::InvalidSource(format!(
+                        "apfs-cow requires APFS: {path:?} is not on an APFS volume"
+                    )));
+                }
+            }
+            if !apfs::same_volume(src, working_copies_dir)? {
+                return Err(Error::InvalidSource(format!(
+                    "apfs-cow requires one APFS volume: source {src:?} and the forest's \
+                     checkout location {working_copies_dir:?} are on different volumes"
+                )));
+            }
+            Ok(())
+        }
+    }
 }
 
 /// Reject writes to a core-reserved kv namespace. Reserved namespaces

@@ -313,13 +313,18 @@ fn write_mode(basic: &LoroMap, mode: &CheckoutMode) -> Result<()> {
         .insert_container("mode", LoroMap::new())
         .map_err(loro_err)?;
     map.insert("checkout_mode", mode.tag()).map_err(loro_err)?;
-    // Both jj-colocated modes carry the same fields; only the tag (above) differs.
+    // Every mode carries the same two fields (`initial_source` + `state`); only the tag
+    // (above) differs.
     match mode {
         CheckoutMode::JjColocated {
             initial_source,
             state,
         }
         | CheckoutMode::JjColocatedDirenvUnsafe {
+            initial_source,
+            state,
+        }
+        | CheckoutMode::ApfsCow {
             initial_source,
             state,
         } => {
@@ -455,6 +460,27 @@ mod tests {
         let json = serde_json::to_value(&ws).unwrap();
         assert_eq!(json["mode"]["checkout_mode"], "jj-colocated-direnv-unsafe");
         assert_eq!(json["mode"]["initial_source"], "https://example.com/x.git");
+    }
+
+    /// The `apfs-cow` mode round-trips through build → hydrate: its `initial_source`
+    /// holds a local path (not a url) and it projects the `apfs-cow` tag.
+    #[test]
+    fn apfs_cow_mode_round_trips() {
+        let mut body = sample_body();
+        body.kind = WorkstreamKind::Basic {
+            mode: CheckoutMode::ApfsCow {
+                initial_source: "/Users/x/repo".into(),
+                state: CheckoutState::Ready,
+            },
+            location: body.location().unwrap().clone(),
+        };
+
+        let doc = build(7, &body).unwrap();
+        let ws = hydrate(WorkstreamId::generate(), &snapshot(&doc).unwrap()).unwrap();
+        assert_eq!(ws.body, body);
+        let json = serde_json::to_value(&ws).unwrap();
+        assert_eq!(json["mode"]["checkout_mode"], "apfs-cow");
+        assert_eq!(json["mode"]["initial_source"], "/Users/x/repo");
     }
 
     /// The heart of the CRDT model: two forests editing the same workstream

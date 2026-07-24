@@ -178,11 +178,13 @@ Forest::create_workstream(NewWorkstream {
 
 - **`WorkstreamKind` is an open, tagged enum**, `Basic` its only variant today;
   the enum is where new kinds (with their own data and session relationships) land.
-- **`CheckoutMode` is a data-carrying, internally-tagged open enum**, `JjColocated`
-  its only variant today. `source` and `state` are **inside** the variant
-  (`initial_source`, `state`) because they are meaningless without the strategy — a
-  future adopt-a-local-dir mode would carry no source and be instantly ready. The
-  creation-side **`NewCheckoutMode`** omits `state`: core owns that lifecycle.
+- **`CheckoutMode` is a data-carrying, internally-tagged open enum** — the
+  jj-colocated modes clone an HTTPS url; `apfs-cow` adopts a local directory via an
+  APFS copy-on-write clone (`cp -c`), hard-failing at creation unless its source and
+  the forest's checkout location share one APFS volume. `source` and `state` are
+  **inside** each variant (`initial_source`, `state`) because they are meaningless
+  without the strategy. The creation-side **`NewCheckoutMode`** omits `state`: core
+  owns that lifecycle.
 - **`Location` = `forest_id` + `LocationWithinForest`**, the latter an open enum over
   *forest kind* (today `BasicForest { path }`, an absolute path). This axis is
   independent of `CheckoutMode`. A basic workstream has exactly one location — it is

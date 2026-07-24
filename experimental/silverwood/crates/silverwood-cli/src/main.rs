@@ -13,9 +13,9 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand};
 use silverwood_core::{
-    agent_shell_plan, base_shell_plan, AgentKind, AgentSession, CheckoutState, Forest, HttpsGitUrl,
-    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SpawnSeed, UpgradeReport,
-    Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
+    agent_shell_plan, base_shell_plan, AbsolutePath, AgentKind, AgentSession, CheckoutState,
+    Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SpawnSeed,
+    UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -254,6 +254,12 @@ enum NewModeArg {
         #[arg(value_name = "SOURCE_HTTPS_URL")]
         source: String,
     },
+    /// APFS copy-on-write clone of a local dir (source + forest must share an APFS volume).
+    ApfsCow {
+        /// Absolute path to the local directory to copy-on-write clone.
+        #[arg(value_name = "ABSOLUTE_PATH")]
+        path: String,
+    },
 }
 
 impl NewModeArg {
@@ -269,6 +275,9 @@ impl NewModeArg {
                     initial_source: HttpsGitUrl::parse(&source)?,
                 }
             }
+            NewModeArg::ApfsCow { path } => NewCheckoutMode::ApfsCow {
+                source_path: AbsolutePath::parse(&path)?,
+            },
         })
     }
 }
@@ -281,13 +290,14 @@ struct ModeInfo {
     mode: String,
     /// One-line human description.
     description: String,
-    /// Whether this mode takes a source seed (has a `source` positional).
+    /// Whether this mode takes a seed the user must supply (has a positional argument —
+    /// an HTTPS url or a local path, depending on the mode).
     requires_source: bool,
 }
 
 /// Metadata for every checkout mode, derived from the `new basic` subcommand tree so the
 /// clap definitions stay the single source of truth (tag = subcommand name, description =
-/// its help, `requires_source` = whether it has the `source` positional).
+/// its help, `requires_source` = whether it has a seed positional).
 fn mode_infos() -> Vec<ModeInfo> {
     let basic = NewVariant::augment_subcommands(clap::Command::new("new"));
     basic
@@ -297,9 +307,7 @@ fn mode_infos() -> Vec<ModeInfo> {
         .map(|sc| ModeInfo {
             mode: sc.get_name().to_string(),
             description: sc.get_about().map(|a| a.to_string()).unwrap_or_default(),
-            requires_source: sc
-                .get_positionals()
-                .any(|a| a.get_id().as_str() == "source"),
+            requires_source: sc.get_positionals().next().is_some(),
         })
         .collect()
 }

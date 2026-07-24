@@ -10,6 +10,7 @@
 //! per workstream — and the basic workstream kind (a checkout mode with
 //! jj-colocated provisioning + a single-forest location, plus agent sessions).
 
+mod apfs;
 mod config;
 mod doc;
 mod docstore;
@@ -32,7 +33,7 @@ pub use forest::{Forest, UpgradeReport};
 pub use id::{ForestId, WorkstreamId};
 pub use migrate::DOC_SCHEMA_VERSION;
 pub use provider::{CheckoutProvider, JjColocated};
-pub use source::HttpsGitUrl;
+pub use source::{AbsolutePath, HttpsGitUrl};
 pub use spawn::{agent_shell_plan, base_shell_plan, ShellPlan, SpawnSeed};
 pub use workstream::{
     AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest,

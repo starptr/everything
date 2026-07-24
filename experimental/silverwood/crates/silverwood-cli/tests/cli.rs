@@ -124,6 +124,17 @@ fn new_subcommand_structure_mirrors_the_data_model() {
     );
     assert!(stderr.contains("scheme must be https"), "got: {stderr}");
 
+    // The apfs-cow mode leaf demands its own seed: an `<ABSOLUTE_PATH>` positional...
+    let stderr = fails(&dir, &["new", "basic", "apfs-cow"]);
+    assert!(stderr.contains("ABSOLUTE_PATH"), "got: {stderr}");
+
+    // ...and it must be absolute — a relative path is rejected before any forest work.
+    let stderr = fails(
+        &dir,
+        &["new", "basic", "apfs-cow", "relative/path", "--name", "x"],
+    );
+    assert!(stderr.contains("absolute"), "got: {stderr}");
+
     // None of the above created anything.
     assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
 }

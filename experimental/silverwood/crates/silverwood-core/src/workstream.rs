@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::id::{ForestId, WorkstreamId};
-use crate::source::HttpsGitUrl;
+use crate::source::{AbsolutePath, HttpsGitUrl};
 
 /// The `kind` discriminant stored on a basic workstream.
 pub(crate) const BASIC_KIND: &str = "basic";
@@ -30,9 +30,9 @@ pub enum Status {
 
 /// How a workstream's code-change is materialized on disk, together with the data
 /// that is only meaningful *for that strategy* — its seed (`initial_source`) and its
-/// provisioning `state`. A future mode that adopts an existing local directory, for
-/// instance, would carry no source and be instantly ready; folding these fields into
-/// the variant keeps `Basic` honest. Open, internally-tagged enum.
+/// provisioning `state`. The jj-colocated modes clone an HTTPS url; `apfs-cow` instead
+/// adopts an existing local directory via an APFS copy-on-write clone. Folding the seed
+/// and state into each variant keeps `Basic` honest. Open, internally-tagged enum.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "checkout_mode", rename_all = "kebab-case")]
 #[non_exhaustive]
@@ -50,6 +50,16 @@ pub enum CheckoutMode {
     /// into trusting the cloned repo.
     JjColocatedDirenvUnsafe {
         /// The HTTPS git url the checkout was cloned from.
+        initial_source: String,
+        /// Provisioning state of the clone (core-owned lifecycle).
+        state: CheckoutState,
+    },
+    /// An APFS copy-on-write clone (`clonefile(2)`, via `cp -c`) of a local directory.
+    /// The source and the forest's checkout location must share an APFS volume (enforced
+    /// at creation), so the checkout materializes near-instantly and shares storage with
+    /// the source until either is written.
+    ApfsCow {
+        /// The absolute local path the checkout was copy-on-write cloned from.
         initial_source: String,
         /// Provisioning state of the clone (core-owned lifecycle).
         state: CheckoutState,
@@ -122,6 +132,7 @@ impl CheckoutMode {
         match self {
             CheckoutMode::JjColocated { .. } => "jj-colocated",
             CheckoutMode::JjColocatedDirenvUnsafe { .. } => "jj-colocated-direnv-unsafe",
+            CheckoutMode::ApfsCow { .. } => "apfs-cow",
         }
     }
 
@@ -129,15 +140,18 @@ impl CheckoutMode {
     pub fn state(&self) -> CheckoutState {
         match self {
             CheckoutMode::JjColocated { state, .. }
-            | CheckoutMode::JjColocatedDirenvUnsafe { state, .. } => *state,
+            | CheckoutMode::JjColocatedDirenvUnsafe { state, .. }
+            | CheckoutMode::ApfsCow { state, .. } => *state,
         }
     }
 
-    /// The seed url this checkout was created from (every mode today carries one).
+    /// The seed this checkout was created from — an HTTPS url or, for `apfs-cow`, a
+    /// local path (every mode today carries one).
     pub fn initial_source(&self) -> &str {
         match self {
             CheckoutMode::JjColocated { initial_source, .. }
-            | CheckoutMode::JjColocatedDirenvUnsafe { initial_source, .. } => initial_source,
+            | CheckoutMode::JjColocatedDirenvUnsafe { initial_source, .. }
+            | CheckoutMode::ApfsCow { initial_source, .. } => initial_source,
         }
     }
 }
@@ -359,6 +373,11 @@ pub enum NewCheckoutMode {
         /// The HTTPS git url to clone.
         initial_source: HttpsGitUrl,
     },
+    /// An APFS copy-on-write clone of a local directory (see [`CheckoutMode::ApfsCow`]).
+    ApfsCow {
+        /// The absolute local path to copy-on-write clone.
+        source_path: AbsolutePath,
+    },
 }
 
 #[cfg(test)]
@@ -395,6 +414,10 @@ mod tests {
             },
             CheckoutMode::JjColocatedDirenvUnsafe {
                 initial_source: "https://example.com/x.git".into(),
+                state: CheckoutState::Ready,
+            },
+            CheckoutMode::ApfsCow {
+                initial_source: "/Users/x/repo".into(),
                 state: CheckoutState::Ready,
             },
         ] {

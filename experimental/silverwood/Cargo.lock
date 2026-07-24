@@ -1551,6 +1551,7 @@ dependencies = [
 name = "silverwood-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "loro",
  "proptest",
  "serde",
