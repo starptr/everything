@@ -24,6 +24,7 @@ import {
 import { useStore, SessionTab } from "../stores/useStore";
 import { Terminal } from "./Terminal";
 import { NewSessionMenu } from "./NewSessionMenu";
+import { useResizablePane } from "./useResizablePane";
 
 const presetColors = [
   "#F97316", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#FBBF24", "#14B8A6"
@@ -66,6 +67,15 @@ export function Sidebar() {
   const [editNotes, setEditNotes] = useState("");
   const [editColor, setEditColor] = useState("");
   const [editIcon, setEditIcon] = useState("");
+
+  // Drag-resizable pane width (persisted). Lives outside the AnimatePresence
+  // subtree so it survives the pane closing/reopening.
+  const { width, dragging, gripProps } = useResizablePane({
+    storageKey: "papyrus:sidebarWidth",
+    defaultWidth: 512,
+    min: 360,
+    max: 1200,
+  });
 
   const [activeTabId, setActiveTabId] = useState<string | undefined>(undefined);
   // The session whose rename panel is open (its pencil was clicked), + its buffer.
@@ -255,8 +265,18 @@ export function Sidebar() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", stiffness: 400, damping: 40 }}
-          className="fixed right-0 top-14 bottom-0 w-full max-w-lg z-50 flex flex-col bg-canvas-dark border-l border-border"
+          style={{ width }}
+          className="fixed right-0 top-14 bottom-0 z-50 flex flex-col bg-canvas-dark border-l border-border"
         >
+          {/* Left-edge drag grip: resize the pane by its leftmost edge. */}
+          <div
+            {...gripProps}
+            title="Drag to resize"
+            className={`absolute inset-y-0 left-0 w-1.5 -translate-x-1/2 z-10 cursor-col-resize transition-colors ${
+              dragging ? "bg-blue-500/60" : "hover:bg-blue-500/50"
+            }`}
+          />
+
           {/* Header */}
           <div className="flex-shrink-0 px-4 py-3 border-b border-border">
             <div className="flex items-center gap-3">
