@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useStore, SessionTab } from "../stores/useStore";
 import { Terminal } from "./Terminal";
+import { NewSessionMenu } from "./NewSessionMenu";
 
 const presetColors = [
   "#F97316", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#FBBF24", "#14B8A6"
@@ -54,6 +55,7 @@ export function Sidebar() {
     updateSession,
     updateNode,
     nodes,
+    agents,
   } = useStore();
 
   const session = selectedNodeId ? sessions.get(selectedNodeId) : null;
@@ -74,6 +76,8 @@ export function Sidebar() {
   const [pending, setPending] = useState<Record<string, Partial<SessionTab>>>({});
   const [connectError, setConnectError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The "+" button's rect while the variant picker is open (null = closed).
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
 
   const storeTabs: SessionTab[] = session?.tabs ?? [];
 
@@ -186,18 +190,28 @@ export function Sidebar() {
     }
   };
 
-  const newTab = async () => {
+  // Start a fresh session of `variant` ("claude-code" | "shell") in this workstream.
+  const startSession = async (variant: string) => {
+    setMenuAnchor(null);
     if (!selectedNodeId) return;
     setBusy(true);
     setConnectError(null);
     try {
-      const res = await fetch(`/api/sessions/${selectedNodeId}/sessions`, { method: "POST" });
+      const res = await fetch(`/api/sessions/${selectedNodeId}/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variant }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setConnectError(data.error || "Failed to start session");
         return;
       }
-      setPending((p) => ({ ...p, [data.sessionId]: { connected: true } }));
+      const shell = variant === "shell";
+      setPending((p) => ({
+        ...p,
+        [data.sessionId]: { connected: true, ...(shell ? { name: "shell", kind: "shell" } : {}) },
+      }));
       setActiveTabId(data.sessionId);
     } catch (e: any) {
       setConnectError(e.message);
@@ -462,7 +476,7 @@ export function Sidebar() {
               );
             })}
             <button
-              onClick={newTab}
+              onClick={(e) => setMenuAnchor(e.currentTarget.getBoundingClientRect())}
               disabled={busy}
               title="Start a new session"
               className="flex items-center justify-center px-2 py-1.5 rounded-t-md text-zinc-400 hover:text-white hover:bg-surface-active transition-colors disabled:opacity-50"
@@ -519,7 +533,7 @@ export function Sidebar() {
                 <div>
                   <p className="text-sm text-zinc-400">No sessions yet</p>
                   <button
-                    onClick={newTab}
+                    onClick={(e) => setMenuAnchor(e.currentTarget.getBoundingClientRect())}
                     disabled={busy}
                     className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-white text-canvas text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 transition-colors"
                   >
@@ -624,6 +638,14 @@ export function Sidebar() {
               )}
             </div>
           </div>
+
+          <NewSessionMenu
+            open={menuAnchor !== null}
+            anchor={menuAnchor}
+            agents={agents}
+            onClose={() => setMenuAnchor(null)}
+            onPick={startSession}
+          />
         </motion.div>
       )}
     </AnimatePresence>

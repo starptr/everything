@@ -56,32 +56,40 @@ function seedEnv(): Record<string, string> {
   return env;
 }
 
-/// Spawn a terminal for a session: a PTY running `silverwood spawn <ws> <sid>
-/// [--resume]` in the checkout dir, registered under `sessionKey` (the claude
-/// session id). silverwood owns *how* the agent shell is created — it scrubs the
-/// environment and picks the command from the checkout mode (plain `claude`, or
-/// `direnv exec` for the direnv-unsafe mode) — and `exec`s the agent, so this PTY
-/// tracks the agent's lifetime directly: when claude exits the PTY exits and we
-/// tear down (releasing the lock, dropping the entry).
+/// Spawn a terminal for a session: a PTY running `silverwood spawn` in the checkout
+/// dir, registered under `sessionKey`. silverwood owns *how* the shell is created —
+/// it scrubs the environment and picks the command from the checkout mode — and
+/// `exec`s it, so this PTY tracks the shell's lifetime directly: when it exits the
+/// PTY exits and we tear down (releasing the lock, dropping the entry).
+///
+/// Two variants:
+///  - "claude-code" (default): `silverwood spawn <ws> <sid> [--resume]` — the agent
+///    shell (`claude --session-id`/`--resume <id>`). `sessionKey` IS the claude
+///    session id, so the registry key === claude id === silverwood key.
+///  - "shell": `silverwood spawn <ws>` (no session id) — an ephemeral login shell.
+///    `sessionKey` is a papyrus-local key used only for the registry/WebSocket; it
+///    is never passed to silverwood, and `resume` is ignored.
 export function spawnTerminal(params: {
   sessionKey: string;
   workstreamId: string;
   cwd: string;
   resume: boolean;
+  kind?: "claude-code" | "shell";
 }): Session {
-  const { sessionKey, workstreamId, cwd, resume } = params;
+  const { sessionKey, workstreamId, cwd, resume, kind = "claude-code" } = params;
 
-  const ptyProcess = spawnPty(
-    SILVERWOOD_EXE,
-    ["spawn", workstreamId, sessionKey, ...(resume ? ["--resume"] : [])],
-    {
-      name: "xterm-256color",
-      cwd,
-      env: seedEnv(),
-      rows: 30,
-      cols: 120,
-    },
-  );
+  const args =
+    kind === "shell"
+      ? ["spawn", workstreamId]
+      : ["spawn", workstreamId, sessionKey, ...(resume ? ["--resume"] : [])];
+
+  const ptyProcess = spawnPty(SILVERWOOD_EXE, args, {
+    name: "xterm-256color",
+    cwd,
+    env: seedEnv(),
+    rows: 30,
+    cols: 120,
+  });
 
   const session: Session = {
     pty: ptyProcess,
@@ -89,6 +97,7 @@ export function spawnTerminal(params: {
     cwd,
     clients: new Set(),
     outputBuffer: [],
+    kind,
   };
   sessions.set(sessionKey, session);
 

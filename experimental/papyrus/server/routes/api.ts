@@ -92,15 +92,18 @@ async function buildNode(ws: sw.Workstream) {
       lock: rec.lock ? { holder: rec.lock.holder, mine: rec.lock.holder === HOLDER } : null,
     });
   }
-  // A just-spawned fresh PTY whose `session create` hasn't landed yet (the tiny
-  // window between spawn and record). Surface it so the tab doesn't flicker.
-  for (const [key] of runtimes) {
+  // A live PTY with no durable session record: either an agent session in the tiny
+  // window between spawn and `session create` landing, or an ephemeral "shell"
+  // (which never gets a record) for as long as its PTY runs. Surface it as a
+  // transient tab, rendered from the registry entry's kind.
+  for (const [key, s] of runtimes) {
     if (durable[key]) continue;
+    const isShell = s.kind === "shell";
     tabs.push({
       sessionId: key,
-      name: "claude",
+      name: isShell ? "shell" : "claude",
       createdAt: ws.created_at,
-      kind: "claude-code",
+      kind: s.kind ?? "claude-code",
       connected: true,
       lock: null,
     });
@@ -264,10 +267,17 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
   return c.json({ sessionId, connected: true });
 });
 
-// Add a fresh session tab: papyrus mints the id, spawns `claude --session-id <id>`,
-// and records the durable silverwood session + lock immediately (no hook).
+// Add a fresh session tab of the requested `variant` (body `{ variant }`, default
+// "claude-code" — an empty/absent body keeps the old behavior). papyrus mints the id.
+//  - "claude-code": spawn `claude --session-id <id>` and record the durable
+//    silverwood session + advisory lock immediately (no hook).
+//  - "shell": spawn an ephemeral `silverwood spawn <ws>` login shell — no durable
+//    record, no lock. It lives only while its PTY runs (buildNode surfaces it as a
+//    transient tab); it vanishes on exit/disconnect.
 apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
   const wsId = c.req.param("wsId");
+  const body = await c.req.json().catch(() => ({}));
+  const variant = body.variant === "shell" ? "shell" : "claude-code";
   let ws: sw.Workstream;
   try {
     ws = await sw.get(wsId);
@@ -284,10 +294,11 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
     workstreamId: wsId,
     cwd,
     resume: false,
+    kind: variant,
   });
-  await recordFreshSession(wsId, sessionId, session);
-  log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${sessionId}`);
-  return c.json({ sessionId, connected: true });
+  if (variant === "claude-code") await recordFreshSession(wsId, sessionId, session);
+  log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${variant} ${sessionId}`);
+  return c.json({ sessionId, connected: true, variant });
 });
 
 // Disconnect a session: kill its live PTY (releasing the lock). The durable
