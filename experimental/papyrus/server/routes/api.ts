@@ -47,13 +47,13 @@ apiRoutes.get("/agents", (c) => {
   return c.json(agents);
 });
 
-// The checkout modes a new workstream can be created with (drives the New
-// Workstream picker) — pure metadata from `silverwood modes`.
-apiRoutes.get("/modes", async (c) => {
+// The `new` command tree a workstream can be created from (drives the New
+// Workstream modal) — pure metadata from `silverwood new-schema`.
+apiRoutes.get("/new-schema", async (c) => {
   try {
-    return c.json(await sw.listModes());
+    return c.json(await sw.newSchema());
   } catch (e: any) {
-    logError(`\x1b[38;5;141m[modes]\x1b[0m ${e.message}`);
+    logError(`\x1b[38;5;141m[new-schema]\x1b[0m ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -182,14 +182,14 @@ async function recordFreshSession(
 // its Claude Code terminal. Blocks on the clone; the node comes up ready.
 apiRoutes.post("/sessions", async (c) => {
   const body = await c.req.json();
-  const { name, source, mode, position } = body;
-  if (!name || !source) {
-    return c.json({ error: "name and source (an https git url) are required" }, 400);
+  const { name, path, args, position } = body;
+  if (!name || !Array.isArray(path) || path.length === 0) {
+    return c.json({ error: "name and a checkout path are required" }, 400);
   }
 
   let ws: sw.Workstream;
   try {
-    ws = await sw.create({ name, source, mode });
+    ws = await sw.create({ name, path, args: Array.isArray(args) ? args : [] });
   } catch (e: any) {
     logError(`\x1b[38;5;141m[create]\x1b[0m ${e.message}`);
     return c.json({ error: e.message }, 400);

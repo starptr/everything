@@ -17,31 +17,46 @@ use tempfile::TempDir;
 
 use common::{create, fails, forest, json, ok, EXAMPLE_SOURCE};
 
-/// `modes` is pure metadata (no network, no forest), so it runs in the sandbox.
+/// `new-schema` is pure metadata (no network, no forest), so it runs in the sandbox.
+/// It reflects the `new` subcommand tree; assert its shape and per-leaf positionals.
 #[test]
-fn modes_lists_available_checkout_modes() {
+fn new_schema_reflects_the_new_command_tree() {
     let dir = forest();
-    let modes = json(&dir, &["--json", "modes"]);
-    let tags: Vec<&str> = modes
-        .as_array()
-        .expect("modes is an array")
+    let schema = json(&dir, &["--json", "new-schema"]);
+    assert_eq!(schema["name"], "new");
+
+    // The one variant today is `basic`; find it under the root's subcommands.
+    let variants = schema["subcommands"].as_array().expect("subcommands array");
+    let basic = variants
         .iter()
-        .map(|m| m["mode"].as_str().expect("mode tag is a string"))
-        .collect();
-    assert!(
-        tags.contains(&"jj-colocated"),
-        "missing jj-colocated: {tags:?}"
-    );
-    assert!(
-        tags.contains(&"jj-colocated-direnv-unsafe"),
-        "missing jj-colocated-direnv-unsafe: {tags:?}"
-    );
-    assert!(tags.contains(&"apfs-cow"), "missing apfs-cow: {tags:?}");
-    // Every entry carries a description + requires_source flag.
-    for m in modes.as_array().unwrap() {
-        assert!(m["description"].as_str().is_some_and(|d| !d.is_empty()));
-        assert!(m["requires_source"].is_boolean());
-    }
+        .find(|v| v["name"] == "basic")
+        .expect("basic variant");
+
+    // `basic`'s children are the checkout modes; collect their leaves by tag.
+    let modes = basic["subcommands"].as_array().expect("mode subcommands");
+    let mode = |tag: &str| {
+        modes
+            .iter()
+            .find(|m| m["name"] == tag)
+            .unwrap_or_else(|| panic!("missing mode {tag}: {modes:?}"))
+    };
+    let jj = mode("jj-colocated");
+    mode("jj-colocated-direnv-unsafe");
+    let apfs = mode("apfs-cow");
+
+    // A leaf's single positional carries the value_name a frontend renders a field from.
+    let sole_arg_value_name = |m: &serde_json::Value| -> String {
+        let args = m["args"].as_array().expect("args array");
+        assert_eq!(args.len(), 1, "expected one positional: {m:?}");
+        assert!(args[0]["help"].as_str().is_some_and(|h| !h.is_empty()));
+        assert!(args[0]["required"].as_bool().expect("required is a bool"));
+        args[0]["value_name"]
+            .as_str()
+            .expect("value_name")
+            .to_string()
+    };
+    assert_eq!(sole_arg_value_name(jj), "SOURCE_HTTPS_URL");
+    assert_eq!(sole_arg_value_name(apfs), "ABSOLUTE_PATH");
 }
 
 #[test]

@@ -1,8 +1,16 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, GitBranch, Loader2, AlertCircle, Sparkles } from "lucide-react";
+import { X, GitBranch, FolderOpen, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
+import {
+  type CommandNode,
+  type Item,
+  FALLBACK_SCHEMA,
+  defaultDescent,
+  nodeAtPath,
+  walk,
+} from "./newSchema";
 
 interface NewSessionModalProps {
   open: boolean;
@@ -10,48 +18,75 @@ interface NewSessionModalProps {
 }
 
 const GRID = 24;
-const DEFAULT_MODE = "jj-colocated";
 
-// A checkout mode offered in the picker (mirrors `silverwood modes`).
-interface ModeInfo {
-  mode: string;
-  description: string;
-  requires_source: boolean;
+// Human label for the choice at each tree depth (cosmetic; the tree, not this list,
+// is authoritative — deeper levels fall back to a generic label).
+const DEPTH_LABELS = ["Workstream variant", "Checkout mode"];
+const depthLabel = (d: number) => DEPTH_LABELS[d] ?? "Option";
+
+// Cosmetic per-positional presentation, keyed on the clap value_name. The functional
+// parts (whether the input exists, its help, whether it's required) come from the
+// schema, so an unknown value_name still renders a correct, labeled input via the
+// humanized fallback.
+const SEED_FIELDS: Record<
+  string,
+  { label: string; placeholder: string; icon: typeof GitBranch }
+> = {
+  SOURCE_HTTPS_URL: {
+    label: "Source (HTTPS git URL)",
+    placeholder: "https://github.com/owner/repo.git",
+    icon: GitBranch,
+  },
+  ABSOLUTE_PATH: {
+    label: "Absolute path",
+    placeholder: "/Users/you/src/project",
+    icon: FolderOpen,
+  },
+};
+function fieldConfig(valueName: string) {
+  return (
+    SEED_FIELDS[valueName] ?? {
+      label: valueName
+        .replace(/_/g, " ")
+        .toLowerCase()
+        .replace(/^./, (c) => c.toUpperCase()),
+      placeholder: "",
+      icon: GitBranch,
+    }
+  );
 }
 
-// Shown until GET /api/modes responds (and if it fails).
-const FALLBACK_MODES: ModeInfo[] = [
-  { mode: "jj-colocated", description: "jj/git colocated clone.", requires_source: true },
-];
-
-// Create a node = create a silverwood workstream from an https git URL (silverwood
-// clones its checkout). All durable state lives in silverwood; the canvas
-// coordinate is stored in the workstream's KV. No optimistic node — the ~1s
-// reconcile adds it from the forest (server truth).
+// Create a node = create a silverwood workstream by walking the `new` command tree:
+// pick a path (variant → mode → …), fill its positional args, and POST them. All
+// durable state lives in silverwood; the canvas coordinate is stored in the
+// workstream's KV. No optimistic node — the ~1s reconcile adds it from the forest.
 export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
   const reactFlowInstance = useReactFlow();
 
   const [name, setName] = useState("");
-  const [source, setSource] = useState("");
-  const [mode, setMode] = useState(DEFAULT_MODE);
-  const [modes, setModes] = useState<ModeInfo[]>(FALLBACK_MODES);
+  const [schema, setSchema] = useState<CommandNode>(FALLBACK_SCHEMA);
+  const [path, setPath] = useState<string[]>(() => defaultDescent(FALLBACK_SCHEMA));
+  const [argValues, setArgValues] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
-      setName("");
-      setSource("");
-      setMode(DEFAULT_MODE);
-      setError(null);
-      setIsBusy(false);
-      fetch("/api/modes")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) setModes(data);
-        })
-        .catch(() => {});
-    }
+    if (!open) return;
+    const apply = (s: CommandNode) => {
+      setSchema(s);
+      setPath(defaultDescent(s));
+      setArgValues({});
+    };
+    setName("");
+    setError(null);
+    setIsBusy(false);
+    apply(FALLBACK_SCHEMA);
+    fetch("/api/new-schema")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.name === "string") apply(data as CommandNode);
+      })
+      .catch(() => {});
   }, [open]);
 
   // Place a new node at the current viewport center, snapped to the grid.
@@ -66,16 +101,35 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
     };
   };
 
+  // Choose subcommand `choice` at tree `depth`: truncate the path there, then
+  // re-default every deeper level. Typed positionals are cleared — they belonged to
+  // the branch we just left.
+  const selectAt = (depth: number, choice: string) => {
+    const prefix = path.slice(0, depth).concat(choice);
+    const chosen = nodeAtPath(schema, prefix);
+    setPath(chosen ? prefix.concat(defaultDescent(chosen)) : prefix);
+    setArgValues({});
+    setError(null);
+  };
+
+  const items = walk(schema, path);
+  const inputs = items.filter((it): it is Extract<Item, { kind: "input" }> => it.kind === "input");
+  const missingRequired = inputs.some(
+    ({ key, arg }) => arg.required && !(argValues[key] ?? "").trim(),
+  );
+  const canCreate = !!name.trim() && !missingRequired && path.length > 0;
+
   const handleCreate = async () => {
-    if (!name.trim() || !source.trim()) return;
+    if (!canCreate) return;
     setIsBusy(true);
     setError(null);
     try {
       const position = viewportCenter();
+      const args = inputs.map(({ key }) => (argValues[key] ?? "").trim());
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), source: source.trim(), mode, position }),
+        body: JSON.stringify({ name: name.trim(), path, args, position }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create workstream");
@@ -130,41 +184,55 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                       className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-zinc-500 flex items-center gap-1.5">
-                      <GitBranch className="w-3 h-3" />
-                      Source (HTTPS git URL)
-                    </label>
-                    <input
-                      type="text"
-                      value={source}
-                      onChange={(e) => setSource(e.target.value)}
-                      placeholder="https://github.com/owner/repo.git"
-                      className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors font-mono"
-                    />
-                    <p className="text-[10px] text-zinc-600">
-                      silverwood clones this into a jj-colocated checkout, then Claude Code
-                      runs there. This can take a moment.
-                    </p>
-                  </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs text-zinc-500">Checkout mode</label>
-                    <select
-                      value={mode}
-                      onChange={(e) => setMode(e.target.value)}
-                      className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
-                    >
-                      {modes.map((m) => (
-                        <option key={m.mode} value={m.mode}>
-                          {m.mode}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-zinc-600">
-                      {modes.find((m) => m.mode === mode)?.description}
-                    </p>
-                  </div>
+                  {/* Below Name: a dropdown per tree level, then the chosen leaf's
+                      positional inputs — all driven by silverwood's `new` schema. */}
+                  {items.map((item) =>
+                    item.kind === "select" ? (
+                      <div className="space-y-2" key={`sel-${item.depth}`}>
+                        <label className="text-xs text-zinc-500">{depthLabel(item.depth)}</label>
+                        <select
+                          value={item.selected}
+                          onChange={(e) => selectAt(item.depth, e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                        >
+                          {item.node.subcommands.map((s) => (
+                            <option key={s.name} value={s.name}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-zinc-600">
+                          {item.node.subcommands.find((s) => s.name === item.selected)?.description}
+                        </p>
+                      </div>
+                    ) : (
+                      (() => {
+                        const cfg = fieldConfig(item.arg.value_name);
+                        const Icon = cfg.icon;
+                        return (
+                          <div className="space-y-2" key={`arg-${item.key}`}>
+                            <label className="text-xs text-zinc-500 flex items-center gap-1.5">
+                              <Icon className="w-3 h-3" />
+                              {cfg.label}
+                            </label>
+                            <input
+                              type="text"
+                              value={argValues[item.key] ?? ""}
+                              onChange={(e) =>
+                                setArgValues((prev) => ({ ...prev, [item.key]: e.target.value }))
+                              }
+                              placeholder={cfg.placeholder}
+                              className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors font-mono"
+                            />
+                            {item.arg.help && (
+                              <p className="text-[10px] text-zinc-600">{item.arg.help}</p>
+                            )}
+                          </div>
+                        );
+                      })()
+                    ),
+                  )}
 
                   {error && (
                     <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 flex items-start gap-2">
@@ -184,13 +252,13 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                   </button>
                   <button
                     onClick={handleCreate}
-                    disabled={isBusy || !name.trim() || !source.trim()}
+                    disabled={isBusy || !canCreate}
                     className="px-4 py-1.5 rounded-md text-sm font-medium text-canvas bg-white hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                   >
                     {isBusy ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Cloning...
+                        Creating…
                       </>
                     ) : (
                       <>

@@ -91,8 +91,10 @@ enum Command {
         dry_run: bool,
     },
 
-    /// List the available checkout modes for `new basic <MODE>`.
-    Modes,
+    /// Print the `new` subcommand tree (every variant/mode and its positional
+    /// arguments) as JSON, so a frontend can drive creation without assuming a
+    /// fixed shape. Human output enumerates each leaf invocation.
+    NewSchema,
 
     /// Exec the interactive agent shell for a session in its checkout. The command
     /// is chosen from the checkout mode (env-scrubbed; `direnv exec` for the
@@ -282,34 +284,89 @@ impl NewModeArg {
     }
 }
 
-/// A checkout mode's metadata, for `silverwood modes` (drives a frontend picker).
+/// A positional argument of a `new` command node (drives a frontend input field).
 #[derive(serde::Serialize)]
-struct ModeInfo {
-    /// The kebab tag naming the `new basic <MODE>` subcommand (matches the stored
-    /// `checkout_mode`).
-    mode: String,
-    /// One-line human description.
-    description: String,
-    /// Whether this mode takes a seed the user must supply (has a positional argument —
-    /// an HTTPS url or a local path, depending on the mode).
-    requires_source: bool,
+struct ArgInfo {
+    /// The clap `value_name`, e.g. "SOURCE_HTTPS_URL" or "ABSOLUTE_PATH".
+    value_name: String,
+    /// One-line help for the positional.
+    help: String,
+    /// Whether the positional must be supplied.
+    required: bool,
 }
 
-/// Metadata for every checkout mode, derived from the `new basic` subcommand tree so the
-/// clap definitions stay the single source of truth (tag = subcommand name, description =
-/// its help, `requires_source` = whether it has a seed positional).
-fn mode_infos() -> Vec<ModeInfo> {
-    let basic = NewVariant::augment_subcommands(clap::Command::new("new"));
-    basic
-        .find_subcommand("basic")
-        .expect("basic subcommand exists")
-        .get_subcommands()
-        .map(|sc| ModeInfo {
-            mode: sc.get_name().to_string(),
-            description: sc.get_about().map(|a| a.to_string()).unwrap_or_default(),
-            requires_source: sc.get_positionals().next().is_some(),
-        })
-        .collect()
+/// A node in the `new` subcommand tree: its own positionals plus its child subcommands.
+/// A leaf (no `subcommands`) is a complete invocation — the path names the variant/mode/…
+/// and `args` are what the user must supply. Nothing here assumes a fixed depth or a
+/// single "seed": a node may have children, positionals, or both.
+#[derive(serde::Serialize)]
+struct CommandNode {
+    /// The subcommand name (kebab), or "new" at the root.
+    name: String,
+    /// One-line description (the subcommand's clap `about`).
+    description: String,
+    /// This node's own positional arguments, in declaration order.
+    args: Vec<ArgInfo>,
+    /// Child subcommands (empty at a leaf).
+    subcommands: Vec<CommandNode>,
+}
+
+/// Reflect the whole `new` subcommand tree so the clap definitions stay the single source
+/// of truth for how a workstream is created — a frontend renders inputs from this without
+/// hardcoding any variant/mode/seed shape.
+fn new_schema() -> CommandNode {
+    reflect_command(&NewVariant::augment_subcommands(clap::Command::new("new")))
+}
+
+/// Recursively reflect one clap command into a [`CommandNode`] (positionals → `args`,
+/// nested subcommands → `subcommands`). Globals/options like `--name` are not positionals,
+/// so they are excluded.
+fn reflect_command(cmd: &clap::Command) -> CommandNode {
+    CommandNode {
+        name: cmd.get_name().to_string(),
+        description: cmd.get_about().map(|a| a.to_string()).unwrap_or_default(),
+        args: cmd
+            .get_positionals()
+            .map(|arg| ArgInfo {
+                value_name: arg
+                    .get_value_names()
+                    .and_then(|names| names.first())
+                    .map(|n| n.to_string())
+                    .unwrap_or_default(),
+                help: arg.get_help().map(|h| h.to_string()).unwrap_or_default(),
+                required: arg.is_required_set(),
+            })
+            .collect(),
+        subcommands: cmd.get_subcommands().map(reflect_command).collect(),
+    }
+}
+
+/// Human output for `new-schema`: enumerate each leaf invocation with its positionals,
+/// accumulating any positionals declared along the path (`out` gets one line per leaf).
+fn print_new_leaves(
+    node: &CommandNode,
+    path: &mut Vec<String>,
+    args: &mut Vec<String>,
+    out: &mut Vec<String>,
+) {
+    path.push(node.name.clone());
+    for a in &node.args {
+        args.push(format!("<{}>", a.value_name));
+    }
+    if node.subcommands.is_empty() {
+        let mut line = path.join(" ");
+        if !args.is_empty() {
+            line.push(' ');
+            line.push_str(&args.join(" "));
+        }
+        out.push(line);
+    } else {
+        for sc in &node.subcommands {
+            print_new_leaves(sc, path, args, out);
+        }
+    }
+    args.truncate(args.len() - node.args.len());
+    path.pop();
 }
 
 fn main() -> ExitCode {
@@ -332,13 +389,15 @@ fn run(cli: Cli) -> CliResult {
     };
     let json = cli.json;
 
-    // `modes` is pure metadata — handle it before opening (and thereby creating)
-    // the forest, so listing modes never touches `$HOME/.silverwood`.
-    if let Command::Modes = cli.command {
-        let modes = mode_infos();
-        emit(json, &modes, || {
-            for m in &modes {
-                println!("{:28}  {}", m.mode, m.description);
+    // `new-schema` is pure metadata — handle it before opening (and thereby
+    // creating) the forest, so it never touches `$HOME/.silverwood`.
+    if let Command::NewSchema = cli.command {
+        let schema = new_schema();
+        emit(json, &schema, || {
+            let mut lines = Vec::new();
+            print_new_leaves(&schema, &mut Vec::new(), &mut Vec::new(), &mut lines);
+            for line in &lines {
+                println!("{line}");
             }
         });
         return Ok(());
@@ -404,7 +463,7 @@ fn run(cli: Cli) -> CliResult {
         }
 
         // Handled above, before the forest is opened.
-        Command::Modes => unreachable!("modes is handled before Forest::open"),
+        Command::NewSchema => unreachable!("new-schema is handled before Forest::open"),
     }
 }
 

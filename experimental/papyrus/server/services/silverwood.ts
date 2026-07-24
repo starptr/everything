@@ -48,12 +48,20 @@ export interface AgentSession {
   lock?: { holder: string; acquired_at: string };
 }
 
-// A checkout mode available to `new --mode`, from `silverwood modes` (drives the
-// New Workstream picker). `mode` is the kebab tag passed back as `--mode`.
-export interface CheckoutModeInfo {
-  mode: string;
+// The `new` command tree, from `silverwood new-schema` (drives the New Workstream
+// modal). `new` is a tree of nested subcommands; each complete path (leaf) declares
+// its own positional args. There is NO fixed variant/mode/seed shape — a node may
+// have children, positionals, or both — so the modal renders inputs by walking this.
+export interface ArgInfo {
+  value_name: string; // e.g. "SOURCE_HTTPS_URL" | "ABSOLUTE_PATH"
+  help: string;
+  required: boolean;
+}
+export interface CommandNode {
+  name: string; // subcommand name (kebab), or "new" at the root
   description: string;
-  requires_source: boolean;
+  args: ArgInfo[]; // this node's own positionals, in order
+  subcommands: CommandNode[]; // empty at a leaf
 }
 
 /// Run `silverwood --json <args>` and parse its stdout. Async (never blocks the
@@ -89,9 +97,9 @@ export function get(id: string): Promise<Workstream> {
   return run(["show", id]);
 }
 
-/// The checkout modes available to `create` (kind-aware; pure metadata, no forest).
-export function listModes(): Promise<CheckoutModeInfo[]> {
-  return run(["modes"]);
+/// The `new` command tree the modal drives creation from (pure metadata, no forest).
+export function newSchema(): Promise<CommandNode> {
+  return run(["new-schema"]);
 }
 
 export async function getPapyrusKv(id: string): Promise<Record<string, string>> {
@@ -106,20 +114,14 @@ export async function sessionLs(id: string): Promise<Record<string, AgentSession
 
 export function create(params: {
   name: string;
-  source: string;
-  mode?: string;
+  path: string[]; // chosen subcommand names, e.g. ["basic", "apfs-cow"]
+  args: string[]; // positional values along that path, in order
 }): Promise<Workstream> {
-  // Blocks on `jj git clone --colocate`; the checkout carries a pending→ready
-  // state machine, so the returned workstream is the finished (ready/failed) one.
-  // Nested subcommands mirror the data model: `new <variant> <mode> <seed…>`.
-  return run([
-    "new",
-    "basic",
-    params.mode || "jj-colocated",
-    params.source,
-    "--name",
-    params.name,
-  ]);
+  // Blocks on provisioning (e.g. `jj git clone --colocate`); the checkout carries a
+  // pending→ready state machine, so the returned workstream is the finished one.
+  // `path`/`args` come from `new-schema` and become argv verbatim (no shell); an
+  // invalid path/arg is rejected by silverwood, the single validator.
+  return run(["new", ...params.path, ...params.args, "--name", params.name]);
 }
 
 export function archive(id: string): Promise<void> {
