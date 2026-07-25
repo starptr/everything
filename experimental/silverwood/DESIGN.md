@@ -75,10 +75,11 @@ Consequences that shape everything else:
 
 - **Membership** of the forest = the set of workstream documents present. When
   forests eventually sync, this is an add-wins union.
-- **Deletion is an in-document tombstone** (`status = archived`), never removal of
-  the document. The tombstone rides along in the document's own merge, so a delete
-  propagates correctly and there is no separate index/root document to keep
-  consistent.
+- **Deletion is an in-document tombstone** (`status = archived` or `deleted`), never
+  removal of the document. The tombstone rides along in the document's own merge, so a
+  delete propagates correctly and there is no separate index/root document to keep
+  consistent. (`deleted` additionally discards the on-disk checkout, but still keeps the
+  document — a hard document removal cannot merge under the add-wins union above.)
 - **`name` is owned by the workstream document** (no dual-home, no drift). Listing
   opens the documents (each is tiny — sub-millisecond). If listing ever becomes
   hot, a purely-local, rebuildable read-cache may be added — never the source of

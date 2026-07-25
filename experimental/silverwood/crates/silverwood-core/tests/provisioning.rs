@@ -50,6 +50,47 @@ fn create_list_get_archive_round_trip() {
 }
 
 #[test]
+fn remove_soft_deletes_and_discards_checkout() {
+    let dir = temp_forest("remove");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+
+    let ws = forest.create_workstream(new_ws("doomed")).unwrap();
+    let LocationWithinForest::BasicForest { path } = &ws.body.location().unwrap().within else {
+        panic!("expected a basic-forest location");
+    };
+    let checkout = Path::new(path).to_path_buf();
+    assert!(checkout.is_dir(), "FakeOk should have created the checkout");
+
+    // Without --force the stubbed safety check refuses; nothing changes.
+    assert!(matches!(
+        forest.remove(ws.id, false).unwrap_err(),
+        Error::UnsafeToRemove(_)
+    ));
+    assert_eq!(forest.get(ws.id).unwrap().body.status, Status::Active);
+    assert!(
+        checkout.is_dir(),
+        "refused remove must not touch the checkout"
+    );
+    assert_eq!(forest.list(false).unwrap().len(), 1);
+
+    // --force: the document is KEPT but tombstoned `deleted`, and the checkout is gone.
+    forest.remove(ws.id, true).unwrap();
+    assert_eq!(forest.get(ws.id).unwrap().body.status, Status::Deleted);
+    assert!(
+        forest.list(false).unwrap().is_empty(),
+        "deleted is hidden from ls"
+    );
+    assert_eq!(forest.list(true).unwrap().len(), 1, "but shown by ls --all");
+    assert!(!checkout.exists(), "the checked-out code must be deleted");
+
+    // Idempotent: removing an already-deleted workstream is a no-op success.
+    forest.remove(ws.id, true).unwrap();
+    assert_eq!(forest.get(ws.id).unwrap().body.status, Status::Deleted);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn failed_provision_is_recoverable() {
     let dir = temp_forest("fail");
     let forest = Forest::open_with_provider(&dir, Box::new(FakeFail)).unwrap();

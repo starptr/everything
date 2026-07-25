@@ -195,13 +195,13 @@ impl Forest {
         doc::hydrate(id, &bytes)
     }
 
-    /// List workstreams, sorted by id (roughly creation order). Archived
-    /// workstreams are excluded unless `include_archived` is set.
-    pub fn list(&self, include_archived: bool) -> Result<Vec<Workstream>> {
+    /// List workstreams, sorted by id (roughly creation order). Inactive
+    /// (archived or deleted) workstreams are excluded unless `include_inactive` is set.
+    pub fn list(&self, include_inactive: bool) -> Result<Vec<Workstream>> {
         let mut out = Vec::new();
         for id in self.docs.list_ids()? {
             let ws = self.get(id)?;
-            if include_archived || ws.body.status == Status::Active {
+            if include_inactive || ws.body.status == Status::Active {
                 out.push(ws);
             }
         }
@@ -209,11 +209,44 @@ impl Forest {
         Ok(out)
     }
 
-    /// Archive a workstream (tombstone; the document is retained).
+    /// Archive a workstream (tombstone; the document and checkout are retained).
     pub fn archive(&self, id: WorkstreamId) -> Result<()> {
         let doc = self.load_doc(id)?;
         doc::set_status(&doc, Status::Archived)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Soft-delete a workstream: keep the document but mark it `Deleted`, then discard
+    /// the workstream kind's on-disk materialization (a `Basic` workstream's checkout).
+    /// Refuses with [`Error::UnsafeToRemove`] unless the workstream is safe to remove —
+    /// currently never (see `is_safe_to_remove`) — or `force` overrides the check.
+    ///
+    /// Unlike a hard delete (impossible under the add-wins membership union, see
+    /// `DESIGN.md` §2.1), the document is retained so the tombstone merges under sync —
+    /// this is a stronger sibling of [`Forest::archive`] that also discards the checkout.
+    pub fn remove(&self, id: WorkstreamId, force: bool) -> Result<()> {
+        let ws = self.get(id)?; // NotFound if absent
+        if !force && !is_safe_to_remove(&ws) {
+            return Err(Error::UnsafeToRemove(id));
+        }
+
+        // Tombstone first (the sync-relevant record of truth), then discard the code.
+        let doc = self.load_doc(id)?;
+        doc::set_status(&doc, Status::Deleted)?;
+        self.docs.save(id, &doc::snapshot(&doc)?)?;
+
+        // Dispatch the on-disk cleanup on the exact workstream kind. A `Basic`
+        // workstream owns a checkout working copy at its location — delete it. (Nested
+        // match on the exact `LocationWithinForest` variant for the same reason: each
+        // kind/forest-kind must consciously decide its own cleanup.)
+        match &ws.body.kind {
+            WorkstreamKind::Basic { location, .. } => match &location.within {
+                LocationWithinForest::BasicForest { path } => {
+                    remove_tree_if_present(Path::new(path))?
+                }
+            },
+        }
+        Ok(())
     }
 
     /// Rename a workstream (overwrite its `name`).
@@ -458,6 +491,25 @@ fn precheck_new_mode(mode: &NewCheckoutMode, working_copies_dir: &Path) -> Resul
             }
             Ok(())
         }
+    }
+}
+
+/// Whether a workstream is safe to remove without `--force`.
+///
+/// STUB: always `false` for now — nothing is removable without `--force`. A real
+/// check would refuse while there is in-flight work: unmerged changes in the
+/// checkout, live or locked agent sessions, or state not yet synced to peers.
+fn is_safe_to_remove(_ws: &Workstream) -> bool {
+    false
+}
+
+/// Remove a directory tree, treating an already-absent path as success (a
+/// never-provisioned `Pending`/`Failed` checkout may have no directory).
+fn remove_tree_if_present(path: &Path) -> Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(Error::io(path, e)),
     }
 }
 

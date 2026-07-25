@@ -168,6 +168,23 @@ fn show_rejects_bad_and_absent_ids() {
 }
 
 #[test]
+fn remove_rejects_bad_and_absent_ids() {
+    let dir = forest();
+
+    // Bad id → parse error, before any forest work.
+    let stderr = fails(&dir, &["remove", "not-a-uuid"]);
+    assert!(stderr.contains("invalid workstream id"), "got: {stderr}");
+
+    // Well-formed but absent id → not-found, both with and without `--force` (the
+    // workstream is loaded before the safety check / force is consulted).
+    fails(&dir, &["remove", "01999999-0000-7000-8000-000000000000"]);
+    fails(
+        &dir,
+        &["remove", "01999999-0000-7000-8000-000000000000", "--force"],
+    );
+}
+
+#[test]
 fn spawn_rejects_bad_and_absent_ids() {
     let dir = forest();
 

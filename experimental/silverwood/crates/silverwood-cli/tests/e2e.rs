@@ -482,3 +482,51 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
     // Persistence across processes: re-read in yet another invocation.
     assert_eq!(json(&dir, &["--json", "show", &id])["id"], id);
 }
+
+/// `remove` is the delete-like tombstone: unlike archive it discards the checkout,
+/// but (add-wins union) still keeps the document, marked `deleted`. Without `--force`
+/// the stubbed safety check refuses.
+#[test]
+#[ignore = "network + jj; run via `cargo test -- --ignored`"]
+fn remove_deletes_checkout_but_keeps_deleted_tombstone() {
+    let dir = forest();
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "basic",
+            "jj-colocated",
+            EXAMPLE_SOURCE,
+            "--name",
+            "w",
+        ],
+    );
+    let id = ws["id"].as_str().unwrap().to_string();
+    let location = ws["location"]["within"]["path"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(Path::new(&location).join("README.md").is_file());
+
+    // Without --force the safety check (stubbed false) refuses; nothing changes.
+    fails(&dir, &["remove", &id]);
+    assert_eq!(json(&dir, &["--json", "show", &id])["status"], "active");
+    assert!(Path::new(&location).join("README.md").is_file());
+
+    // --force soft-deletes: the checkout is gone, but the document survives as deleted.
+    ok(&dir, &["remove", &id, "--force"]);
+    assert_eq!(json(&dir, &["--json", "show", &id])["status"], "deleted");
+
+    // Hidden from `ls`, present in `ls --all` as deleted.
+    assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
+    let all = json(&dir, &["--json", "ls", "--all"]);
+    assert_eq!(all.as_array().unwrap().len(), 1);
+    assert_eq!(all[0]["status"], "deleted");
+
+    // The checked-out code on disk is deleted.
+    assert!(
+        !Path::new(&location).exists(),
+        "remove must delete the checkout"
+    );
+}

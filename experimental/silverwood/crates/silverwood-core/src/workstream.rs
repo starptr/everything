@@ -19,13 +19,16 @@ pub(crate) const SESSION_NS: &str = "app.andref.silverwood.session";
 /// cannot corrupt core-owned state (today: [`SESSION_NS`]).
 pub(crate) const RESERVED_NS_PREFIX: &str = "app.andref.silverwood.";
 
-/// Lifecycle status of a workstream. Deletion is the `Archived` tombstone —
-/// documents are never removed, so archival merges under future sync.
+/// Lifecycle status of a workstream. Both non-active states are in-document
+/// tombstones — the document is never removed, so they merge under future sync.
+/// `Archived` is a reversible soft-hide that keeps the checkout; `Deleted` is a
+/// stronger, delete-like tombstone that also discards the on-disk checkout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     Active,
     Archived,
+    Deleted,
 }
 
 /// How a workstream's code-change is materialized on disk, together with the data
@@ -132,6 +135,7 @@ impl Status {
         match self {
             Status::Active => "active",
             Status::Archived => "archived",
+            Status::Deleted => "deleted",
         }
     }
 }
@@ -414,6 +418,10 @@ mod tests {
         assert_eq!(
             serde_json::to_value(Status::Archived).unwrap(),
             serde_json::json!(Status::Archived.as_str())
+        );
+        assert_eq!(
+            serde_json::to_value(Status::Deleted).unwrap(),
+            serde_json::json!(Status::Deleted.as_str())
         );
         for state in [
             CheckoutState::Pending,

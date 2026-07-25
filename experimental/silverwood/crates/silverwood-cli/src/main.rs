@@ -51,7 +51,7 @@ enum Command {
 
     /// List workstreams.
     Ls {
-        /// Include archived workstreams.
+        /// Include archived and deleted workstreams.
         #[arg(long)]
         all: bool,
     },
@@ -66,6 +66,16 @@ enum Command {
     Archive {
         /// The workstream id (from `silverwood ls`).
         id: String,
+    },
+
+    /// Remove a workstream: mark it deleted and delete its checked-out code. Refuses
+    /// unless the workstream is safe to remove (currently: never) — pass `--force`.
+    Remove {
+        /// The workstream id (from `silverwood ls`).
+        id: String,
+        /// Remove even if the workstream is not deemed safe to remove.
+        #[arg(long)]
+        force: bool,
     },
 
     /// Rename a workstream.
@@ -445,6 +455,14 @@ fn run(cli: Cli) -> CliResult {
             forest.archive(id)?;
             let ws = forest.get(id)?;
             emit(json, &ws, || println!("archived {}", ws.id));
+            Ok(())
+        }
+
+        Command::Remove { id, force } => {
+            let id = parse_id(&id)?;
+            forest.remove(id, force)?;
+            let ws = forest.get(id)?;
+            emit(json, &ws, || println!("deleted {}", ws.id));
             Ok(())
         }
 

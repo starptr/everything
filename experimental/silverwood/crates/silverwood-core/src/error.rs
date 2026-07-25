@@ -45,6 +45,10 @@ pub enum Error {
     #[error("workstream not found: {0}")]
     NotFound(WorkstreamId),
 
+    /// A workstream was not deemed safe to remove (and `--force` was not given).
+    #[error("workstream {0} is not safe to remove; pass --force to remove anyway")]
+    UnsafeToRemove(WorkstreamId),
+
     /// A session with this id is already attached to the workstream.
     #[error("session already attached: {0}")]
     SessionExists(String),
