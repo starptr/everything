@@ -15,7 +15,7 @@ use std::path::Path;
 
 use tempfile::TempDir;
 
-use common::{create, fails, forest, json, ok, EXAMPLE_SOURCE};
+use common::{create, fails, forest, json, json_env, ok, EXAMPLE_SOURCE};
 
 /// `new-schema` is pure metadata (no network, no forest), so it runs in the sandbox.
 /// It reflects the `new` subcommand tree; assert its shape and per-leaf positionals.
@@ -411,6 +411,31 @@ fn kv_and_session_lifecycle() {
         &dir,
         &["kv", "set", &id, "app.andref.silverwood.session", "x", "{}"],
     );
+
+    // session doctor: read-only report of the variant + whether Claude's transcript
+    // exists on disk. Point CLAUDE_CONFIG_DIR at a temp dir we control.
+    let claude = forest(); // a fresh temp dir, reused as an isolated CLAUDE_CONFIG_DIR
+    let claude_dir = claude.path().to_str().unwrap();
+    let report = json_env(
+        &dir,
+        &[("CLAUDE_CONFIG_DIR", claude_dir)],
+        &["--json", "session", "doctor", &id, "sess-2"],
+    );
+    assert_eq!(report["kind"], "claude-code");
+    assert_eq!(report["conversation_exists"], false);
+    // Read-only: the session is untouched by doctor.
+    assert!(json(&dir, &["--json", "session", "ls", &id])["sess-2"].is_object());
+
+    // With a transcript on disk (in any project dir), doctor reports it present.
+    let proj = claude.path().join("projects").join("-any-escaped-cwd");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("sess-2.jsonl"), "{}\n").unwrap();
+    let report = json_env(
+        &dir,
+        &[("CLAUDE_CONFIG_DIR", claude_dir)],
+        &["--json", "session", "doctor", &id, "sess-2"],
+    );
+    assert_eq!(report["conversation_exists"], true);
 
     // Advisory session lock: acquire surfaces in `session ls`, a second holder is
     // blocked, --force steals, unlock clears (best-effort cooperative flag).

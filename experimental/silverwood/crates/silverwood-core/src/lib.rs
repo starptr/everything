@@ -11,6 +11,7 @@
 //! jj-colocated provisioning + a single-forest location, plus agent sessions).
 
 mod apfs;
+mod claude;
 mod config;
 mod doc;
 mod docstore;
@@ -26,6 +27,7 @@ mod workstream;
 #[cfg(test)]
 mod tests;
 
+pub use claude::claude_conversation_exists;
 pub use config::ForestConfig;
 pub use docstore::{DocStore, FilesDocStore};
 pub use error::{Error, Result};
@@ -36,7 +38,7 @@ pub use provider::{CheckoutProvider, JjColocated};
 pub use source::{AbsolutePath, HttpsGitUrl};
 pub use spawn::{agent_shell_plan, base_shell_plan, ShellPlan, SpawnSeed};
 pub use workstream::{
-    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest,
-    NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody,
-    WorkstreamKind,
+    AgentKind, AgentSession, CheckoutMode, CheckoutState, DoctorReport, Location,
+    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream,
+    WorkstreamBody, WorkstreamKind,
 };

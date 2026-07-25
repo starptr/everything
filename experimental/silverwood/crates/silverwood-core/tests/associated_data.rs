@@ -124,6 +124,48 @@ fn session_lifecycle() {
 }
 
 #[test]
+fn session_doctor_reports_variant_and_conversation_presence() {
+    let dir = temp_forest("doctor");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+    let ws = forest.create_workstream(new_ws("doctor-demo")).unwrap();
+    forest
+        .create_session(
+            ws.id,
+            "sess-1",
+            AgentKind::ClaudeCode { lock: None },
+            "planning",
+        )
+        .unwrap();
+
+    // An isolated Claude config dir with no transcripts on disk.
+    let claude = temp_forest("doctor-claude");
+
+    // Nothing persisted → conversation_exists: Some(false); the report names the variant
+    // and echoes the ids.
+    let report = forest.doctor_session(ws.id, "sess-1", &claude).unwrap();
+    assert_eq!(report.kind, "claude-code");
+    assert_eq!(report.conversation_exists, Some(false));
+    assert_eq!(report.session_id, "sess-1");
+    assert_eq!(report.workstream_id, ws.id.to_string());
+
+    // Doctor is read-only: the session is untouched.
+    assert_eq!(forest.get(ws.id).unwrap().body.sessions().len(), 1);
+
+    // A transcript under any project dir (glob-by-id) → conversation_exists: Some(true).
+    let proj = claude.join("projects").join("-any-escaped-cwd");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("sess-1.jsonl"), "{}\n").unwrap();
+    let report = forest.doctor_session(ws.id, "sess-1", &claude).unwrap();
+    assert_eq!(report.conversation_exists, Some(true));
+
+    // Doctoring an absent session errors.
+    assert!(forest.doctor_session(ws.id, "nope", &claude).is_err());
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&claude);
+}
+
+#[test]
 fn session_lock_lifecycle() {
     let dir = temp_forest("session-lock");
     let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();

@@ -20,6 +20,11 @@ export interface SessionTab {
   kind: string;
   connected: boolean;
   lock?: { holder: string; mine: boolean } | null;
+  // Set on a disconnected tab whose last resume failed with "no conversation found".
+  // `doctorKind` is the variant `silverwood session doctor` reported; the delete-session
+  // button shows only when reason is "no-conversation" AND doctorKind is "claude-code".
+  disconnectReason?: string;
+  doctorKind?: string;
 }
 
 export interface AgentSession {

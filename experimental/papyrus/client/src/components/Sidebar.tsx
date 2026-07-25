@@ -11,6 +11,7 @@ import {
   Power,
   Lock,
   Loader2,
+  Trash2,
   Sparkles,
   Code,
   Cpu,
@@ -243,6 +244,42 @@ export function Sidebar() {
       });
     } catch {
       // The reconcile loop will reflect the real state.
+    }
+  };
+
+  // Doctor + conditionally delete a session that failed to resume. The server runs
+  // `silverwood session doctor` and only removes the session if no conversation exists
+  // on disk; a removed tab vanishes on the next reconcile.
+  const doctorSession = async (tab: SessionTab) => {
+    if (!selectedNodeId) return;
+    setBusy(true);
+    setConnectError(null);
+    try {
+      const res = await fetch(`/api/sessions/${selectedNodeId}/sessions/${tab.sessionId}/doctor`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setConnectError(data.error || "Failed to check session");
+        return;
+      }
+      if (data.removed) {
+        setPending((p) => {
+          const n = { ...p };
+          delete n[tab.sessionId];
+          return n;
+        });
+      } else {
+        setConnectError(
+          data.conversationExists
+            ? "A saved conversation exists — try Connect again."
+            : "Session left in place.",
+        );
+      }
+    } catch (e: any) {
+      setConnectError(e.message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -621,6 +658,23 @@ export function Sidebar() {
                       Connect
                     </button>
                   )}
+                  {activeTab.disconnectReason === "no-conversation" &&
+                    activeTab.doctorKind === "claude-code" && (
+                      <div className="space-y-1.5 pt-1">
+                        <p className="text-[11px] text-zinc-500">
+                          No saved conversation was found on disk for this session.
+                        </p>
+                        <button
+                          onClick={() => doctorSession(activeTab)}
+                          disabled={busy}
+                          title="Runs `silverwood session doctor`, then removes the session only if no conversation exists on disk"
+                          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md border border-red-500/40 text-red-300 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                        >
+                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          Delete this claude session if it doesn't exist
+                        </button>
+                      </div>
+                    )}
                   {connectError && <p className="text-xs text-red-400">{connectError}</p>}
                 </div>
               </div>

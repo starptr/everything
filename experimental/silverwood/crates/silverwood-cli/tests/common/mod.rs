@@ -46,6 +46,30 @@ pub fn json(dir: &TempDir, args: &[&str]) -> serde_json::Value {
         .unwrap_or_else(|e| panic!("command {args:?} bad json: {e}\n{stdout}"))
 }
 
+/// Like [`run`], with extra environment variables set (e.g. `CLAUDE_CONFIG_DIR`).
+pub fn run_env(dir: &TempDir, env: &[(&str, &str)], args: &[&str]) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_silverwood"));
+    cmd.env(FOREST_ENV, dir.path());
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    cmd.args(args).output().expect("spawn silverwood")
+}
+
+/// Like [`json`], with extra environment variables set.
+pub fn json_env(dir: &TempDir, env: &[(&str, &str)], args: &[&str]) -> serde_json::Value {
+    let out = run_env(dir, env, args);
+    assert!(
+        out.status.success(),
+        "command {args:?} failed ({}):\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("command {args:?} bad json: {e}\n{stdout}"))
+}
+
 /// Run, require failure (non-zero exit), return stderr.
 pub fn fails(dir: &TempDir, args: &[&str]) -> String {
     let out = run(dir, args);

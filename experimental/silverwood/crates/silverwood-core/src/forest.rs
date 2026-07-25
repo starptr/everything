@@ -17,9 +17,9 @@ use crate::id::{ForestId, WorkstreamId};
 use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
-    AgentKind, CheckoutMode, CheckoutState, Location, LocationWithinForest, NewCheckoutMode,
-    NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody, WorkstreamKind,
-    RESERVED_NS_PREFIX,
+    AgentKind, CheckoutMode, CheckoutState, DoctorReport, Location, LocationWithinForest,
+    NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody,
+    WorkstreamKind, RESERVED_NS_PREFIX,
 };
 
 /// The outcome for one document in a [`Forest::upgrade_all`] pass.
@@ -323,6 +323,38 @@ impl Forest {
         let doc = self.load_doc(id)?;
         doc::remove_session(&doc, session_id)?;
         self.docs.save(id, &doc::snapshot(&doc)?)
+    }
+
+    /// Read-only health check for a session: report its variant and, for a
+    /// claude-code session, whether Claude's conversation transcript still exists
+    /// under `config_dir` (the resumability ground truth — a session created but
+    /// never prompted has none). **Never mutates**; removing an orphaned session is
+    /// the caller's job via [`Forest::remove_session`]. Errors
+    /// [`Error::SessionNotFound`] if the session is absent.
+    ///
+    /// The match over the session kind is deliberately exhaustive: adding an
+    /// [`AgentKind`] forces a decision here about how (or whether) doctor checks it,
+    /// rather than silently reporting `conversation_exists: None`.
+    pub fn doctor_session(
+        &self,
+        id: WorkstreamId,
+        session_id: &str,
+        config_dir: &Path,
+    ) -> Result<DoctorReport> {
+        let doc = self.load_doc(id)?;
+        let session = doc::get_session(&doc, session_id)?
+            .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
+        let conversation_exists = match &session.kind {
+            AgentKind::ClaudeCode { .. } => Some(crate::claude::claude_conversation_exists(
+                config_dir, session_id,
+            )),
+        };
+        Ok(DoctorReport {
+            workstream_id: id.to_string(),
+            session_id: session_id.to_string(),
+            kind: session.kind.tag().to_string(),
+            conversation_exists,
+        })
     }
 
     /// Acquire the best-effort advisory lock on a session for `holder`. Succeeds

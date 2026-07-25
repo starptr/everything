@@ -14,8 +14,8 @@ use std::str::FromStr;
 use clap::{Parser, Subcommand};
 use silverwood_core::{
     agent_shell_plan, base_shell_plan, AbsolutePath, AgentKind, AgentSession, CheckoutState,
-    Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SpawnSeed,
-    UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
+    DoctorReport, Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode, NewKind,
+    NewWorkstream, SpawnSeed, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -217,6 +217,16 @@ enum SessionCommand {
         /// Release regardless of who holds it.
         #[arg(long)]
         force: bool,
+    },
+    /// Report a session's health (read-only): its agent variant, and — for a
+    /// claude-code session — whether Claude's conversation transcript still exists
+    /// on disk (a session created but never prompted has none, so `claude --resume`
+    /// fails). Never mutates; use `session rm` to remove an orphaned session.
+    Doctor {
+        /// The workstream id the session belongs to (from `silverwood ls`).
+        id: String,
+        /// The session id to examine.
+        session_id: String,
     },
 }
 
@@ -549,7 +559,8 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
         | SessionCommand::Rename { id, .. }
         | SessionCommand::Rm { id, .. }
         | SessionCommand::Lock { id, .. }
-        | SessionCommand::Unlock { id, .. } => parse_id(id)?,
+        | SessionCommand::Unlock { id, .. }
+        | SessionCommand::Doctor { id, .. } => parse_id(id)?,
     };
 
     match cmd {
@@ -575,6 +586,14 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
             force,
             ..
         } => forest.unlock_session(id, &session_id, holder.as_deref(), force)?,
+        SessionCommand::Doctor { session_id, .. } => {
+            // Read-only: report on this one session and return, rather than falling
+            // through to the shared `session ls` emit below.
+            let config_dir = resolve_claude_config_dir()?;
+            let report = forest.doctor_session(id, &session_id, &config_dir)?;
+            emit(json, &report, || print_doctor(&report));
+            return Ok(());
+        }
         SessionCommand::Ls { .. } => {}
     }
 
@@ -765,6 +784,18 @@ fn print_sessions(sessions: &BTreeMap<String, AgentSession>) {
     }
 }
 
+fn print_doctor(report: &DoctorReport) {
+    let convo = match report.conversation_exists {
+        Some(true) => "present",
+        Some(false) => "missing",
+        None => "n/a (variant not checkable)",
+    };
+    println!(
+        "{}  [{}]  conversation: {convo}",
+        report.session_id, report.kind
+    );
+}
+
 /// Render a serde enum to its serialized string form (single source of truth
 /// with the stored representation), e.g. `Status::Active` → `active`.
 fn enum_str(value: impl serde::Serialize) -> String {
@@ -796,4 +827,18 @@ fn resolve_forest_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
         "no forest location: pass --forest <DIR>, set SILVERWOOD_FOREST_PATH, or set HOME",
     )?;
     Ok(PathBuf::from(home).join(".silverwood"))
+}
+
+/// Resolve Claude Code's config dir (its per-session transcripts live under
+/// `projects/`): `$CLAUDE_CONFIG_DIR` if set and non-empty, else `$HOME/.claude`.
+/// Frontend policy, like [`resolve_forest_dir`] — `silverwood-core` never reads env.
+fn resolve_claude_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(path) = std::env::var_os("CLAUDE_CONFIG_DIR") {
+        if !path.is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    let home = std::env::var_os("HOME")
+        .ok_or("cannot locate Claude's config dir: set CLAUDE_CONFIG_DIR or HOME")?;
+    Ok(PathBuf::from(home).join(".claude"))
 }

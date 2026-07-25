@@ -7,6 +7,7 @@ import {
   killTerminal,
   resolveRuntime,
   pruneWorkstreams,
+  disconnectInfo,
   HOLDER,
 } from "../services/sessionManager";
 import * as sw from "../services/silverwood";
@@ -83,6 +84,10 @@ async function buildNode(ws: sw.Workstream) {
   for (const [sid, rec] of Object.entries(durable)) {
     // The registry key IS the session id, so a live PTY is a direct lookup.
     const live = runtimes.some(([k]) => k === sid);
+    // For a disconnected tab whose last resume failed with "no conversation found",
+    // surface the reason and the variant `session doctor` reported (the button gates
+    // on doctor's kind, not this projection's rec.kind).
+    const info = !live ? disconnectInfo.get(sid) : undefined;
     tabs.push({
       sessionId: sid,
       name: rec.name,
@@ -90,6 +95,8 @@ async function buildNode(ws: sw.Workstream) {
       kind: rec.kind,
       connected: live,
       lock: rec.lock ? { holder: rec.lock.holder, mine: rec.lock.holder === HOLDER } : null,
+      disconnectReason: info?.reason,
+      doctorKind: info?.doctorKind,
     });
   }
   // A live PTY with no durable session record: either an agent session in the tiny
@@ -307,6 +314,34 @@ apiRoutes.post("/sessions/:wsId/sessions/:sessionId/disconnect", (c) => {
   const r = resolveRuntime(c.req.param("sessionId"));
   if (r) killTerminal(r[0]);
   return c.json({ success: true });
+});
+
+// Doctor a session, then delete it if it's an orphan. This backs the disconnected
+// screen's "Delete this claude session if it doesn't exist" button: it runs the
+// read-only `silverwood session doctor` and, only when a checked variant reports no
+// conversation on disk (`conversation_exists === false`), removes the durable session
+// via `session rm`. A `true` (real history) or `null` (unknown variant) is left alone.
+apiRoutes.post("/sessions/:wsId/sessions/:sessionId/doctor", async (c) => {
+  const wsId = c.req.param("wsId");
+  const sessionId = c.req.param("sessionId");
+  try {
+    const report = await sw.sessionDoctor(wsId, sessionId);
+    let removed = false;
+    if (report.conversation_exists === false) {
+      await sw.sessionRemove(wsId, sessionId);
+      removed = true;
+      log(`\x1b[38;5;141m[doctor]\x1b[0m removed orphaned ${sessionId}`);
+    }
+    disconnectInfo.delete(sessionId);
+    return c.json({
+      kind: report.kind,
+      conversationExists: report.conversation_exists,
+      removed,
+    });
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[doctor]\x1b[0m ${sessionId}: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 // Rename a session (its silverwood `name`, shown as the tab title). Name required

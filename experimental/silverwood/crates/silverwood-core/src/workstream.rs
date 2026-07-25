@@ -247,6 +247,26 @@ impl AgentSession {
     }
 }
 
+/// A read-only health report for one agent session, produced by
+/// [`crate::Forest::doctor_session`]. It names the session's variant and, for
+/// variants doctor understands, whether the agent's backing state still exists on
+/// disk — letting a frontend decide whether an unresumable session is safe to
+/// remove. `conversation_exists` is `None` for a variant doctor cannot yet check;
+/// a caller must not treat that as "safe to delete".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DoctorReport {
+    /// The workstream the session belongs to.
+    pub workstream_id: String,
+    /// The session id examined.
+    pub session_id: String,
+    /// The session's agent-kind tag (e.g. `"claude-code"`), always reported.
+    pub kind: String,
+    /// For a claude-code session, whether Claude's conversation transcript exists
+    /// on disk (the `--resume` ground truth). `None` for a variant doctor doesn't
+    /// know how to check.
+    pub conversation_exists: Option<bool>,
+}
+
 /// The kind of a workstream — an open, tagged enum. Today the only kind is
 /// [`WorkstreamKind::Basic`]; future kinds may hold different data.
 ///

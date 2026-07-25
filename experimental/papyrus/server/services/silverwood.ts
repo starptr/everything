@@ -48,6 +48,17 @@ export interface AgentSession {
   lock?: { holder: string; acquired_at: string };
 }
 
+// The read-only report from `silverwood session doctor`: the session's variant and,
+// for a claude-code session, whether Claude's conversation transcript exists on disk
+// (the `--resume` ground truth). `conversation_exists` is null for a variant doctor
+// cannot yet check.
+export interface DoctorReport {
+  workstream_id: string;
+  session_id: string;
+  kind: string;
+  conversation_exists: boolean | null;
+}
+
 // The `new` command tree, from `silverwood new-schema` (drives the New Workstream
 // modal). `new` is a tree of nested subcommands; each complete path (leaf) declares
 // its own positional args. There is NO fixed variant/mode/seed shape — a node may
@@ -108,6 +119,12 @@ export async function getPapyrusKv(id: string): Promise<Record<string, string>> 
 
 export async function sessionLs(id: string): Promise<Record<string, AgentSession>> {
   return (await run(["session", "ls", id])) || {};
+}
+
+/// Read-only health report for a session (its variant + whether Claude's
+/// conversation transcript exists on disk). Not serialized — `doctor` never writes.
+export function sessionDoctor(id: string, sessionId: string): Promise<DoctorReport> {
+  return run(["session", "doctor", id, sessionId]);
 }
 
 // ---- writes (serialized per workstream — see below) ----

@@ -28,6 +28,23 @@ const MAX_BUFFER_SIZE = 1000;
 // here is cached from it.
 export const sessions = new Map<string, Session>();
 
+// Claude Code prints this to the PTY when `claude --resume <id>` finds no saved
+// conversation, then exits. It's the only signal that a reconnect failed because
+// the session was never persisted (created but never prompted) — Claude emits no
+// structured status and the plugin hooks were removed. Brittle to Claude's wording;
+// this is the single place to update if it changes.
+const NO_CONVERSATION_MARKER = "No conversation found with session ID";
+
+// Why a session's PTY last exited, when it was the resumable-but-missing case above.
+// Populated on exit (keyed by session id) and cleared on the next spawn for that key
+// or when the doctor endpoint acts. `doctorKind` is filled in from `session doctor`
+// (the authority for the variant used to gate papyrus's delete-session button); it's
+// absent until that async call lands. Ephemeral, like the registry itself.
+export const disconnectInfo = new Map<
+  string,
+  { reason: "no-conversation"; doctorKind?: string }
+>();
+
 // Release the advisory lock this instance holds for a session, if any
 // (best-effort; a crash skips it and the lock is recovered via a force-steal).
 // The registry key IS the silverwood session id.
@@ -78,6 +95,9 @@ export function spawnTerminal(params: {
 }): Session {
   const { sessionKey, workstreamId, cwd, resume, kind = "claude-code" } = params;
 
+  // A fresh spawn attempt supersedes any prior "no conversation" verdict for this id.
+  disconnectInfo.delete(sessionKey);
+
   const args =
     kind === "shell"
       ? ["spawn", workstreamId]
@@ -114,6 +134,19 @@ export function spawnTerminal(params: {
   ptyProcess.onExit(() => {
     // Only tear down if this exact entry is still the live one for the key.
     if (sessions.get(sessionKey) === session) {
+      // A claude-code resume that failed because the conversation was never saved
+      // exits printing NO_CONVERSATION_MARKER. Record it so the disconnected screen
+      // can offer to clean up the orphaned session, and ask `session doctor` for the
+      // variant (its authority) to gate that button.
+      if (kind === "claude-code" && session.outputBuffer.join("").includes(NO_CONVERSATION_MARKER)) {
+        disconnectInfo.set(sessionKey, { reason: "no-conversation" });
+        sw.sessionDoctor(workstreamId, sessionKey)
+          .then((r) => {
+            const info = disconnectInfo.get(sessionKey);
+            if (info) info.doctorKind = r.kind;
+          })
+          .catch((e) => log(`\x1b[38;5;141m[doctor]\x1b[0m ${sessionKey}: ${e.message}`));
+      }
       releaseLock(sessionKey, session);
       session.clients.clear();
       sessions.delete(sessionKey);
