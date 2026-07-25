@@ -17,9 +17,9 @@ pub trait CheckoutProvider {
 }
 
 /// The default checkout provider, dispatching every [`NewCheckoutMode`]: the
-/// jj-colocated modes `jj git clone --colocate` (the direnv-unsafe one also
-/// `direnv allow`s the checkout), and `apfs-cow` makes an APFS copy-on-write clone of a
-/// local directory. (Named for its original, once-sole mode.)
+/// jj-colocated modes `jj git clone --colocate` and the apfs-cow modes make an APFS
+/// copy-on-write clone of a local directory; each has a direnv-unsafe variant that also
+/// `direnv allow`s the checkout after cloning. (Named for its original, once-sole mode.)
 pub struct JjColocated;
 
 impl CheckoutProvider for JjColocated {
@@ -31,6 +31,10 @@ impl CheckoutProvider for JjColocated {
                 direnv_allow(dest)
             }
             NewCheckoutMode::ApfsCow { source_path } => apfs_clone(source_path.as_path(), dest),
+            NewCheckoutMode::ApfsCowDirenvUnsafe { source_path } => {
+                apfs_clone(source_path.as_path(), dest)?;
+                direnv_allow(dest)
+            }
         }
     }
 }

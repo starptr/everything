@@ -8,7 +8,7 @@
 //!   1. a **base shell** — a clean login shell that does NOT inherit the parent
 //!      process's environment, and
 //!   2. an **agent** — `claude` run inside that clean env, wrapped in
-//!      `direnv exec <cwd>` for the direnv-unsafe checkout mode so it loads the
+//!      `direnv exec <cwd>` for a direnv-unsafe checkout mode so it loads the
 //!      checkout's pre-approved `.envrc`.
 //!
 //! The env scrub mirrors what papyrus used to do inline: `process.env` in a
@@ -88,7 +88,7 @@ pub fn base_shell_plan(cwd: &str, seed: &SpawnSeed) -> ShellPlan {
 }
 
 /// The **agent** variant: `claude` (fresh `--session-id`, or `--resume` to
-/// reconnect), wrapped in `direnv exec <cwd>` for the direnv-unsafe checkout mode,
+/// reconnect), wrapped in `direnv exec <cwd>` for a direnv-unsafe checkout mode,
 /// in a clean, non-inherited environment.
 pub fn agent_shell_plan(
     mode: &CheckoutMode,
@@ -108,15 +108,15 @@ pub fn agent_shell_plan(
 }
 
 /// The agent command argv, selected from the checkout mode. Hard-coded per mode
-/// (no data-driven templates): the direnv-unsafe mode runs claude under
-/// `direnv exec <cwd>` (its `.envrc` was pre-approved at clone time); every other
+/// (no data-driven templates): the direnv-unsafe modes run claude under
+/// `direnv exec <cwd>` (their `.envrc` was pre-approved at clone time); every other
 /// mode runs claude directly. `cwd` is passed as its own argv element, so no shell
 /// quoting is needed (the plan is exec'd directly, never through a shell).
 fn agent_argv(mode: &CheckoutMode, cwd: &str, session_id: &str, resume: bool) -> Vec<String> {
     let flag = if resume { "--resume" } else { "--session-id" };
     let claude = ["claude", flag, session_id].map(String::from);
     match mode {
-        CheckoutMode::JjColocatedDirenvUnsafe { .. } => {
+        CheckoutMode::JjColocatedDirenvUnsafe { .. } | CheckoutMode::ApfsCowDirenvUnsafe { .. } => {
             let mut argv = vec!["direnv".to_string(), "exec".to_string(), cwd.to_string()];
             argv.extend(claude);
             argv
@@ -236,6 +236,13 @@ mod tests {
         }
     }
 
+    fn apfs_cow_direnv_unsafe() -> CheckoutMode {
+        CheckoutMode::ApfsCowDirenvUnsafe {
+            initial_source: "/Users/x/repo".into(),
+            state: CheckoutState::Ready,
+        }
+    }
+
     #[test]
     fn plain_mode_runs_claude_directly() {
         assert_eq!(
@@ -269,6 +276,23 @@ mod tests {
         assert_eq!(
             agent_argv(&direnv_unsafe(), "/w/abc", "sess-1", true),
             vec!["direnv", "exec", "/w/abc", "claude", "--resume", "sess-1"]
+        );
+    }
+
+    #[test]
+    fn apfs_cow_direnv_unsafe_mode_wraps_claude_in_direnv_exec() {
+        // The apfs-cow direnv-unsafe mode also pre-approves its `.envrc`, so it runs
+        // claude under `direnv exec` just like the jj direnv-unsafe mode.
+        assert_eq!(
+            agent_argv(&apfs_cow_direnv_unsafe(), "/w/abc", "sess-1", false),
+            vec![
+                "direnv",
+                "exec",
+                "/w/abc",
+                "claude",
+                "--session-id",
+                "sess-1"
+            ]
         );
     }
 

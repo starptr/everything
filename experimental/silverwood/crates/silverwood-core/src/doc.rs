@@ -327,6 +327,10 @@ fn write_mode(basic: &LoroMap, mode: &CheckoutMode) -> Result<()> {
         | CheckoutMode::ApfsCow {
             initial_source,
             state,
+        }
+        | CheckoutMode::ApfsCowDirenvUnsafe {
+            initial_source,
+            state,
         } => {
             map.insert("initial_source", initial_source.as_str())
                 .map_err(loro_err)?;
@@ -480,6 +484,28 @@ mod tests {
         assert_eq!(ws.body, body);
         let json = serde_json::to_value(&ws).unwrap();
         assert_eq!(json["mode"]["checkout_mode"], "apfs-cow");
+        assert_eq!(json["mode"]["initial_source"], "/Users/x/repo");
+    }
+
+    /// The `apfs-cow-direnv-unsafe` mode round-trips through build → hydrate: it carries
+    /// the same fields as `apfs-cow` (a local-path `initial_source`), so `write_mode`/serde
+    /// must distinguish it by tag alone.
+    #[test]
+    fn apfs_cow_direnv_unsafe_mode_round_trips() {
+        let mut body = sample_body();
+        body.kind = WorkstreamKind::Basic {
+            mode: CheckoutMode::ApfsCowDirenvUnsafe {
+                initial_source: "/Users/x/repo".into(),
+                state: CheckoutState::Ready,
+            },
+            location: body.location().unwrap().clone(),
+        };
+
+        let doc = build(7, &body).unwrap();
+        let ws = hydrate(WorkstreamId::generate(), &snapshot(&doc).unwrap()).unwrap();
+        assert_eq!(ws.body, body);
+        let json = serde_json::to_value(&ws).unwrap();
+        assert_eq!(json["mode"]["checkout_mode"], "apfs-cow-direnv-unsafe");
         assert_eq!(json["mode"]["initial_source"], "/Users/x/repo");
     }
 

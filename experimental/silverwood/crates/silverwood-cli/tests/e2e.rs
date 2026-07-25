@@ -160,6 +160,50 @@ fn new_apfs_cow_creates_a_ready_checkout() {
     );
 }
 
+/// The apfs-cow-direnv-unsafe mode is apfs-cow plus `direnv allow`. The temp source has
+/// no `.envrc`, so `direnv_allow` no-ops (no `direnv`/network needed) and provisioning
+/// still succeeds; assert the mode tag, ready state, and the copied file — same shape as
+/// the plain apfs-cow test. macOS + APFS only, so `#[ignore]`d like the rest.
+#[test]
+#[ignore = "macOS + apfs (cp -c); run via `cargo test -- --ignored`"]
+fn new_apfs_cow_direnv_unsafe_creates_a_ready_checkout() {
+    let dir = forest();
+
+    let src = TempDir::new().expect("create source dir");
+    std::fs::write(src.path().join("marker.txt"), "hello").expect("write marker");
+    let src_path = src.path().to_str().unwrap();
+
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "basic",
+            "apfs-cow-direnv-unsafe",
+            src_path,
+            "--name",
+            "cow-direnv",
+        ],
+    );
+
+    assert_eq!(ws["name"], "cow-direnv");
+    assert_eq!(ws["kind"], "basic");
+    assert_eq!(ws["mode"]["checkout_mode"], "apfs-cow-direnv-unsafe");
+    assert_eq!(ws["mode"]["state"], "ready");
+    assert_eq!(ws["mode"]["initial_source"], src_path);
+
+    let location = ws["location"]["within"]["path"].as_str().unwrap();
+    let loc = Path::new(location);
+    assert!(
+        loc.starts_with(dir.path()),
+        "checkout not under forest: {location}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(loc.join("marker.txt")).expect("marker copied into checkout"),
+        "hello"
+    );
+}
+
 /// The direnv-unsafe mode produces a ready checkout too. The example repo has no
 /// `.envrc`, so `direnv allow` is a no-op and provisioning still succeeds; the
 /// stored `checkout_mode` reflects the chosen mode. (A repo WITH an `.envrc` is

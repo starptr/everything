@@ -262,6 +262,12 @@ enum NewModeArg {
         #[arg(value_name = "ABSOLUTE_PATH")]
         path: String,
     },
+    /// APFS copy-on-write clone of a local dir, then `direnv allow` (pre-approves .envrc; unsafe).
+    ApfsCowDirenvUnsafe {
+        /// Absolute path to the local directory to copy-on-write clone.
+        #[arg(value_name = "ABSOLUTE_PATH")]
+        path: String,
+    },
 }
 
 impl NewModeArg {
@@ -278,6 +284,9 @@ impl NewModeArg {
                 }
             }
             NewModeArg::ApfsCow { path } => NewCheckoutMode::ApfsCow {
+                source_path: AbsolutePath::parse(&path)?,
+            },
+            NewModeArg::ApfsCowDirenvUnsafe { path } => NewCheckoutMode::ApfsCowDirenvUnsafe {
                 source_path: AbsolutePath::parse(&path)?,
             },
         })

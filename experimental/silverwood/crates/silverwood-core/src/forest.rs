@@ -146,6 +146,12 @@ impl Forest {
                 initial_source: source_path.as_str().to_string(),
                 state: CheckoutState::Pending,
             },
+            NewCheckoutMode::ApfsCowDirenvUnsafe { source_path } => {
+                CheckoutMode::ApfsCowDirenvUnsafe {
+                    initial_source: source_path.as_str().to_string(),
+                    state: CheckoutState::Pending,
+                }
+            }
         };
 
         // The location records this forest as the single materialization site.
@@ -419,7 +425,7 @@ fn ensure_dir(path: &Path) -> Result<()> {
 /// Validate a mode's creation preconditions that must reject *before* any document
 /// is persisted. A no-op for modes without one.
 ///
-/// `apfs-cow` requires a native copy-on-write clone, which `clonefile(2)` can only
+/// The apfs-cow modes require a native copy-on-write clone, which `clonefile(2)` can only
 /// perform within one APFS volume — so the source must be an existing directory, and
 /// both it and the forest's checkout location (`working_copies_dir`) must be APFS and
 /// share a volume. Any failure is an [`Error::InvalidSource`] (a hard rejection, not a
@@ -429,24 +435,25 @@ fn precheck_new_mode(mode: &NewCheckoutMode, working_copies_dir: &Path) -> Resul
         NewCheckoutMode::JjColocated { .. } | NewCheckoutMode::JjColocatedDirenvUnsafe { .. } => {
             Ok(())
         }
-        NewCheckoutMode::ApfsCow { source_path } => {
+        NewCheckoutMode::ApfsCow { source_path }
+        | NewCheckoutMode::ApfsCowDirenvUnsafe { source_path } => {
             let src = source_path.as_path();
             if !src.is_dir() {
                 return Err(Error::InvalidSource(format!(
-                    "apfs-cow source {src:?} is not an existing directory"
+                    "apfs copy-on-write source {src:?} is not an existing directory"
                 )));
             }
             for path in [src, working_copies_dir] {
                 if !apfs::is_apfs(path)? {
                     return Err(Error::InvalidSource(format!(
-                        "apfs-cow requires APFS: {path:?} is not on an APFS volume"
+                        "apfs copy-on-write requires APFS: {path:?} is not on an APFS volume"
                     )));
                 }
             }
             if !apfs::same_volume(src, working_copies_dir)? {
                 return Err(Error::InvalidSource(format!(
-                    "apfs-cow requires one APFS volume: source {src:?} and the forest's \
-                     checkout location {working_copies_dir:?} are on different volumes"
+                    "apfs copy-on-write requires one APFS volume: source {src:?} and the \
+                     forest's checkout location {working_copies_dir:?} are on different volumes"
                 )));
             }
             Ok(())

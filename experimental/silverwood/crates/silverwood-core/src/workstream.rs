@@ -64,6 +64,16 @@ pub enum CheckoutMode {
         /// Provisioning state of the clone (core-owned lifecycle).
         state: CheckoutState,
     },
+    /// As [`CheckoutMode::ApfsCow`], but after a successful clone `direnv allow` is run
+    /// on the checkout so its `.envrc` is pre-approved. "Unsafe": pre-approval lets the
+    /// `.envrc` run arbitrary shell on later direnv loads — the caller opts into trusting
+    /// the copied directory.
+    ApfsCowDirenvUnsafe {
+        /// The absolute local path the checkout was copy-on-write cloned from.
+        initial_source: String,
+        /// Provisioning state of the clone (core-owned lifecycle).
+        state: CheckoutState,
+    },
 }
 
 /// Provisioning state of a per-forest checkout.
@@ -133,6 +143,7 @@ impl CheckoutMode {
             CheckoutMode::JjColocated { .. } => "jj-colocated",
             CheckoutMode::JjColocatedDirenvUnsafe { .. } => "jj-colocated-direnv-unsafe",
             CheckoutMode::ApfsCow { .. } => "apfs-cow",
+            CheckoutMode::ApfsCowDirenvUnsafe { .. } => "apfs-cow-direnv-unsafe",
         }
     }
 
@@ -141,17 +152,19 @@ impl CheckoutMode {
         match self {
             CheckoutMode::JjColocated { state, .. }
             | CheckoutMode::JjColocatedDirenvUnsafe { state, .. }
-            | CheckoutMode::ApfsCow { state, .. } => *state,
+            | CheckoutMode::ApfsCow { state, .. }
+            | CheckoutMode::ApfsCowDirenvUnsafe { state, .. } => *state,
         }
     }
 
-    /// The seed this checkout was created from — an HTTPS url or, for `apfs-cow`, a
-    /// local path (every mode today carries one).
+    /// The seed this checkout was created from — an HTTPS url or, for the apfs-cow
+    /// modes, a local path (every mode today carries one).
     pub fn initial_source(&self) -> &str {
         match self {
             CheckoutMode::JjColocated { initial_source, .. }
             | CheckoutMode::JjColocatedDirenvUnsafe { initial_source, .. }
-            | CheckoutMode::ApfsCow { initial_source, .. } => initial_source,
+            | CheckoutMode::ApfsCow { initial_source, .. }
+            | CheckoutMode::ApfsCowDirenvUnsafe { initial_source, .. } => initial_source,
         }
     }
 }
@@ -378,6 +391,12 @@ pub enum NewCheckoutMode {
         /// The absolute local path to copy-on-write clone.
         source_path: AbsolutePath,
     },
+    /// As [`NewCheckoutMode::ApfsCow`], plus `direnv allow` on the checkout after a
+    /// successful clone (pre-approves its `.envrc`; see [`CheckoutMode`] docs).
+    ApfsCowDirenvUnsafe {
+        /// The absolute local path to copy-on-write clone.
+        source_path: AbsolutePath,
+    },
 }
 
 #[cfg(test)]
@@ -417,6 +436,10 @@ mod tests {
                 state: CheckoutState::Ready,
             },
             CheckoutMode::ApfsCow {
+                initial_source: "/Users/x/repo".into(),
+                state: CheckoutState::Ready,
+            },
+            CheckoutMode::ApfsCowDirenvUnsafe {
                 initial_source: "/Users/x/repo".into(),
                 state: CheckoutState::Ready,
             },

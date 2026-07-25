@@ -135,6 +135,23 @@ fn new_subcommand_structure_mirrors_the_data_model() {
     );
     assert!(stderr.contains("absolute"), "got: {stderr}");
 
+    // The apfs-cow-direnv-unsafe leaf exists with the same seed: `<ABSOLUTE_PATH>`,
+    // absolute-only (its extra `direnv allow` doesn't change the creation contract).
+    let stderr = fails(&dir, &["new", "basic", "apfs-cow-direnv-unsafe"]);
+    assert!(stderr.contains("ABSOLUTE_PATH"), "got: {stderr}");
+    let stderr = fails(
+        &dir,
+        &[
+            "new",
+            "basic",
+            "apfs-cow-direnv-unsafe",
+            "relative/path",
+            "--name",
+            "x",
+        ],
+    );
+    assert!(stderr.contains("absolute"), "got: {stderr}");
+
     // None of the above created anything.
     assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
 }
