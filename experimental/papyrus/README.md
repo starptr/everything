@@ -113,7 +113,14 @@ cd openui
 bun install
 cd client && bun install && cd ..
 
-bun run dev  # Server on 4242, UI on 6969
+bun run dev  # backend on PORT (default 6968), UI (Vite) on CLIENT_PORT (default 6969)
+```
+
+To run a dev instance **alongside a packaged `papyrus`** (which serves on 6969, the same
+port Vite uses in dev), override both ports so nothing collides:
+
+```bash
+PORT=7968 CLIENT_PORT=7969 bun run dev   # then open http://localhost:7969
 ```
 
 ### Testing with the Claude Code Plugin

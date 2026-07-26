@@ -6,11 +6,16 @@ import { useReactFlow } from "@xyflow/react";
 import {
   type CommandNode,
   type Item,
+  type SourceSelection,
+  ABSOLUTE_PATH_VALUE_NAME,
   FALLBACK_SCHEMA,
   defaultDescent,
   nodeAtPath,
   walk,
+  sourceArgIndex,
+  isRequiredMissing,
 } from "./newSchema";
+import { useStore } from "../stores/useStore";
 
 interface NewSessionModalProps {
   open: boolean;
@@ -67,8 +72,17 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
   const [schema, setSchema] = useState<CommandNode>(FALLBACK_SCHEMA);
   const [path, setPath] = useState<string[]>(() => defaultDescent(FALLBACK_SCHEMA));
   const [argValues, setArgValues] = useState<Record<string, string>>({});
+  const [source, setSource] = useState<SourceSelection>({ kind: "path", workstreamId: "" });
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Existing workstreams for the "APFS workstream" source picker. Presentation only —
+  // the reconcile loop keeps this live; the authoritative checkout path is resolved
+  // server-side (`silverwood show`) at submit, so nothing here is trusted as the value.
+  const sessions = useStore((s) => s.sessions);
+  const workstreams = [...sessions.values()]
+    .map((w) => ({ id: w.id, name: w.customName || w.id, cwd: w.cwd, state: w.checkoutState }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
     if (!open) return;
@@ -76,6 +90,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
       setSchema(s);
       setPath(defaultDescent(s));
       setArgValues({});
+      setSource({ kind: "path", workstreamId: "" });
     };
     setName("");
     setError(null);
@@ -109,14 +124,13 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
     const chosen = nodeAtPath(schema, prefix);
     setPath(chosen ? prefix.concat(defaultDescent(chosen)) : prefix);
     setArgValues({});
+    setSource({ kind: "path", workstreamId: "" });
     setError(null);
   };
 
   const items = walk(schema, path);
   const inputs = items.filter((it): it is Extract<Item, { kind: "input" }> => it.kind === "input");
-  const missingRequired = inputs.some(
-    ({ key, arg }) => arg.required && !(argValues[key] ?? "").trim(),
-  );
+  const missingRequired = isRequiredMissing(inputs, argValues, source);
   const canCreate = !!name.trim() && !missingRequired && path.length > 0;
 
   const handleCreate = async () => {
@@ -126,10 +140,21 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
     try {
       const position = viewportCenter();
       const args = inputs.map(({ key }) => (argValues[key] ?? "").trim());
+      // For an "APFS workstream" source, send the picked workstream id + which arg slot it
+      // fills; the server resolves it to a checkout path via `silverwood show` and
+      // substitutes it into `args`. The slot's text value (if any) is ignored.
+      const idx = sourceArgIndex(inputs);
+      const useWorkstream = source.kind === "workstream" && idx !== null && !!source.workstreamId;
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), path, args, position }),
+        body: JSON.stringify({
+          name: name.trim(),
+          path,
+          args,
+          position,
+          ...(useWorkstream ? { source: { argIndex: idx, workstreamId: source.workstreamId } } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create workstream");
@@ -210,22 +235,92 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                       (() => {
                         const cfg = fieldConfig(item.arg.value_name);
                         const Icon = cfg.icon;
+                        // apfs-cow modes: let the source be a typed path OR an existing
+                        // workstream (resolved to its checkout server-side on submit).
+                        const isApfsSource = item.arg.value_name === ABSOLUTE_PATH_VALUE_NAME;
+                        const pickWorkstream = isApfsSource && source.kind === "workstream";
+                        const selectedWs = workstreams.find((w) => w.id === source.workstreamId);
                         return (
                           <div className="space-y-2" key={`arg-${item.key}`}>
                             <label className="text-xs text-zinc-500 flex items-center gap-1.5">
                               <Icon className="w-3 h-3" />
-                              {cfg.label}
+                              {isApfsSource ? "Source" : cfg.label}
                             </label>
-                            <input
-                              type="text"
-                              value={argValues[item.key] ?? ""}
-                              onChange={(e) =>
-                                setArgValues((prev) => ({ ...prev, [item.key]: e.target.value }))
-                              }
-                              placeholder={cfg.placeholder}
-                              className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors font-mono"
-                            />
-                            {item.arg.help && (
+
+                            {isApfsSource && (
+                              <div
+                                role="radiogroup"
+                                aria-label="Source type"
+                                className="inline-flex rounded-md border border-border overflow-hidden"
+                              >
+                                {(
+                                  [
+                                    ["path", "Absolute path"],
+                                    ["workstream", "APFS workstream"],
+                                  ] as const
+                                ).map(([k, lbl], i) => (
+                                  <button
+                                    key={k}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={source.kind === k}
+                                    onClick={() => setSource((s) => ({ ...s, kind: k }))}
+                                    className={`px-3 py-1.5 text-xs transition-colors ${
+                                      i > 0 ? "border-l border-border" : ""
+                                    } ${
+                                      source.kind === k
+                                        ? "bg-surface-active text-white"
+                                        : "text-zinc-400 hover:bg-white/5"
+                                    }`}
+                                  >
+                                    {lbl}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {pickWorkstream ? (
+                              workstreams.length === 0 ? (
+                                <p className="text-[10px] text-zinc-600">No workstreams yet.</p>
+                              ) : (
+                                <>
+                                  <select
+                                    value={source.workstreamId}
+                                    onChange={(e) =>
+                                      setSource((s) => ({ ...s, workstreamId: e.target.value }))
+                                    }
+                                    className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                                  >
+                                    <option value="" disabled>
+                                      Select a workstream…
+                                    </option>
+                                    {workstreams.map((w) => (
+                                      <option key={w.id} value={w.id}>
+                                        {w.name}
+                                        {w.state && w.state !== "ready" ? ` (${w.state})` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {selectedWs?.cwd && (
+                                    <p className="text-[10px] text-zinc-600 font-mono break-all">
+                                      {selectedWs.cwd}
+                                    </p>
+                                  )}
+                                </>
+                              )
+                            ) : (
+                              <input
+                                type="text"
+                                value={argValues[item.key] ?? ""}
+                                onChange={(e) =>
+                                  setArgValues((prev) => ({ ...prev, [item.key]: e.target.value }))
+                                }
+                                placeholder={cfg.placeholder}
+                                className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors font-mono"
+                              />
+                            )}
+
+                            {item.arg.help && !pickWorkstream && (
                               <p className="text-[10px] text-zinc-600">{item.arg.help}</p>
                             )}
                           </div>

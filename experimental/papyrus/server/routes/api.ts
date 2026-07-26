@@ -189,14 +189,31 @@ async function recordFreshSession(
 // its Claude Code terminal. Blocks on the clone; the node comes up ready.
 apiRoutes.post("/sessions", async (c) => {
   const body = await c.req.json();
-  const { name, path, args, position } = body;
+  const { name, path, args, position, source } = body;
   if (!name || !Array.isArray(path) || path.length === 0) {
     return c.json({ error: "name and a checkout path are required" }, 400);
   }
 
+  // A positional may reference an existing workstream instead of a literal value
+  // (e.g. an apfs-cow source). silverwood only takes a filesystem path, and papyrus is
+  // stateless, so resolve the workstream's checkout path *now* from live silverwood
+  // (`show`) rather than trusting a client-cached value, then pass it verbatim.
+  const argList = Array.isArray(args) ? [...args] : [];
+  if (source && Number.isInteger(source.argIndex) && source.argIndex >= 0) {
+    let srcWs: sw.Workstream;
+    try {
+      srcWs = await sw.get(source.workstreamId);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 400);
+    }
+    const srcPath = sw.checkoutLocation(srcWs);
+    if (!srcPath) return c.json({ error: "selected workstream has no checkout path" }, 400);
+    argList[source.argIndex] = srcPath;
+  }
+
   let ws: sw.Workstream;
   try {
-    ws = await sw.create({ name, path, args: Array.isArray(args) ? args : [] });
+    ws = await sw.create({ name, path, args: argList });
   } catch (e: any) {
     logError(`\x1b[38;5;141m[create]\x1b[0m ${e.message}`);
     return c.json({ error: e.message }, 400);

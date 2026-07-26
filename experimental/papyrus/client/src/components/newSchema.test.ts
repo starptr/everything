@@ -2,10 +2,14 @@ import { describe, test, expect } from "bun:test";
 import {
   type CommandNode,
   type Item,
+  type InputItem,
+  type SourceSelection,
   FALLBACK_SCHEMA,
   defaultDescent,
   nodeAtPath,
   walk,
+  sourceArgIndex,
+  isRequiredMissing,
 } from "./newSchema";
 
 // A two-mode tree with distinct positional shapes, standing in for `new-schema`.
@@ -80,5 +84,42 @@ describe("newSchema tree helpers", () => {
       "jj-colocated",
     ]);
     expect(inputs(items)[0].arg.value_name).toBe("SOURCE_HTTPS_URL");
+  });
+});
+
+describe("apfs-cow source selection helpers", () => {
+  const apfsInputs = (): InputItem[] => inputs(walk(SCHEMA, ["basic", "apfs-cow"]));
+  const jjInputs = (): InputItem[] => inputs(walk(SCHEMA, ["basic", "jj-colocated"]));
+  const path: SourceSelection = { kind: "path", workstreamId: "" };
+  const wsUnset: SourceSelection = { kind: "workstream", workstreamId: "" };
+  const wsSet: SourceSelection = { kind: "workstream", workstreamId: "ws-123" };
+
+  test("sourceArgIndex finds the ABSOLUTE_PATH slot, null when absent", () => {
+    expect(sourceArgIndex(apfsInputs())).toBe(0);
+    expect(sourceArgIndex(jjInputs())).toBeNull();
+  });
+
+  test("path mode: required missing until the text value is filled", () => {
+    const ins = apfsInputs();
+    const key = ins[0].key;
+    expect(isRequiredMissing(ins, {}, path)).toBe(true);
+    expect(isRequiredMissing(ins, { [key]: "  " }, path)).toBe(true);
+    expect(isRequiredMissing(ins, { [key]: "/abs/path" }, path)).toBe(false);
+  });
+
+  test("workstream mode: satisfied by a picked id, ignores the text value", () => {
+    const ins = apfsInputs();
+    const key = ins[0].key;
+    // No workstream picked -> missing, even if a stale text value lingers.
+    expect(isRequiredMissing(ins, { [key]: "/typed/but/ignored" }, wsUnset)).toBe(true);
+    // Picked -> satisfied, even with no text value.
+    expect(isRequiredMissing(ins, {}, wsSet)).toBe(false);
+  });
+
+  test("workstream mode does not affect non-ABSOLUTE_PATH positionals", () => {
+    const ins = jjInputs();
+    // A jj leaf's SOURCE_HTTPS_URL still requires its own text value regardless of source.
+    expect(isRequiredMissing(ins, {}, wsSet)).toBe(true);
+    expect(isRequiredMissing(ins, { [ins[0].key]: "https://x/y" }, wsSet)).toBe(false);
   });
 });

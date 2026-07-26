@@ -50,6 +50,42 @@ export type Item =
   | { kind: "select"; depth: number; node: CommandNode; selected: string }
   | { kind: "input"; key: string; arg: ArgInfo };
 
+export type InputItem = Extract<Item, { kind: "input" }>;
+
+// The clap value_name of the apfs-cow modes' source positional. Its input can be filled
+// from a literal absolute path OR by resolving an existing workstream's checkout.
+export const ABSOLUTE_PATH_VALUE_NAME = "ABSOLUTE_PATH";
+
+// How the apfs-cow source positional is being supplied: a typed path, or an existing
+// workstream (resolved server-side to its checkout path at submit).
+export interface SourceSelection {
+  kind: "path" | "workstream";
+  workstreamId: string;
+}
+
+// The index (within the submitted `args` order) of the ABSOLUTE_PATH positional, or null
+// if this leaf has none. Used to tell the server which arg slot to fill from a workstream.
+export function sourceArgIndex(inputs: InputItem[]): number | null {
+  const i = inputs.findIndex((it) => it.arg.value_name === ABSOLUTE_PATH_VALUE_NAME);
+  return i === -1 ? null : i;
+}
+
+// Whether any required positional is unsatisfied. Same as a plain non-empty check, except
+// the ABSOLUTE_PATH input in `workstream` mode is satisfied by a picked workstream id
+// (its text value is ignored — the server substitutes the resolved checkout path).
+export function isRequiredMissing(
+  inputs: InputItem[],
+  argValues: Record<string, string>,
+  source: SourceSelection,
+): boolean {
+  return inputs.some(({ key, arg }) => {
+    if (arg.value_name === ABSOLUTE_PATH_VALUE_NAME && source.kind === "workstream") {
+      return !source.workstreamId;
+    }
+    return arg.required && !(argValues[key] ?? "").trim();
+  });
+}
+
 // The first-child descent from a node down to a leaf — the default selection path
 // (a list of chosen subcommand names, one per level).
 export function defaultDescent(node: CommandNode): string[] {

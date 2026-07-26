@@ -3,6 +3,16 @@
 Papyrus is a canvas GUI for silverwood workstreams (Bun/Hono server + React/Vite/xterm
 client), packaged with bun2nix. See `README.md` / `VENDOR.md` for background.
 
+## Running a dev instance
+
+The developer typically has a packaged `papyrus` running — it serves on port **6969** by
+default (`bin/papyrus.ts`). A plain `bun run dev` puts Vite on 6969 too (and the backend on
+6968), so it would collide. When you start a dev server to try a change, **always pass
+non-default ports** so that instance keeps working — e.g.
+`PORT=7968 CLIENT_PORT=7969 bun run dev` (open `http://localhost:7969`). `PORT` is the
+backend (`server/config.ts`, default 6968); `CLIENT_PORT` is Vite's port
+(`client/vite.config.ts`, default 6969), which proxies `/api` + `/ws` to `PORT`.
+
 ## Testing — ownership rule (read before touching tests)
 
 Tests split by owner (full detail in `TESTING.md`):
