@@ -7,6 +7,9 @@ import react from "@vitejs/plugin-react";
 const serverPort = Number(process.env.PORT) || 6968;
 const clientPort = Number(process.env.CLIENT_PORT) || 6969;
 
+// Only `/api` is proxied. The terminal WebSocket is NOT: Vite's ws proxy does not relay
+// frames to a Bun.serve target (blank panes), so the client connects the terminal ws
+// directly to the backend port (from /api/config) — see components/terminalWs.ts.
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -15,10 +18,6 @@ export default defineConfig({
       "/api": {
         target: `http://localhost:${serverPort}`,
         changeOrigin: true,
-      },
-      "/ws": {
-        target: `ws://localhost:${serverPort}`,
-        ws: true,
       },
     },
   },

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Agent, Session } from "../types";
 import { randomUUID } from "crypto";
+import { PORT } from "../config";
 import {
   sessions,
   spawnTerminal,
@@ -29,6 +30,10 @@ apiRoutes.get("/config", (c) => {
   return c.json({
     launchCwd: process.env.LAUNCH_CWD || process.cwd(),
     forest: process.env.SILVERWOOD_FOREST_PATH || null,
+    // The backend's listen port, so the client can open the terminal WebSocket
+    // directly (in dev the page is served by Vite on a different port, whose WS
+    // proxy does not relay frames; in prod this equals the page's own port).
+    serverPort: PORT,
   });
 });
 

@@ -55,6 +55,10 @@ interface AppState {
   // Config
   launchCwd: string;
   setLaunchCwd: (cwd: string) => void;
+  // Backend listen port (from /api/config), used to open the terminal WebSocket
+  // directly at the backend rather than via the page origin. Null until config loads.
+  serverPort: number | null;
+  setServerPort: (port: number | null) => void;
 
   // Agents
   agents: Agent[];
@@ -90,6 +94,8 @@ export const useStore = create<AppState>((set) => ({
   // Config
   launchCwd: "",
   setLaunchCwd: (cwd) => set({ launchCwd: cwd }),
+  serverPort: null,
+  setServerPort: (port) => set({ serverPort: port }),
 
   // Agents
   agents: [],

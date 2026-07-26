@@ -29,6 +29,7 @@ function AppContent() {
     setNodes: setStoreNodes,
     setAgents,
     setLaunchCwd,
+    setServerPort,
     setSelectedNodeId,
     setSidebarOpen,
     agents,
@@ -58,14 +59,17 @@ function AppContent() {
   useEffect(() => {
     fetch("/api/config")
       .then((res) => res.json())
-      .then((config) => setLaunchCwd(config.launchCwd))
+      .then((config) => {
+        setLaunchCwd(config.launchCwd);
+        setServerPort(config.serverPort ?? null);
+      })
       .catch(console.error);
 
     fetch("/api/agents")
       .then((res) => res.json())
       .then((agents) => setAgents(agents))
       .catch(console.error);
-  }, [setAgents, setLaunchCwd]);
+  }, [setAgents, setLaunchCwd, setServerPort]);
 
   // Reconcile the client's view from silverwood every second. GET /api/state is a
   // fresh projection (workstreams + per-session tabs + lock), so nodes/tabs/names

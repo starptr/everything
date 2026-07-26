@@ -3,6 +3,8 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { useStore } from "../stores/useStore";
+import { terminalWsUrl } from "./terminalWs";
 
 interface TerminalProps {
   sessionId: string;
@@ -15,6 +17,7 @@ export function Terminal({ sessionId, color }: TerminalProps) {
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const mountedRef = useRef(false);
+  const serverPort = useStore((s) => s.serverPort);
 
   useEffect(() => {
     if (!terminalRef.current || !sessionId) return;
@@ -80,9 +83,10 @@ export function Terminal({ sessionId, color }: TerminalProps) {
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Connect WebSocket with small delay to allow session to be ready
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws?sessionId=${sessionId}`;
+    // Connect WebSocket with small delay to allow session to be ready. Target the
+    // backend port directly (from /api/config) so dev bypasses Vite's WS proxy, which
+    // does not relay frames; falls back to the page origin (prod = same port).
+    const wsUrl = terminalWsUrl(window.location, serverPort, sessionId);
 
     let ws: WebSocket | null = null;
     let isFirstMessage = true;
@@ -158,7 +162,7 @@ export function Terminal({ sessionId, color }: TerminalProps) {
       ws?.close();
       term.dispose();
     };
-  }, [sessionId, color]);
+  }, [sessionId, color, serverPort]);
 
   return (
     <div
