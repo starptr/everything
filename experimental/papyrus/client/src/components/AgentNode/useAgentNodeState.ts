@@ -38,7 +38,7 @@ export function useAgentNodeState(
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
-  const handleDelete = async () => {
+  const handleArchive = async () => {
     const sessionId = session?.sessionId || nodeData.sessionId;
     if (sessionId) {
       await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
@@ -56,7 +56,7 @@ export function useAgentNodeState(
   return {
     contextMenu,
     handleContextMenu,
-    handleDelete,
+    handleArchive,
     closeContextMenu,
   };
 }
