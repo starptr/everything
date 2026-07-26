@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -23,6 +23,7 @@ import {
   GitBranch,
 } from "lucide-react";
 import { useStore, SessionTab } from "../stores/useStore";
+import { type PendingOptimism, shouldDropOptimism } from "./sessionOptimism";
 import { Terminal } from "./Terminal";
 import { NewSessionMenu } from "./NewSessionMenu";
 import { useResizablePane } from "./useResizablePane";
@@ -84,7 +85,10 @@ export function Sidebar() {
   const [editSessionName, setEditSessionName] = useState("");
   // Optimism: an action's server-confirmed result, shown until the ~1s reconcile
   // reflects it (mount-from-response). { sessionId -> partial tab override }.
-  const [pending, setPending] = useState<Record<string, Partial<SessionTab>>>({});
+  // Optimistic tab overrides, each stamped with the reconcile generation it was set at (so a
+  // `connected` optimism can be retired even if the server never echoes it — the fast-fail race).
+  const [pending, setPending] = useState<Record<string, PendingOptimism>>({});
+  const reconcileSeqRef = useRef(0);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The "+" button's rect while the variant picker is open (null = closed).
@@ -95,7 +99,7 @@ export function Sidebar() {
   // The tab list: the server projection, with local optimism merged over it.
   const tabs: SessionTab[] = (() => {
     const byId = new Map<string, SessionTab>(storeTabs.map((t) => [t.sessionId, { ...t }]));
-    for (const [sid, ov] of Object.entries(pending)) {
+    for (const [sid, { ov }] of Object.entries(pending)) {
       const ex = byId.get(sid);
       if (ex) byId.set(sid, { ...ex, ...ov });
       else
@@ -144,20 +148,20 @@ export function Sidebar() {
     }
   }, [tabs, editingSessionId]);
 
-  // Drop optimism once the reconcile agrees (server truth caught up).
+  // Each reconcile bumps the generation counter; drop optimism once the server agrees, or
+  // (for a `connected` optimism) once ≥2 reconciles have elapsed since it was set — so a
+  // resume that fails before the server ever reports `connected:true` still unsticks the tab.
   useEffect(() => {
+    reconcileSeqRef.current += 1;
     setPending((p) => {
       const keys = Object.keys(p);
       if (keys.length === 0) return p;
+      const seqNow = reconcileSeqRef.current;
       let changed = false;
-      const next: Record<string, Partial<SessionTab>> = {};
+      const next: Record<string, PendingOptimism> = {};
       for (const sid of keys) {
         const t = storeTabs.find((x) => x.sessionId === sid);
-        const settled =
-          t &&
-          (p[sid].connected === undefined || t.connected === p[sid].connected) &&
-          (p[sid].name === undefined || t.name === p[sid].name);
-        if (settled) changed = true;
+        if (shouldDropOptimism(p[sid], t, seqNow)) changed = true;
         else next[sid] = p[sid];
       }
       return changed ? next : p;
@@ -192,7 +196,10 @@ export function Sidebar() {
         setConnectError(data.error || "Failed to connect");
         return;
       }
-      setPending((p) => ({ ...p, [data.sessionId]: { connected: true } }));
+      setPending((p) => ({
+        ...p,
+        [data.sessionId]: { ov: { connected: true }, seq: reconcileSeqRef.current },
+      }));
       setActiveTabId(data.sessionId);
     } catch (e: any) {
       setConnectError(e.message);
@@ -221,7 +228,10 @@ export function Sidebar() {
       const shell = variant === "shell";
       setPending((p) => ({
         ...p,
-        [data.sessionId]: { connected: true, ...(shell ? { name: "shell", kind: "shell" } : {}) },
+        [data.sessionId]: {
+          ov: { connected: true, ...(shell ? { name: "shell", kind: "shell" } : {}) },
+          seq: reconcileSeqRef.current,
+        },
       }));
       setActiveTabId(data.sessionId);
     } catch (e: any) {
@@ -564,7 +574,10 @@ export function Sidebar() {
                       if (!sid) return;
                       const v = e.target.value;
                       setEditSessionName(v);
-                      setPending((p) => ({ ...p, [sid]: { ...p[sid], name: v } }));
+                      setPending((p) => ({
+                        ...p,
+                        [sid]: { ov: { ...p[sid]?.ov, name: v }, seq: reconcileSeqRef.current },
+                      }));
                       if (selectedNodeId && v.trim()) {
                         fetch(`/api/sessions/${selectedNodeId}/sessions/${sid}`, {
                           method: "PATCH",
