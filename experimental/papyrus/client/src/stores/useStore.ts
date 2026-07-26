@@ -1,5 +1,21 @@
 import { create } from "zustand";
 import type { Node } from "@xyflow/react";
+import {
+  type ThemeName,
+  type ThemePreference,
+  loadThemePreference,
+  resolveTheme,
+  saveThemePreference,
+  systemPrefersDark,
+} from "../theme";
+
+// Resolved theme to start from: trust the pre-paint script's `data-theme` (set in
+// index.html before first paint), falling back to resolving the stored preference.
+function initialResolvedTheme(pref: ThemePreference): ThemeName {
+  const fromDom =
+    typeof document !== "undefined" ? document.documentElement.dataset.theme : undefined;
+  return fromDom || resolveTheme(pref, systemPrefersDark());
+}
 
 export interface Agent {
   id: string;
@@ -88,6 +104,12 @@ interface AppState {
   setNewSessionModalOpen: (open: boolean) => void;
   newSessionForNodeId: string | null;
   setNewSessionForNodeId: (nodeId: string | null) => void;
+
+  // Theme
+  themePreference: ThemePreference;
+  setThemePreference: (pref: ThemePreference) => void;
+  resolvedTheme: ThemeName;
+  setResolvedTheme: (name: ThemeName) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -151,4 +173,14 @@ export const useStore = create<AppState>((set) => ({
   setNewSessionModalOpen: (open) => set({ newSessionModalOpen: open }),
   newSessionForNodeId: null,
   setNewSessionForNodeId: (nodeId) => set({ newSessionForNodeId: nodeId }),
+
+  // Theme: preference persists to localStorage; `resolvedTheme` is the concrete theme
+  // name (light/dark) that useThemeController applies to <html> and keeps in sync.
+  themePreference: loadThemePreference(),
+  setThemePreference: (pref) => {
+    saveThemePreference(pref);
+    set({ themePreference: pref });
+  },
+  resolvedTheme: initialResolvedTheme(loadThemePreference()),
+  setResolvedTheme: (name) => set({ resolvedTheme: name }),
 }));

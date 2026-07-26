@@ -53,11 +53,11 @@ export function AgentNodeCard({
   return (
     <div
       className={`relative w-[220px] rounded-lg transition-all duration-300 cursor-pointer ${
-        selected ? "ring-1 ring-white/20" : ""
+        selected ? "ring-1 ring-content/20" : ""
       }`}
       style={{
-        backgroundColor: "#1a1a1a",
-        border: connected ? `1px solid ${indicator.color}40` : "1px solid #2a2a2a",
+        backgroundColor: "rgb(var(--color-surface))",
+        border: connected ? `1px solid ${indicator.color}40` : "1px solid rgb(var(--color-border))",
         boxShadow: selected
           ? "0 8px 24px rgba(0, 0, 0, 0.6)"
           : "0 4px 12px rgba(0, 0, 0, 0.4)",
@@ -84,8 +84,8 @@ export function AgentNodeCard({
             <Icon className="w-5 h-5" style={{ color: displayColor }} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-white truncate leading-tight">{displayName}</h3>
-            <p className="text-[10px] text-zinc-500">{agentId}</p>
+            <h3 className="text-sm font-semibold text-content truncate leading-tight">{displayName}</h3>
+            <p className="text-[10px] text-content-subtle">{agentId}</p>
           </div>
         </div>
 
@@ -106,8 +106,8 @@ export function AgentNodeCard({
           <div className="mt-2 space-y-1">
             {dirName && (
               <div className="flex items-center gap-1.5">
-                <Folder className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-                <span className="text-[11px] text-zinc-400 font-mono truncate">{dirName}</span>
+                <Folder className="w-3.5 h-3.5 text-content-subtle flex-shrink-0" />
+                <span className="text-[11px] text-content-muted font-mono truncate">{dirName}</span>
               </div>
             )}
             {gitBranch && (

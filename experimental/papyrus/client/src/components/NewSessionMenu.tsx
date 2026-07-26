@@ -95,8 +95,8 @@ export function NewSessionMenu({ open, anchor, agents, onClose, onPick }: NewSes
 
   return createPortal(
     <div
-      className="new-session-menu fixed z-[9999] rounded-lg border shadow-xl py-1"
-      style={{ left, top, width: MENU_WIDTH, backgroundColor: "#262626", borderColor: "#333" }}
+      className="new-session-menu fixed z-[9999] rounded-lg border border-popover-border bg-popover shadow-xl py-1"
+      style={{ left, top, width: MENU_WIDTH }}
     >
       {items.map((item, i) => {
         const Icon = iconMap[item.icon] || Cpu;
@@ -107,15 +107,15 @@ export function NewSessionMenu({ open, anchor, agents, onClose, onPick }: NewSes
               onPick(item.variant);
               onClose();
             }}
-            className="w-full px-3 py-2 text-left hover:bg-white/5 flex items-start gap-2.5 transition-colors"
+            className="w-full px-3 py-2 text-left hover:bg-surface-active flex items-start gap-2.5 transition-colors"
           >
             <Icon
               className="w-4 h-4 flex-shrink-0 mt-0.5"
-              style={{ color: item.color || "#a1a1aa" }}
+              style={{ color: item.color || "rgb(var(--color-content-muted))" }}
             />
             <div className="min-w-0">
-              <div className="text-xs text-white">{item.label}</div>
-              <div className="text-[10px] text-zinc-500 truncate">{item.description}</div>
+              <div className="text-xs text-content">{item.label}</div>
+              <div className="text-[10px] text-content-subtle truncate">{item.description}</div>
             </div>
           </button>
         );

@@ -187,10 +187,10 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
               <div className="rounded-xl bg-surface border border-border shadow-2xl overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                  <h2 className="text-base font-semibold text-white">New Workstream</h2>
+                  <h2 className="text-base font-semibold text-content">New Workstream</h2>
                   <button
                     onClick={onClose}
-                    className="w-7 h-7 rounded flex items-center justify-center text-zinc-500 hover:text-white hover:bg-surface-active transition-colors"
+                    className="w-7 h-7 rounded flex items-center justify-center text-content-subtle hover:text-content hover:bg-surface-active transition-colors"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -199,14 +199,14 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                 {/* Body */}
                 <div className="p-5 space-y-4">
                   <div className="space-y-2">
-                    <label className="text-xs text-zinc-500">Name</label>
+                    <label className="text-xs text-content-subtle">Name</label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="auth-refactor"
                       autoFocus
-                      className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm placeholder-content-faint focus:outline-none focus:border-border-strong transition-colors"
                     />
                   </div>
 
@@ -215,11 +215,11 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                   {items.map((item) =>
                     item.kind === "select" ? (
                       <div className="space-y-2" key={`sel-${item.depth}`}>
-                        <label className="text-xs text-zinc-500">{depthLabel(item.depth)}</label>
+                        <label className="text-xs text-content-subtle">{depthLabel(item.depth)}</label>
                         <select
                           value={item.selected}
                           onChange={(e) => selectAt(item.depth, e.target.value)}
-                          className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                          className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm focus:outline-none focus:border-border-strong transition-colors"
                         >
                           {item.node.subcommands.map((s) => (
                             <option key={s.name} value={s.name}>
@@ -227,7 +227,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                             </option>
                           ))}
                         </select>
-                        <p className="text-[10px] text-zinc-600">
+                        <p className="text-[10px] text-content-faint">
                           {item.node.subcommands.find((s) => s.name === item.selected)?.description}
                         </p>
                       </div>
@@ -242,7 +242,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                         const selectedWs = workstreams.find((w) => w.id === source.workstreamId);
                         return (
                           <div className="space-y-2" key={`arg-${item.key}`}>
-                            <label className="text-xs text-zinc-500 flex items-center gap-1.5">
+                            <label className="text-xs text-content-subtle flex items-center gap-1.5">
                               <Icon className="w-3 h-3" />
                               {isApfsSource ? "Source" : cfg.label}
                             </label>
@@ -269,8 +269,8 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                                       i > 0 ? "border-l border-border" : ""
                                     } ${
                                       source.kind === k
-                                        ? "bg-surface-active text-white"
-                                        : "text-zinc-400 hover:bg-white/5"
+                                        ? "bg-surface-active text-content"
+                                        : "text-content-muted hover:bg-surface-active"
                                     }`}
                                   >
                                     {lbl}
@@ -281,7 +281,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
 
                             {pickWorkstream ? (
                               workstreams.length === 0 ? (
-                                <p className="text-[10px] text-zinc-600">No workstreams yet.</p>
+                                <p className="text-[10px] text-content-faint">No workstreams yet.</p>
                               ) : (
                                 <>
                                   <select
@@ -289,7 +289,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                                     onChange={(e) =>
                                       setSource((s) => ({ ...s, workstreamId: e.target.value }))
                                     }
-                                    className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                                    className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm focus:outline-none focus:border-border-strong transition-colors"
                                   >
                                     <option value="" disabled>
                                       Select a workstream…
@@ -302,7 +302,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                                     ))}
                                   </select>
                                   {selectedWs?.cwd && (
-                                    <p className="text-[10px] text-zinc-600 font-mono break-all">
+                                    <p className="text-[10px] text-content-faint font-mono break-all">
                                       {selectedWs.cwd}
                                     </p>
                                   )}
@@ -316,12 +316,12 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                                   setArgValues((prev) => ({ ...prev, [item.key]: e.target.value }))
                                 }
                                 placeholder={cfg.placeholder}
-                                className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors font-mono"
+                                className="w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm placeholder-content-faint focus:outline-none focus:border-border-strong transition-colors font-mono"
                               />
                             )}
 
                             {item.arg.help && !pickWorkstream && (
-                              <p className="text-[10px] text-zinc-600">{item.arg.help}</p>
+                              <p className="text-[10px] text-content-faint">{item.arg.help}</p>
                             )}
                           </div>
                         );
@@ -341,14 +341,14 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
                 <div className="px-5 py-3 bg-canvas border-t border-border flex justify-end gap-2">
                   <button
                     onClick={onClose}
-                    className="px-3 py-1.5 rounded-md text-sm text-zinc-400 hover:text-white hover:bg-surface-active transition-colors"
+                    className="px-3 py-1.5 rounded-md text-sm text-content-muted hover:text-content hover:bg-surface-active transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleCreate}
                     disabled={isBusy || !canCreate}
-                    className="px-4 py-1.5 rounded-md text-sm font-medium text-canvas bg-white hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+                    className="px-4 py-1.5 rounded-md text-sm font-medium text-inverse-content bg-inverse hover:bg-inverse/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                   >
                     {isBusy ? (
                       <>

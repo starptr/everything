@@ -2,6 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens. Each theme is a named block of semantic color variables (space-
+   separated RGB channels, consumed via `rgb(var(--x) / <alpha-value>)` from
+   tailwind.config.js). `:root` holds the dark defaults; a theme is applied by
+   setting `data-theme="<name>"` on <html>. Add a new theme = one more
+   `:root[data-theme="<name>"]` block. `color-scheme` flips native chrome
+   (scrollbars, form controls, the canvas) to match. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: 15 15 15;
+  --color-canvas-dark: 10 10 10;
+  --color-canvas-light: 26 26 26;
+  --color-canvas-lighter: 37 37 37;
+  --color-surface: 26 26 26;
+  --color-surface-hover: 31 31 31;
+  --color-surface-active: 37 37 37;
+  --color-border: 42 42 42;
+  --color-border-light: 51 51 51;
+  --color-border-strong: 113 113 122;
+  --color-content: 250 250 250;
+  --color-content-muted: 161 161 170;
+  --color-content-subtle: 113 113 122;
+  --color-content-faint: 82 82 91;
+  --color-inverse: 255 255 255;
+  --color-inverse-content: 15 15 15;
+  --color-popover: 38 38 38;
+  --color-popover-border: 51 51 51;
+  --color-dot: 37 37 37;
+  --color-terminal-bg: 13 13 13;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: 255 255 255;
+  --color-canvas-dark: 244 244 245;
+  --color-canvas-light: 250 250 250;
+  --color-canvas-lighter: 244 244 245;
+  --color-surface: 244 244 245;
+  --color-surface-hover: 228 228 231;
+  --color-surface-active: 228 228 231;
+  --color-border: 228 228 231;
+  --color-border-light: 212 212 216;
+  --color-border-strong: 161 161 170;
+  --color-content: 24 24 27;
+  --color-content-muted: 82 82 91;
+  --color-content-subtle: 113 113 122;
+  --color-content-faint: 161 161 170;
+  --color-inverse: 24 24 27;
+  --color-inverse-content: 250 250 250;
+  --color-popover: 255 255 255;
+  --color-popover-border: 228 228 231;
+  --color-dot: 212 212 216;
+  --color-terminal-bg: 250 250 250;
+}
+
 :root {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-synthesis: none;
@@ -19,18 +74,18 @@ html, body {
   padding: 0;
   height: 100%;
   width: 100%;
-  background: #0f0f0f;
-  color: #fafafa;
+  background: rgb(var(--color-canvas));
+  color: rgb(var(--color-content));
   overflow: hidden;
 }
 
 /* React Flow canvas */
 .react-flow {
-  background: #0f0f0f !important;
+  background: rgb(var(--color-canvas)) !important;
 }
 
 .react-flow__background {
-  background-color: #0f0f0f !important;
+  background-color: rgb(var(--color-canvas)) !important;
 }
 
 .react-flow__pane {
@@ -54,8 +109,8 @@ html, body {
 }
 
 .react-flow__controls {
-  background: #1a1a1a !important;
-  border: 1px solid #2a2a2a !important;
+  background: rgb(var(--color-surface)) !important;
+  border: 1px solid rgb(var(--color-border)) !important;
   border-radius: 8px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
   overflow: hidden;
@@ -64,8 +119,8 @@ html, body {
 .react-flow__controls-button {
   background: transparent !important;
   border: none !important;
-  border-bottom: 1px solid #2a2a2a !important;
-  color: #666 !important;
+  border-bottom: 1px solid rgb(var(--color-border)) !important;
+  color: rgb(var(--color-content-subtle)) !important;
   width: 28px !important;
   height: 28px !important;
   padding: 6px !important;
@@ -76,8 +131,8 @@ html, body {
 }
 
 .react-flow__controls-button:hover {
-  background: #252525 !important;
-  color: #fff !important;
+  background: rgb(var(--color-surface-active)) !important;
+  color: rgb(var(--color-content)) !important;
 }
 
 .react-flow__controls-button svg {
@@ -87,8 +142,8 @@ html, body {
 }
 
 .react-flow__minimap {
-  background: #1a1a1a !important;
-  border: 1px solid #2a2a2a !important;
+  background: rgb(var(--color-surface)) !important;
+  border: 1px solid rgb(var(--color-border)) !important;
   border-radius: 8px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
@@ -116,12 +171,12 @@ html, body {
 }
 
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: #333;
+  background: rgb(var(--color-border-light));
   border-radius: 3px;
 }
 
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  background: rgb(var(--color-border-strong));
 }
 
 /* Custom scrollbar */
@@ -135,12 +190,12 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: rgb(var(--color-border-light));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  background: rgb(var(--color-border-strong));
 }
 
 /* Animations */

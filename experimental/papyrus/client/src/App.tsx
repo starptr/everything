@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ReactFlow,
   Background,
@@ -18,6 +18,7 @@ import { Sidebar } from "./components/Sidebar";
 import { NewSessionModal } from "./components/NewSessionModal";
 import { Header } from "./components/Header";
 import { CanvasControls } from "./components/CanvasControls";
+import { useThemeController } from "./hooks/useThemeController";
 
 const nodeTypes = {
   agent: AgentNode,
@@ -36,6 +37,18 @@ function AppContent() {
     addAgentModalOpen,
     setAddAgentModalOpen,
   } = useStore();
+
+  useThemeController();
+
+  // The canvas dot-grid color comes from React Flow as an SVG `fill` attribute, which
+  // can't reference a CSS var — so read the resolved `--color-dot` token instead, and
+  // recompute whenever the active theme changes.
+  const resolvedTheme = useStore((s) => s.resolvedTheme);
+  const dotColor = useMemo(() => {
+    if (typeof window === "undefined") return "rgb(37 37 37)";
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--color-dot").trim();
+    return v ? `rgb(${v})` : "rgb(37 37 37)";
+  }, [resolvedTheme]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(storeNodes);
   const positionUpdateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -269,7 +282,7 @@ function AppContent() {
             variant={BackgroundVariant.Dots}
             gap={24}
             size={1}
-            color="#252525"
+            color={dotColor}
           />
           <Controls
             showInteractive={false}
@@ -283,15 +296,15 @@ function AppContent() {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center pointer-events-auto">
               <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center mx-auto mb-4">
-                <Plus className="w-8 h-8 text-zinc-600" />
+                <Plus className="w-8 h-8 text-content-faint" />
               </div>
-              <h2 className="text-lg font-medium text-zinc-300 mb-2">No agents yet</h2>
-              <p className="text-sm text-zinc-500 mb-4 max-w-xs">
+              <h2 className="text-lg font-medium text-content mb-2">No agents yet</h2>
+              <p className="text-sm text-content-subtle mb-4 max-w-xs">
                 Spawn your first AI agent to get started
               </p>
               <button
                 onClick={() => setAddAgentModalOpen(true)}
-                className="px-4 py-2 rounded-lg bg-white text-canvas font-medium text-sm hover:bg-zinc-100 transition-colors"
+                className="px-4 py-2 rounded-lg bg-inverse text-inverse-content font-medium text-sm hover:bg-inverse/90 transition-colors"
               >
                 Create Agent
               </button>

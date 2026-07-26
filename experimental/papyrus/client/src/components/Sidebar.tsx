@@ -332,7 +332,7 @@ export function Sidebar() {
                 style={{ backgroundColor: displayColor }}
               />
               <div className="flex-1 min-w-0">
-                <h2 className="text-sm font-medium text-white truncate">
+                <h2 className="text-sm font-medium text-content truncate">
                   {session.customName || session.agentName}
                 </h2>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -340,7 +340,7 @@ export function Sidebar() {
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: headerStatus.color }}
                   />
-                  <span className="text-[10px] text-zinc-500">{headerStatus.label}</span>
+                  <span className="text-[10px] text-content-subtle">{headerStatus.label}</span>
                 </div>
               </div>
 
@@ -349,15 +349,15 @@ export function Sidebar() {
                   onClick={() => setIsEditing(!isEditing)}
                   className={`w-7 h-7 rounded flex items-center justify-center transition-colors ${
                     isEditing
-                      ? "text-white bg-surface-active"
-                      : "text-zinc-500 hover:text-white hover:bg-surface-active"
+                      ? "text-content bg-surface-active"
+                      : "text-content-subtle hover:text-content hover:bg-surface-active"
                   }`}
                 >
                   <Edit3 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleClose}
-                  className="w-7 h-7 rounded flex items-center justify-center text-zinc-500 hover:text-white hover:bg-surface-active transition-colors"
+                  className="w-7 h-7 rounded flex items-center justify-center text-content-subtle hover:text-content hover:bg-surface-active transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -376,7 +376,7 @@ export function Sidebar() {
               >
                 <div className="p-4 space-y-4">
                   <div>
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Name</label>
+                    <label className="text-[10px] text-content-subtle uppercase tracking-wider">Name</label>
                     <input
                       type="text"
                       value={editName}
@@ -398,12 +398,12 @@ export function Sidebar() {
                           }).catch(console.error);
                         }
                       }}
-                      className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                      className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm focus:outline-none focus:border-border-strong transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Color</label>
+                    <label className="text-[10px] text-content-subtle uppercase tracking-wider">Color</label>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {presetColors.map((color) => (
                         <button
@@ -426,7 +426,7 @@ export function Sidebar() {
                           }}
                           className={`w-7 h-7 rounded-md transition-all ${
                             editColor === color
-                              ? "ring-2 ring-white ring-offset-2 ring-offset-canvas-dark scale-110"
+                              ? "ring-2 ring-content ring-offset-2 ring-offset-canvas-dark scale-110"
                               : "hover:scale-110"
                           }`}
                           style={{ backgroundColor: color }}
@@ -436,7 +436,7 @@ export function Sidebar() {
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Icon</label>
+                    <label className="text-[10px] text-content-subtle uppercase tracking-wider">Icon</label>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {iconOptions.map(({ id, icon: IconComponent }) => (
                         <button
@@ -451,14 +451,14 @@ export function Sidebar() {
                           }}
                           className={`w-9 h-9 rounded-md transition-all flex items-center justify-center ${
                             editIcon === id
-                              ? "ring-2 ring-white ring-offset-2 ring-offset-canvas-dark scale-110 bg-white/10"
-                              : "hover:scale-110 hover:bg-white/5 bg-canvas"
+                              ? "ring-2 ring-content ring-offset-2 ring-offset-canvas-dark scale-110 bg-content/10"
+                              : "hover:scale-110 hover:bg-content/5 bg-canvas"
                           }`}
-                          style={{ borderColor: editIcon === id ? editColor : "#333", borderWidth: "1px" }}
+                          style={{ borderColor: editIcon === id ? editColor : "rgb(var(--color-border-light))", borderWidth: "1px" }}
                         >
                           <IconComponent
                             className="w-4 h-4"
-                            style={{ color: editIcon === id ? editColor : "#888" }}
+                            style={{ color: editIcon === id ? editColor : "rgb(var(--color-content-subtle))" }}
                           />
                         </button>
                       ))}
@@ -466,7 +466,7 @@ export function Sidebar() {
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Notes</label>
+                    <label className="text-[10px] text-content-subtle uppercase tracking-wider">Notes</label>
                     <textarea
                       value={editNotes}
                       onChange={(e) => setEditNotes(e.target.value)}
@@ -482,7 +482,7 @@ export function Sidebar() {
                       }}
                       placeholder="Add notes..."
                       rows={2}
-                      className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors resize-none"
+                      className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm placeholder-content-faint focus:outline-none focus:border-border-strong transition-colors resize-none"
                     />
                   </div>
                 </div>
@@ -502,8 +502,8 @@ export function Sidebar() {
                   key={t.sessionId}
                   className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-t-md text-xs whitespace-nowrap transition-colors ${
                     isActive
-                      ? "bg-[#0d0d0d] text-white border-b-2 border-white"
-                      : "text-zinc-400 hover:bg-surface-active"
+                      ? "bg-canvas text-content border-b-2 border-content"
+                      : "text-content-muted hover:bg-surface-active"
                   }`}
                 >
                   <button
@@ -513,7 +513,7 @@ export function Sidebar() {
                       setActiveTabId(t.sessionId);
                     }}
                     title={t.sessionId}
-                    className={`flex items-center gap-1.5 min-w-0 ${isActive ? "" : "hover:text-white"}`}
+                    className={`flex items-center gap-1.5 min-w-0 ${isActive ? "" : "hover:text-content"}`}
                   >
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
                     <span className="max-w-[120px] truncate">{tabLabel(t)}</span>
@@ -533,8 +533,8 @@ export function Sidebar() {
                     title="Rename session"
                     className={`flex-shrink-0 rounded p-0.5 transition-colors ${
                       isEditingTab
-                        ? "text-white bg-surface-active"
-                        : "text-zinc-600 hover:text-white"
+                        ? "text-content bg-surface-active"
+                        : "text-content-faint hover:text-content"
                     }`}
                   >
                     <Edit3 className="w-3 h-3" />
@@ -546,7 +546,7 @@ export function Sidebar() {
               onClick={(e) => setMenuAnchor(e.currentTarget.getBoundingClientRect())}
               disabled={busy}
               title="Start a new session"
-              className="flex items-center justify-center px-2 py-1.5 rounded-t-md text-zinc-400 hover:text-white hover:bg-surface-active transition-colors disabled:opacity-50"
+              className="flex items-center justify-center px-2 py-1.5 rounded-t-md text-content-muted hover:text-content hover:bg-surface-active transition-colors disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -562,7 +562,7 @@ export function Sidebar() {
                 className="flex-shrink-0 overflow-hidden border-b border-border"
               >
                 <div className="p-4">
-                  <label className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                  <label className="text-[10px] text-content-subtle uppercase tracking-wider">
                     Session title
                   </label>
                   <input
@@ -589,7 +589,7 @@ export function Sidebar() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === "Escape") setEditingSessionId(null);
                     }}
-                    className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-white text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                    className="mt-1 w-full px-3 py-2 rounded-md bg-canvas border border-border text-content text-sm focus:outline-none focus:border-border-strong transition-colors"
                   />
                 </div>
               </motion.div>
@@ -601,11 +601,11 @@ export function Sidebar() {
             {!activeTab ? (
               <div className="flex-1 flex items-center justify-center p-6 text-center">
                 <div>
-                  <p className="text-sm text-zinc-400">No sessions yet</p>
+                  <p className="text-sm text-content-muted">No sessions yet</p>
                   <button
                     onClick={(e) => setMenuAnchor(e.currentTarget.getBoundingClientRect())}
                     disabled={busy}
-                    className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-white text-canvas text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 transition-colors"
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-inverse text-inverse-content text-sm font-medium hover:bg-inverse/90 disabled:opacity-50 transition-colors"
                   >
                     {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                     Start a session
@@ -616,19 +616,19 @@ export function Sidebar() {
               <>
                 <div className="flex-shrink-0 px-4 py-2 border-b border-border flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <TerminalIcon className="w-3.5 h-3.5 text-zinc-500" />
-                    <span className="text-xs text-zinc-500">Terminal</span>
+                    <TerminalIcon className="w-3.5 h-3.5 text-content-subtle" />
+                    <span className="text-xs text-content-subtle">Terminal</span>
                   </div>
                   <button
                     onClick={() => disconnect(activeTab)}
                     title="Disconnect (keeps the session)"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-zinc-400 hover:text-white hover:bg-surface-active transition-colors"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-content-muted hover:text-content hover:bg-surface-active transition-colors"
                   >
                     <Power className="w-3 h-3" />
                     Disconnect
                   </button>
                 </div>
-                <div className="flex-1 min-h-0 bg-[#0d0d0d]">
+                <div className="flex-1 min-h-0 bg-[rgb(var(--color-terminal-bg))]">
                   <Terminal
                     key={activeTab.sessionId}
                     sessionId={activeTab.sessionId}
@@ -639,10 +639,10 @@ export function Sidebar() {
             ) : (
               <div className="flex-1 flex items-center justify-center p-6">
                 <div className="w-full max-w-sm space-y-3 text-center">
-                  <Plug className="w-6 h-6 text-zinc-500 mx-auto" />
+                  <Plug className="w-6 h-6 text-content-subtle mx-auto" />
                   <div>
-                    <p className="text-sm text-white font-medium">{tabLabel(activeTab)}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">
+                    <p className="text-sm text-content font-medium">{tabLabel(activeTab)}</p>
+                    <p className="text-xs text-content-subtle mt-0.5">
                       Disconnected — connecting resumes this Claude Code conversation.
                     </p>
                   </div>
@@ -665,7 +665,7 @@ export function Sidebar() {
                     <button
                       onClick={() => connect(activeTab)}
                       disabled={busy}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-white text-canvas text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 transition-colors"
+                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-inverse text-inverse-content text-sm font-medium hover:bg-inverse/90 disabled:opacity-50 transition-colors"
                     >
                       {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plug className="w-3.5 h-3.5" />}
                       Connect
@@ -674,7 +674,7 @@ export function Sidebar() {
                   {activeTab.disconnectReason === "no-conversation" &&
                     activeTab.doctorKind === "claude-code" && (
                       <div className="space-y-1.5 pt-1">
-                        <p className="text-[11px] text-zinc-500">
+                        <p className="text-[11px] text-content-subtle">
                           No saved conversation was found on disk for this session.
                         </p>
                         <button
@@ -698,28 +698,28 @@ export function Sidebar() {
           <div className="flex-shrink-0 border-t border-border">
             <div className="p-4 space-y-2">
               {session.notes && !isEditing && (
-                <p className="text-xs text-zinc-400 italic mb-3 pb-3 border-b border-border">
+                <p className="text-xs text-content-muted italic mb-3 pb-3 border-b border-border">
                   {session.notes}
                 </p>
               )}
               <div className="flex items-center gap-2 text-xs">
-                <Clock className="w-3 h-3 text-zinc-600 flex-shrink-0" />
-                <span className="text-zinc-500">Started</span>
-                <span className="text-zinc-400 font-mono ml-auto">
+                <Clock className="w-3 h-3 text-content-faint flex-shrink-0" />
+                <span className="text-content-subtle">Started</span>
+                <span className="text-content-muted font-mono ml-auto">
                   {new Date(session.createdAt).toLocaleTimeString()}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <Folder className="w-3 h-3 text-zinc-600 flex-shrink-0" />
-                <span className="text-zinc-500">Directory</span>
-                <span className="text-zinc-400 font-mono ml-auto truncate max-w-[180px]" title={session.cwd}>
+                <Folder className="w-3 h-3 text-content-faint flex-shrink-0" />
+                <span className="text-content-subtle">Directory</span>
+                <span className="text-content-muted font-mono ml-auto truncate max-w-[180px]" title={session.cwd}>
                   {session.cwd.split("/").slice(-2).join("/")}
                 </span>
               </div>
               {session.gitBranch && (
                 <div className="flex items-center gap-2 text-xs">
-                  <GitBranch className="w-3 h-3 text-zinc-600 flex-shrink-0" />
-                  <span className="text-zinc-500">Branch</span>
+                  <GitBranch className="w-3 h-3 text-content-faint flex-shrink-0" />
+                  <span className="text-content-subtle">Branch</span>
                   <span className="text-purple-400 font-mono ml-auto">{session.gitBranch}</span>
                 </div>
               )}
