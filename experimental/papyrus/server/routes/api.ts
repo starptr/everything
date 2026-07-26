@@ -383,17 +383,9 @@ apiRoutes.patch("/sessions/:wsId/sessions/:sessionId", async (c) => {
   return c.json({ success: true });
 });
 
-// Persist canvas positions into each workstream's papyrus KV (serialized writes).
-apiRoutes.post("/state/positions", async (c) => {
-  const { positions } = await c.req.json();
-  await Promise.all(
-    Object.entries(positions || {}).map(([id, pos]) => sw.setKv(id, "position", pos)),
-  );
-  return c.json({ success: true });
-});
-
-// Edit a node's label/color/notes. Label is the workstream name (silverwood
-// rename); color + notes are papyrus KV.
+// Edit a node's label/color/notes/position. Label is the workstream name (silverwood
+// rename); color, notes, and canvas position are papyrus KV. Position is per-node —
+// the client saves only the workstream it moved, so one instance never rewrites another's.
 apiRoutes.patch("/sessions/:sessionId", async (c) => {
   const id = c.req.param("sessionId");
   const u = await c.req.json();
@@ -401,6 +393,7 @@ apiRoutes.patch("/sessions/:sessionId", async (c) => {
     if (u.customName !== undefined) await sw.rename(id, u.customName);
     if (u.customColor !== undefined) await sw.setKv(id, "color", u.customColor);
     if (u.notes !== undefined) await sw.setKv(id, "notes", u.notes);
+    if (u.position !== undefined) await sw.setKv(id, "position", u.position);
   } catch (e: any) {
     return c.json({ error: e.message }, 400);
   }

@@ -6,13 +6,14 @@ import {
   useNodesState,
   BackgroundVariant,
   ReactFlowProvider,
-  NodeChange,
-  applyNodeChanges,
+  type Node,
+  type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Plus } from "lucide-react";
 
 import { useStore, AgentSession } from "./stores/useStore";
+import { resolveReconciledPosition } from "./canvasPosition";
 import { AgentNode } from "./components/AgentNode/index";
 import { Sidebar } from "./components/Sidebar";
 import { NewSessionModal } from "./components/NewSessionModal";
@@ -51,7 +52,12 @@ function AppContent() {
   }, [resolvedTheme]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(storeNodes);
-  const positionUpdateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A node just moved locally: keep its optimistic position and shield it from the
+  // reconcile loop until silverwood echoes back the value we saved (the expiry is only
+  // a failure-mode safety valve — see the reconcile's echo-clear guard below).
+  const recentlyMoved = useRef<Map<string, { x: number; y: number; expiry: number }>>(
+    new Map(),
+  );
   const hasRestoredRef = useRef(false);
   // True while a node is being dragged, so the reconcile loop doesn't touch nodes
   // (and snap a drag back). Session/tab updates still flow.
@@ -87,9 +93,11 @@ function AppContent() {
   // Reconcile the client's view from silverwood every second. GET /api/state is a
   // fresh projection (workstreams + per-session tabs + lock), so nodes/tabs/names
   // appear, disappear, and update as the forest changes — including from other
-  // processes. The client invents no durable state. An existing node's position is
-  // never pulled from the server (positions flow client -> server on drag), so this
-  // never fights a drag; node mutations are also skipped while a drag is in flight.
+  // processes. The client invents no durable state: silverwood is authoritative for
+  // position too, so an existing node's position is re-synced from the server (that is
+  // how a move in another instance shows up here). The only exception is a node we just
+  // dragged ourselves — `recentlyMoved` keeps its optimistic position until our own save
+  // echoes back — and all node mutations are skipped while a drag is in flight.
   useEffect(() => {
     if (agents.length === 0) return;
     let cancelled = false;
@@ -134,10 +142,26 @@ function AppContent() {
         if (store.sessions.has(n.nodeId)) {
           store.updateSession(n.nodeId, sessionData);
           if (dragging) return;
-          // Reflect an external rename/recolor on the canvas node label.
           const node = store.nodes.find((x) => x.id === n.nodeId);
-          if (node && (node.data?.label !== label || node.data?.color !== color)) {
-            store.updateNode(n.nodeId, { data: { ...node.data, label, color } });
+          if (!node) return;
+
+          const updates: Partial<Node> = {};
+          // Reflect an external rename/recolor on the canvas node label.
+          if (node.data?.label !== label || node.data?.color !== color) {
+            updates.data = { ...node.data, label, color };
+          }
+          // Adopt silverwood's position (source of truth), except for a node we just
+          // dragged, until our own save echoes back (see resolveReconciledPosition).
+          const { position, clearGuard } = resolveReconciledPosition(
+            node.position,
+            n.position,
+            recentlyMoved.current.get(n.nodeId),
+            Date.now(),
+          );
+          if (clearGuard) recentlyMoved.current.delete(n.nodeId);
+          if (position) updates.position = position;
+          if (updates.data || updates.position) {
+            store.updateNode(n.nodeId, updates);
           }
         } else if (!dragging) {
           store.addSession(n.nodeId, sessionData);
@@ -174,70 +198,41 @@ function AppContent() {
     };
   }, [agents.length]);
 
-  // Helper to save all positions - accepts nodes directly to avoid sync issues
-  const saveAllPositions = useCallback((nodesToSave?: typeof nodes) => {
-    const currentNodes = nodesToSave || useStore.getState().nodes;
-    if (currentNodes.length === 0) return;
-
-    const positions: Record<string, { x: number; y: number }> = {};
-    const GRID_SIZE = 24;
-    currentNodes.forEach((node) => {
-      // Each node is a workstream; its coordinate is saved to the workstream's KV.
-      if (node.type === "agent") {
-        positions[node.id] = {
-          x: Math.round(node.position.x / GRID_SIZE) * GRID_SIZE,
-          y: Math.round(node.position.y / GRID_SIZE) * GRID_SIZE,
-        };
+  // Persist a finished drag straight to silverwood — only the node(s) that moved, so one
+  // instance never rewrites another's positions. A selection drag fires once with every
+  // dragged node in `dragged`. React Flow snaps to the grid, so `position` is already
+  // grid-aligned; sending it verbatim lets the reconcile's echo-check match exactly.
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, _node: Node, dragged: Node[]) => {
+      const moved = dragged?.length ? dragged : [_node];
+      const GRACE = 10_000;
+      for (const n of moved) {
+        if (n.type !== "agent") continue;
+        const position = { x: n.position.x, y: n.position.y };
+        recentlyMoved.current.set(n.id, { ...position, expiry: Date.now() + GRACE });
+        fetch(`/api/sessions/${n.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ position }),
+          keepalive: true, // survive a tab close that races the drop
+        }).catch(console.error);
       }
-    });
-    if (Object.keys(positions).length > 0) {
-      fetch("/api/state/positions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ positions }),
-      }).catch(console.error);
-    }
-  }, [nodes]);
+    },
+    [],
+  );
 
-  // Save positions on window close/refresh
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      saveAllPositions();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [saveAllPositions]);
-
-  // Save positions when nodes are moved or resized
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    onNodesChange(changes);
-
-    // Track drag state so the reconcile loop leaves nodes alone mid-drag.
-    for (const c of changes) {
-      if (c.type === "position" && "dragging" in c) {
-        draggingRef.current = c.dragging === true;
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+      // Track drag state so the reconcile loop leaves nodes alone mid-drag.
+      for (const c of changes) {
+        if (c.type === "position" && "dragging" in c) {
+          draggingRef.current = c.dragging === true;
+        }
       }
-    }
-
-    const positionChanges = changes.filter(
-      (c) => c.type === "position" && "dragging" in c && c.dragging === false
-    );
-    // Check for dimension changes - resizing property might be true, false, or undefined
-    const dimensionChanges = changes.filter(
-      (c) => c.type === "dimensions" && (!("resizing" in c) || c.resizing === false)
-    );
-
-    if (positionChanges.length > 0 || dimensionChanges.length > 0) {
-      if (positionUpdateTimeout.current) {
-        clearTimeout(positionUpdateTimeout.current);
-      }
-      // Compute updated nodes immediately to avoid sync delay issues
-      const updatedNodes = applyNodeChanges(changes, nodes);
-      positionUpdateTimeout.current = setTimeout(() => {
-        saveAllPositions(updatedNodes);
-      }, 300);
-    }
-  }, [onNodesChange, saveAllPositions, nodes]);
+    },
+    [onNodesChange],
+  );
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: any) => {
@@ -266,6 +261,7 @@ function AppContent() {
           nodes={nodes}
           edges={[]}
           onNodesChange={handleNodesChange}
+          onNodeDragStop={onNodeDragStop}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
