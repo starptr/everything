@@ -8,10 +8,20 @@ client), packaged with bun2nix. See `README.md` / `VENDOR.md` for background.
 The developer typically has a packaged `papyrus` running — it serves on port **6969** by
 default (`bin/papyrus.ts`). A plain `bun run dev` puts Vite on 6969 too (and the backend on
 6968), so it would collide. When you start a dev server to try a change, **always pass
-non-default ports** so that instance keeps working — e.g.
-`PORT=7968 CLIENT_PORT=7969 bun run dev` (open `http://localhost:7969`). `PORT` is the
-backend (`server/config.ts`, default 6968); `CLIENT_PORT` is Vite's port
-(`client/vite.config.ts`, default 6969), which proxies `/api` + `/ws` to `PORT`.
+non-default ports** so that instance keeps working — e.g. `PORT=7968 CLIENT_PORT=7969`
+(open `http://localhost:7969`). `PORT` is the backend (`server/config.ts`, default 6968);
+`CLIENT_PORT` is Vite's port (`client/vite.config.ts`, default 6969). Vite proxies only
+`/api`; the terminal WebSocket connects straight to `PORT` (Vite's WS proxy does not relay
+frames — see `client/src/components/terminalWs.ts`).
+
+Get `bun` with **`nix shell nixpkgs#bun --impure`**, NOT `nix develop`. `nix develop`
+overwrites `$SHELL` with the devshell's bash, so terminal panes would spawn `bash -l`
+instead of your real login shell (silverwood's base shell is `$SHELL -l`). `nix shell`
+leaves `$SHELL` alone, so panes spawn your actual login shell (e.g. fish). Full command
+(run from `experimental/papyrus`; silverwood must be reachable — on `PATH` or via
+`SILVERWOOD_BIN`):
+
+    PORT=7968 CLIENT_PORT=7969 nix shell nixpkgs#bun --impure --command bun run dev
 
 ## Testing — ownership rule (read before touching tests)
 
