@@ -14,12 +14,14 @@ non-default ports** so that instance keeps working — e.g. `PORT=7968 CLIENT_PO
 `/api`; the terminal WebSocket connects straight to `PORT` (Vite's WS proxy does not relay
 frames — see `client/src/components/terminalWs.ts`).
 
-Get `bun` with **`nix shell nixpkgs#bun --impure`**, NOT `nix develop`. `nix develop`
-overwrites `$SHELL` with the devshell's bash, so terminal panes would spawn `bash -l`
-instead of your real login shell (silverwood's base shell is `$SHELL -l`). `nix shell`
-leaves `$SHELL` alone, so panes spawn your actual login shell (e.g. fish). Full command
-(run from `experimental/papyrus`; silverwood must be reachable — on `PATH` or via
-`SILVERWOOD_BIN`):
+Get `bun` with either **`nix shell nixpkgs#bun --impure`** or `nix develop` — both work for
+terminal panes now. silverwood's base shell resolves your real login shell from the passwd
+database (`getpwuid`), independent of `$SHELL`, so a devshell that overwrites `$SHELL` with
+its bash no longer makes panes spawn `bash -l`; they spawn your actual login shell (e.g.
+fish) regardless. (`nix develop` still drops you into a bash *interactive* shell, whereas
+`nix shell --command` leaves your current shell alone — a preference, not a pane-correctness
+issue.) Full command (run from `experimental/papyrus`; silverwood must be reachable — on
+`PATH` or via `SILVERWOOD_BIN`):
 
     PORT=7968 CLIENT_PORT=7969 nix shell nixpkgs#bun --impure --command bun run dev
 
