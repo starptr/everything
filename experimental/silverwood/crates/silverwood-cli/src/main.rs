@@ -654,16 +654,69 @@ fn run_spawn(
     Err(format!("exec {}: {err}", program.display()).into())
 }
 
-/// Gather the spawn's dynamic inputs from the environment — frontend policy, like
-/// [`resolve_forest_dir`] (`silverwood-core` never reads env). `HOME` is required
-/// to reconstruct a login environment; `SHELL` defaults if unset.
+/// The user's real login identity, read from the passwd database.
+struct LoginIdentity {
+    name: String,
+    home: String,
+    shell: String,
+}
+
+/// Read the user's real login identity from the passwd database (`getpwuid(getuid())`)
+/// — authoritative and independent of the process env, which a nix devshell pollutes
+/// (it overwrites `$SHELL`). On macOS this consults Directory Services; on Linux,
+/// `/etc/passwd`/nsswitch. Returns `None` if the entry is missing or a field is
+/// empty/non-UTF8, so the caller falls back to env vars.
+fn login_identity() -> Option<LoginIdentity> {
+    // SAFETY: getpwuid returns a pointer to a static buffer valid until the next getpw*
+    // call; we copy every field out immediately and never retain the pointer. spawn_seed
+    // is called once at startup on the main thread, so the shared buffer is not raced.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() {
+            return None;
+        }
+        let pw = &*pw;
+        let field = |p: *const libc::c_char| -> Option<String> {
+            if p.is_null() {
+                return None;
+            }
+            std::ffi::CStr::from_ptr(p)
+                .to_str()
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+        };
+        Some(LoginIdentity {
+            name: field(pw.pw_name)?,
+            home: field(pw.pw_dir)?,
+            shell: field(pw.pw_shell)?,
+        })
+    }
+}
+
+/// Gather the spawn's dynamic inputs — frontend policy, like [`resolve_forest_dir`]
+/// (`silverwood-core` never touches env/the passwd DB). Identity (`home`/`user`/`shell`)
+/// comes from the passwd database via [`login_identity`] so it is independent of the
+/// process env (a nix devshell overwrites `$SHELL`); env vars are only a fallback. `HOME`
+/// is required to reconstruct a login environment. `term`/`ssh_auth_sock` are session
+/// context, so they stay env-sourced.
 fn spawn_seed() -> Result<SpawnSeed, Box<dyn std::error::Error>> {
-    let home =
-        std::env::var("HOME").map_err(|_| "no HOME: cannot reconstruct a login environment")?;
-    let user = std::env::var("USER")
-        .ok()
+    let login = login_identity();
+    let home = login
+        .as_ref()
+        .map(|l| l.home.clone())
+        .or_else(|| std::env::var("HOME").ok())
+        .ok_or("no HOME: cannot reconstruct a login environment")?;
+    let user = login
+        .as_ref()
+        .map(|l| l.name.clone())
+        .or_else(|| std::env::var("USER").ok())
         .or_else(|| std::env::var("LOGNAME").ok());
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let shell = login
+        .as_ref()
+        .map(|l| l.shell.clone())
+        .or_else(|| std::env::var("SHELL").ok())
+        .unwrap_or_else(|| "/bin/zsh".to_string());
     let term = std::env::var("TERM").ok();
     let ssh_auth_sock = std::env::var("SSH_AUTH_SOCK").ok();
     Ok(SpawnSeed {

@@ -13,10 +13,12 @@
 //!
 //! The env scrub mirrors what papyrus used to do inline: `process.env` in a
 //! frontend launched from a nix devshell is polluted (`IN_NIX_SHELL`, `DEVENV_*`,
-//! an augmented `PATH`), so a spawned agent must not inherit it. Instead the
-//! user's real login environment is reconstructed by running the login shell from
-//! an empty base in a dir with no `.envrc`, and the two dynamic vars a terminal
-//! needs (`TERM`, the ssh-agent socket) are overlaid on top.
+//! an augmented `PATH`, an overwritten `$SHELL`), so a spawned agent must not inherit
+//! it. Instead the user's real login environment is reconstructed by running the login
+//! shell from an empty base in a dir with no `.envrc`, and the vars a login capture
+//! can't produce are overlaid on top (`TERM`, the ssh-agent socket, `SHELL`, a default
+//! `LANG`) — see `overlay_session_env`. The login shell itself comes from the passwd
+//! database (via the frontend's `SpawnSeed`), not the polluted `$SHELL`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -25,17 +27,18 @@ use std::process::Command;
 use crate::workstream::CheckoutMode;
 
 /// The dynamic, machine/session inputs a spawn needs, gathered by the frontend.
-/// Reading these from the environment is frontend policy (like the forest dir),
-/// so core takes them explicitly rather than touching `std::env`. `home`/`user`/
-/// `shell` seed the login-env capture; `term`/`ssh_auth_sock` are overlaid onto
-/// the captured env (a login capture can't have them).
+/// Resolving these (identity from the passwd database, session context from the
+/// environment) is frontend policy, so core takes them explicitly rather than touching
+/// `std::env`/the passwd DB itself. `home`/`user`/`shell` seed the login-env capture;
+/// `term`/`ssh_auth_sock` are overlaid onto the captured env (a login capture can't
+/// have them).
 #[derive(Debug, Clone)]
 pub struct SpawnSeed {
     /// The user's home directory (`$HOME`).
     pub home: String,
     /// The login user (`$USER`/`$LOGNAME`), if known.
     pub user: Option<String>,
-    /// Absolute path to the user's login shell (`$SHELL`).
+    /// Absolute path to the user's login shell (from the passwd database).
     pub shell: String,
     /// The terminal type to advertise (`$TERM`), if any.
     pub term: Option<String>,
@@ -126,16 +129,30 @@ fn agent_argv(mode: &CheckoutMode, cwd: &str, session_id: &str, resume: bool) ->
 }
 
 /// The scrubbed environment for a spawned shell: the captured login env (or a
-/// reconstructed fallback), with `TERM` and the ssh-agent socket overlaid.
+/// reconstructed fallback), with the session/identity vars a login capture can't
+/// produce overlaid on top (see [`overlay_session_env`]).
 fn clean_env(seed: &SpawnSeed) -> BTreeMap<String, String> {
     let mut env = capture_login_env(seed).unwrap_or_else(|| fallback_env(seed));
+    overlay_session_env(&mut env, seed);
+    env
+}
+
+/// Overlay the vars a login-shell capture can't produce onto `env`: the dynamic terminal
+/// context (`TERM`, the ssh-agent socket), `SHELL` (set by `login(1)`, never exported by
+/// the shell itself), and a default `LANG` when the capture has none (macOS injects the
+/// locale via Terminal.app, not the login shell). `SHELL` is authoritative (a hard
+/// overlay); `LANG` is only a default, so a shell that sets its own locale wins.
+fn overlay_session_env(env: &mut BTreeMap<String, String>, seed: &SpawnSeed) {
     if let Some(term) = &seed.term {
         env.insert("TERM".to_string(), term.clone());
     }
     if let Some(sock) = &seed.ssh_auth_sock {
         env.insert("SSH_AUTH_SOCK".to_string(), sock.clone());
     }
-    env
+    env.insert("SHELL".to_string(), seed.shell.clone());
+    if !env.contains_key("LANG") && !env.contains_key("LC_ALL") {
+        env.insert("LANG".to_string(), "en_US.UTF-8".to_string());
+    }
 }
 
 /// Run the user's login shell from an empty base and read back its exported env:
@@ -327,5 +344,58 @@ mod tests {
             env: BTreeMap::new(),
         };
         assert_eq!(plan.resolve_program(), Some(PathBuf::from("/bin/zsh")));
+    }
+
+    fn seed_with_shell(shell: &str) -> SpawnSeed {
+        SpawnSeed {
+            home: "/home/x".to_string(),
+            user: Some("x".to_string()),
+            shell: shell.to_string(),
+            term: Some("xterm-256color".to_string()),
+            ssh_auth_sock: Some("/tmp/agent.sock".to_string()),
+        }
+    }
+
+    #[test]
+    fn overlay_sets_shell_authoritatively() {
+        // A stale SHELL in the captured env must lose to the resolved login shell.
+        let mut env = BTreeMap::new();
+        env.insert("SHELL".to_string(), "/bin/bash".to_string());
+        overlay_session_env(&mut env, &seed_with_shell("/usr/bin/fish"));
+        assert_eq!(env.get("SHELL"), Some(&"/usr/bin/fish".to_string()));
+    }
+
+    #[test]
+    fn overlay_applies_term_and_ssh_auth_sock() {
+        let mut env = BTreeMap::new();
+        overlay_session_env(&mut env, &seed_with_shell("/usr/bin/fish"));
+        assert_eq!(env.get("TERM"), Some(&"xterm-256color".to_string()));
+        assert_eq!(
+            env.get("SSH_AUTH_SOCK"),
+            Some(&"/tmp/agent.sock".to_string())
+        );
+    }
+
+    #[test]
+    fn overlay_defaults_lang_when_absent() {
+        let mut env = BTreeMap::new();
+        overlay_session_env(&mut env, &seed_with_shell("/usr/bin/fish"));
+        assert_eq!(env.get("LANG"), Some(&"en_US.UTF-8".to_string()));
+    }
+
+    #[test]
+    fn overlay_keeps_an_existing_lang() {
+        let mut env = BTreeMap::new();
+        env.insert("LANG".to_string(), "de_DE.UTF-8".to_string());
+        overlay_session_env(&mut env, &seed_with_shell("/usr/bin/fish"));
+        assert_eq!(env.get("LANG"), Some(&"de_DE.UTF-8".to_string()));
+    }
+
+    #[test]
+    fn overlay_skips_lang_default_when_lc_all_is_set() {
+        let mut env = BTreeMap::new();
+        env.insert("LC_ALL".to_string(), "C".to_string());
+        overlay_session_env(&mut env, &seed_with_shell("/usr/bin/fish"));
+        assert!(!env.contains_key("LANG"));
     }
 }
