@@ -8,6 +8,7 @@ import {
   saveThemePreference,
   systemPrefersDark,
 } from "../theme";
+import { clampLineSpacing, loadLineSpacing, saveLineSpacing } from "../settings";
 
 // Resolved theme to start from: trust the pre-paint script's `data-theme` (set in
 // index.html before first paint), falling back to resolving the stored preference.
@@ -104,12 +105,18 @@ interface AppState {
   setNewSessionModalOpen: (open: boolean) => void;
   newSessionForNodeId: string | null;
   setNewSessionForNodeId: (nodeId: string | null) => void;
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
 
   // Theme
   themePreference: ThemePreference;
   setThemePreference: (pref: ThemePreference) => void;
   resolvedTheme: ThemeName;
   setResolvedTheme: (name: ThemeName) => void;
+
+  // Terminal appearance
+  lineSpacing: number;
+  setLineSpacing: (value: number) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -173,6 +180,8 @@ export const useStore = create<AppState>((set) => ({
   setNewSessionModalOpen: (open) => set({ newSessionModalOpen: open }),
   newSessionForNodeId: null,
   setNewSessionForNodeId: (nodeId) => set({ newSessionForNodeId: nodeId }),
+  settingsOpen: false,
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
 
   // Theme: preference persists to localStorage; `resolvedTheme` is the concrete theme
   // name (light/dark) that useThemeController applies to <html> and keeps in sync.
@@ -183,4 +192,12 @@ export const useStore = create<AppState>((set) => ({
   },
   resolvedTheme: initialResolvedTheme(loadThemePreference()),
   setResolvedTheme: (name) => set({ resolvedTheme: name }),
+
+  // Terminal appearance: line spacing persists to localStorage; Terminal reads it live.
+  lineSpacing: loadLineSpacing(),
+  setLineSpacing: (value) => {
+    const clamped = clampLineSpacing(value);
+    saveLineSpacing(clamped);
+    set({ lineSpacing: clamped });
+  },
 }));

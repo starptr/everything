@@ -1,12 +1,19 @@
 import { useState } from "react";
-import { Plus, Folder, Monitor, Sun, Moon } from "lucide-react";
+import { Plus, Folder, Monitor, Sun, Moon, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { useStore } from "../stores/useStore";
 import { ThemeMenu } from "./ThemeMenu";
 
 export function Header() {
-  const { setAddAgentModalOpen, sessions, launchCwd, themePreference, setThemePreference } =
-    useStore();
+  const {
+    setAddAgentModalOpen,
+    sessions,
+    launchCwd,
+    themePreference,
+    setThemePreference,
+    settingsOpen,
+    setSettingsOpen,
+  } = useStore();
   // The theme button's rect while its menu is open (null = closed).
   const [themeAnchor, setThemeAnchor] = useState<DOMRect | null>(null);
 
@@ -50,6 +57,19 @@ export function Header() {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={() => setSettingsOpen(!settingsOpen)}
+          title="Settings"
+          aria-label="Settings"
+          className={`flex items-center justify-center px-2 py-1.5 rounded-md transition-colors ${
+            settingsOpen
+              ? "text-content bg-surface-active"
+              : "text-content-faint hover:text-content hover:bg-surface-active"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+
         <button
           onClick={(e) => setThemeAnchor(e.currentTarget.getBoundingClientRect())}
           title="Theme"

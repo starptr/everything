@@ -16,6 +16,7 @@ import { useStore, AgentSession } from "./stores/useStore";
 import { resolveReconciledPosition } from "./canvasPosition";
 import { AgentNode } from "./components/AgentNode/index";
 import { Sidebar } from "./components/Sidebar";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { NewSessionModal } from "./components/NewSessionModal";
 import { Header } from "./components/Header";
 import { CanvasControls } from "./components/CanvasControls";
@@ -309,6 +310,7 @@ function AppContent() {
         )}
 
         <Sidebar />
+        <SettingsPanel />
       </div>
 
       <NewSessionModal open={addAgentModalOpen} onClose={() => setAddAgentModalOpen(false)} />

@@ -72,6 +72,7 @@ export function Terminal({ sessionId, color }: TerminalProps) {
   const mountedRef = useRef(false);
   const serverPort = useStore((s) => s.serverPort);
   const resolvedTheme = useStore((s) => s.resolvedTheme);
+  const lineSpacing = useStore((s) => s.lineSpacing);
 
   useEffect(() => {
     if (!terminalRef.current || !sessionId) return;
@@ -92,7 +93,9 @@ export function Terminal({ sessionId, color }: TerminalProps) {
       fontSize: 12,
       fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
       fontWeight: "400",
-      lineHeight: 1.4,
+      // Read non-reactively (like `theme` below) so a change updates the live terminal
+      // via the effect below instead of tearing it down and reconnecting.
+      lineHeight: useStore.getState().lineSpacing,
       letterSpacing: 0,
       // Read the theme non-reactively so a theme switch updates the live terminal
       // (separate effect below) instead of tearing it down and reconnecting.
@@ -203,6 +206,19 @@ export function Terminal({ sessionId, color }: TerminalProps) {
     const term = xtermRef.current;
     if (term) term.options.theme = terminalTheme(resolvedTheme, color);
   }, [resolvedTheme, color]);
+
+  // Apply line-spacing changes live. Unlike a re-theme, line height changes the row
+  // count, so refit and tell the PTY the new dimensions.
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term) return;
+    term.options.lineHeight = lineSpacing;
+    fitAddonRef.current?.fit();
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+    }
+  }, [lineSpacing]);
 
   return (
     <div
