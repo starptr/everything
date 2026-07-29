@@ -217,12 +217,14 @@ local pubkeys = import 'magic/common/public_keys.json';
       sonarrApiKey: secrets.sonarrForSdxarr.apiKey,
       category: 'sonarr-for-sdxarr',
     },
-    // On each COMPLETED torrent in the `shoko-manual` category, hardlink the content into Shoko's
-    // drop-source folder (/data/downloads/shoko-drop, on the same mdata fs as the downloads, so the
-    // link costs no extra disk and the torrent keeps seeding). Shoko then rename-and-move-organizes
-    // it into its library -- see the `shoko` field + lib/shoko.libsonnet. This is the manual-download
-    // counterpart to the SeaDex/Sonarr path above: Shoko can't hardlink itself, so qbittorrent does.
-    hardlinkOnFinished = { category: 'shoko-manual', destDir: '/data/downloads/shoko-drop' },
+    // On each COMPLETED torrent in these categories, hardlink the content into Shoko's drop-source
+    // folder (/data/downloads/shoko-drop, on the same mdata fs as the downloads, so the link costs no
+    // extra disk and the torrent keeps seeding). Shoko then rename-and-move-organizes it into its
+    // library -- see the `shoko` field + lib/shoko.libsonnet. `shoko-manual` is the manual-download
+    // path (Shoko can't hardlink itself, so qbittorrent does). `sonarr-for-sdxarr` is ALSO listed so
+    // SeaDexArr grabs land in Shoko too -- the handler falls through, so those torrents are hardlinked
+    // into Shoko AND still imported by Sonarr (onTorrentFinished above), appearing in both libraries.
+    hardlinkOnFinished = { categories: ['shoko-manual', 'sonarr-for-sdxarr'], destDir: '/data/downloads/shoko-drop' },
   ),
 
   // vpn-proxy: a VPN-egress HTTP forward proxy. gluetun's built-in HTTP proxy (:8888) forwards every

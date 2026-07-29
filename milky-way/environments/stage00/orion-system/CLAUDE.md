@@ -194,3 +194,43 @@ kubectl --context methanol -n <namespace> logs -l app=<name> --tail=50
 For a secret-mounted config, spot-check that the rendered `Secret`'s base64 value decodes to
 what you expect (`tk show ... | grep -A1 <name>` then `base64 -d`), and that the pod logs
 show it read the config from the mounted path rather than erroring on parse/auth.
+
+## Runbook: back-fill already-downloaded SeaDexArr episodes into Shoko
+
+The qbittorrent on-complete hook hardlinks torrents in the `shoko-manual` **and**
+`sonarr-for-sdxarr` categories into Shoko's drop source (`hardlinkOnFinished` in `main.jsonnet`,
+handler in `lib/qbittorrent.libsonnet`). That only fires on *future* completions. To back-fill
+SeaDexArr episodes downloaded before the hook covered `sonarr-for-sdxarr`, run this one-shot — it
+enumerates completed torrents in that category via the local qBittorrent API (localhost needs no
+creds: `LocalHostAuth=false` + `127.0.0.0/8` in `AuthSubnetWhitelist`) and hardlinks each into the
+drop source, exactly like the hook. Idempotent (skips entries already present) and safe (same-fs
+hardlink; the seeding originals are untouched):
+
+```bash
+kubectl --context methanol exec deploy/qbittorrent -c qbittorrent -- s6-setuidgid abc sh -c '
+  set -eu
+  mkdir -p /data/downloads/shoko-drop
+  curl -fsS "http://127.0.0.1:8080/api/v2/torrents/info?category=sonarr-for-sdxarr&filter=completed" \
+    | jq -r ".[].content_path" \
+    | while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        dest="/data/downloads/shoko-drop/$(basename "$p")"
+        [ -e "$dest" ] && continue
+        cp -al "$p" /data/downloads/shoko-drop/ && echo "linked: $p"
+      done
+'
+```
+
+**Run it as `abc` (`s6-setuidgid abc`), NOT a bare `kubectl exec`.** A bare exec runs as **root**,
+which the shared NFS root-squashes to `nobody` — then `cp -al` on a *multi-file* (season-pack)
+torrent creates the destination directory as `nobody:0700` and can't chown it, so Shoko (uid 1000)
+can't traverse it and the season is invisible to Shoko. Running as `abc` (uid 1000 — the same uid
+the qbittorrent process and the go-forward hook use) creates `abc:users` dirs Shoko can organize.
+Single-file torrents are unaffected either way (a hardlink keeps the inode's `abc` ownership), so a
+mistaken root run leaves only the directory torrents broken; re-run as `abc` after `rm -rf`-ing the
+`nobody`-owned dirs (as root, which owns them) to fix.
+
+Shoko then drains the drop source into `/data/library/Anime (Shoko)` on its own schedule; a large
+batch is paced by AniDB UDP throttling, so let it run and watch Shoko's WebUI queue. (Precondition:
+Shoko must already have `/data/downloads/shoko-drop` set as a Drop Source import folder with a drop
+destination + renamer configured — the same setup the `shoko-manual` workflow needs.)
