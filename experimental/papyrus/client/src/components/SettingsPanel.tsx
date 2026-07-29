@@ -1,15 +1,28 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Minus, Plus } from "lucide-react";
+import { X, Minus, Plus, TerminalSquare, Ghost, type LucideIcon } from "lucide-react";
 import { useStore } from "../stores/useStore";
-import { LINE_SPACING_STEP, MIN_LINE_SPACING, MAX_LINE_SPACING } from "../settings";
+import {
+  LINE_SPACING_STEP,
+  MIN_LINE_SPACING,
+  MAX_LINE_SPACING,
+  TERMINAL_BACKENDS,
+  type BackendId,
+} from "../settings";
+
+const BACKEND_ICON: Record<BackendId, LucideIcon> = {
+  xterm: TerminalSquare,
+  ghostty: Ghost,
+};
 
 // Global appearance settings, docked to the right edge and toggled by the header gear.
-// Mirrors Sidebar's slide-in; sits above it (z-[60]) so the two never collide. For now
-// it holds a single control — terminal line spacing — stepped in LINE_SPACING_STEP
-// increments; the store clamps and persists.
+// Mirrors Sidebar's slide-in; sits above it (z-[60]) so the two never collide. Holds the
+// terminal controls: the emulator backend (segmented toggle) and line spacing (stepper);
+// the store persists both.
 export function SettingsPanel() {
   const settingsOpen = useStore((s) => s.settingsOpen);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
+  const terminalBackend = useStore((s) => s.terminalBackend);
+  const setTerminalBackend = useStore((s) => s.setTerminalBackend);
   const lineSpacing = useStore((s) => s.lineSpacing);
   const setLineSpacing = useStore((s) => s.setLineSpacing);
 
@@ -44,6 +57,31 @@ export function SettingsPanel() {
               <label className="text-[10px] text-content-subtle uppercase tracking-wider">
                 Terminal
               </label>
+              <div className="mt-2">
+                <span className="text-sm text-content">Emulator</span>
+                <div className="mt-1.5 flex flex-col gap-1 rounded-md bg-canvas border border-border p-0.5">
+                  {TERMINAL_BACKENDS.map(({ id, label }) => {
+                    const Icon = BACKEND_ICON[id];
+                    const active = terminalBackend === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => setTerminalBackend(id)}
+                        aria-pressed={active}
+                        aria-label={`Use ${label}`}
+                        className={`flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors ${
+                          active
+                            ? "text-content bg-surface-active"
+                            : "text-content-subtle hover:text-content hover:bg-surface-active"
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span className="text-sm">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-sm text-content">Line spacing</span>
                 <div className="flex items-center gap-1 rounded-md bg-canvas border border-border p-0.5">

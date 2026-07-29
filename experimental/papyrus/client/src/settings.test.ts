@@ -1,15 +1,20 @@
 // UNIT test (mine to maintain — see ../../TESTING.md): the clamp/step-snap and the
-// tolerant (de)serialization that back the line-spacing stepper.
+// tolerant (de)serialization that back the line-spacing stepper and the emulator toggle.
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
   DEFAULT_LINE_SPACING,
+  DEFAULT_TERMINAL_BACKEND,
   LINE_SPACING_STORAGE_KEY,
   MAX_LINE_SPACING,
   MIN_LINE_SPACING,
+  TERMINAL_BACKEND_STORAGE_KEY,
   clampLineSpacing,
   loadLineSpacing,
+  loadTerminalBackend,
   parseLineSpacing,
+  parseTerminalBackend,
   saveLineSpacing,
+  saveTerminalBackend,
 } from "./settings";
 
 describe("clampLineSpacing", () => {
@@ -71,5 +76,42 @@ describe("loadLineSpacing / saveLineSpacing", () => {
   test("save clamps out-of-range values before persisting", () => {
     saveLineSpacing(10);
     expect(loadLineSpacing()).toBe(MAX_LINE_SPACING);
+  });
+});
+
+describe("parseTerminalBackend", () => {
+  test("null (nothing stored) falls back to the default backend", () => {
+    expect(parseTerminalBackend(null)).toBe(DEFAULT_TERMINAL_BACKEND);
+  });
+
+  test("a known backend id passes through", () => {
+    expect(parseTerminalBackend("xterm")).toBe("xterm");
+    expect(parseTerminalBackend("ghostty")).toBe("ghostty");
+  });
+
+  test("an unknown id falls back to the default rather than passing through", () => {
+    expect(parseTerminalBackend("kitty")).toBe(DEFAULT_TERMINAL_BACKEND);
+    expect(parseTerminalBackend("")).toBe(DEFAULT_TERMINAL_BACKEND);
+  });
+});
+
+describe("loadTerminalBackend / saveTerminalBackend", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test("defaults when nothing is stored", () => {
+    expect(loadTerminalBackend()).toBe(DEFAULT_TERMINAL_BACKEND);
+  });
+
+  test("persists under the papyrus:terminalBackend key and reads back", () => {
+    saveTerminalBackend("ghostty");
+    expect(localStorage.getItem(TERMINAL_BACKEND_STORAGE_KEY)).toBe("ghostty");
+    expect(loadTerminalBackend()).toBe("ghostty");
+  });
+
+  test("a corrupt stored value loads as the default", () => {
+    localStorage.setItem(TERMINAL_BACKEND_STORAGE_KEY, "bogus");
+    expect(loadTerminalBackend()).toBe(DEFAULT_TERMINAL_BACKEND);
   });
 });

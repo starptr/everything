@@ -8,7 +8,14 @@ import {
   saveThemePreference,
   systemPrefersDark,
 } from "../theme";
-import { clampLineSpacing, loadLineSpacing, saveLineSpacing } from "../settings";
+import {
+  type BackendId,
+  clampLineSpacing,
+  loadLineSpacing,
+  loadTerminalBackend,
+  saveLineSpacing,
+  saveTerminalBackend,
+} from "../settings";
 
 // Resolved theme to start from: trust the pre-paint script's `data-theme` (set in
 // index.html before first paint), falling back to resolving the stored preference.
@@ -115,6 +122,8 @@ interface AppState {
   setResolvedTheme: (name: ThemeName) => void;
 
   // Terminal appearance
+  terminalBackend: BackendId;
+  setTerminalBackend: (id: BackendId) => void;
   lineSpacing: number;
   setLineSpacing: (value: number) => void;
 }
@@ -193,7 +202,13 @@ export const useStore = create<AppState>((set) => ({
   resolvedTheme: initialResolvedTheme(loadThemePreference()),
   setResolvedTheme: (name) => set({ resolvedTheme: name }),
 
-  // Terminal appearance: line spacing persists to localStorage; Terminal reads it live.
+  // Terminal appearance: both persist to localStorage. Terminal reads lineSpacing live;
+  // switching terminalBackend remounts the pane on the other emulator.
+  terminalBackend: loadTerminalBackend(),
+  setTerminalBackend: (id) => {
+    saveTerminalBackend(id);
+    set({ terminalBackend: id });
+  },
   lineSpacing: loadLineSpacing(),
   setLineSpacing: (value) => {
     const clamped = clampLineSpacing(value);

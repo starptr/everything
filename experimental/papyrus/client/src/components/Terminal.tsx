@@ -1,222 +1,165 @@
 import { useEffect, useRef } from "react";
-import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import "@xterm/xterm/css/xterm.css";
 import { useStore } from "../stores/useStore";
 import { terminalWsUrl } from "./terminalWs";
-import { THEMES, type ThemeName } from "../theme";
+import { createTerminalBackend, type TerminalBackend } from "../terminal/backend";
+import { terminalTheme } from "../terminal/palette";
 
 interface TerminalProps {
   sessionId: string;
   color: string;
 }
 
-// xterm needs concrete color strings (not CSS vars), so we keep one ANSI palette per
-// polarity and pick by the active theme. `cursor` is the node's accent color.
-const DARK_PALETTE: ITheme = {
-  background: "#0d0d0d",
-  foreground: "#d4d4d4",
-  selectionBackground: "#3b3b3b",
-  selectionForeground: "#ffffff",
-  black: "#1a1a1a",
-  red: "#f87171",
-  green: "#4ade80",
-  yellow: "#fbbf24",
-  blue: "#60a5fa",
-  magenta: "#c084fc",
-  cyan: "#22d3ee",
-  white: "#d4d4d4",
-  brightBlack: "#525252",
-  brightRed: "#fca5a5",
-  brightGreen: "#86efac",
-  brightYellow: "#fcd34d",
-  brightBlue: "#93c5fd",
-  brightMagenta: "#d8b4fe",
-  brightCyan: "#67e8f9",
-  brightWhite: "#ffffff",
-};
-
-const LIGHT_PALETTE: ITheme = {
-  background: "#fafafa",
-  foreground: "#24292e",
-  selectionBackground: "#cfe0f4",
-  black: "#24292e",
-  red: "#d73a49",
-  green: "#22863a",
-  yellow: "#b08800",
-  blue: "#0366d6",
-  magenta: "#6f42c1",
-  cyan: "#1b7c83",
-  white: "#6a737d",
-  brightBlack: "#959da5",
-  brightRed: "#cb2431",
-  brightGreen: "#28a745",
-  brightYellow: "#b08800",
-  brightBlue: "#005cc5",
-  brightMagenta: "#5a32a3",
-  brightCyan: "#3192aa",
-  brightWhite: "#24292e",
-};
-
-function terminalTheme(themeName: ThemeName, cursorColor: string): ITheme {
-  const base = (THEMES[themeName]?.polarity ?? "dark") === "light" ? LIGHT_PALETTE : DARK_PALETTE;
-  return { ...base, cursor: cursorColor, cursorAccent: base.background };
-}
-
 export function Terminal({ sessionId, color }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<XTerm | null>(null);
+  const backendRef = useRef<TerminalBackend | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const mountedRef = useRef(false);
   const serverPort = useStore((s) => s.serverPort);
   const resolvedTheme = useStore((s) => s.resolvedTheme);
   const lineSpacing = useStore((s) => s.lineSpacing);
+  const backendId = useStore((s) => s.terminalBackend);
+
+  // Backends that can't mutate theme/line-height live (ghostty) fold those into a remount
+  // token, so changing either rebuilds the pane at the right settings. xterm applies both
+  // live, so its token is constant and its rebuild triggers stay exactly the old deps.
+  const remountToken = backendId === "xterm" ? "" : `${resolvedTheme}:${lineSpacing}`;
 
   useEffect(() => {
-    if (!terminalRef.current || !sessionId) return;
+    const container = terminalRef.current;
+    if (!container || !sessionId) return;
 
-    // Prevent double mount in strict mode
-    if (mountedRef.current) return;
-    mountedRef.current = true;
-
-    // Clear container completely
-    while (terminalRef.current.firstChild) {
-      terminalRef.current.removeChild(terminalRef.current.firstChild);
-    }
-
-    // Create terminal
-    const term = new XTerm({
-      cursorBlink: true,
-      cursorStyle: "bar",
-      fontSize: 12,
-      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
-      fontWeight: "400",
-      // Read non-reactively (like `theme` below) so a change updates the live terminal
-      // via the effect below instead of tearing it down and reconnecting.
-      lineHeight: useStore.getState().lineSpacing,
-      letterSpacing: 0,
-      // Read the theme non-reactively so a theme switch updates the live terminal
-      // (separate effect below) instead of tearing it down and reconnecting.
-      theme: terminalTheme(useStore.getState().resolvedTheme, color),
-      allowProposedApi: true,
-      scrollback: 10000,
-    });
-
-    const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
-    term.loadAddon(fitAddon);
-    term.loadAddon(webLinksAddon);
-
-    term.open(terminalRef.current);
-    
-    // Reset all terminal attributes before receiving buffered content
-    term.write("\x1b[0m\x1b[?25h");
-    
-    setTimeout(() => fitAddon.fit(), 50);
-
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    // Connect WebSocket with small delay to allow session to be ready. Target the
-    // backend port directly (from /api/config) so dev bypasses Vite's WS proxy, which
-    // does not relay frames; falls back to the page origin (prod = same port).
-    const wsUrl = terminalWsUrl(window.location, serverPort, sessionId);
-
+    // Each effect run owns its own `cancelled` flag; the async body checks it after every
+    // await so a StrictMode double-mount (or a rapid dep change) disposes the just-built
+    // backend instead of leaking a second terminal + WebSocket.
+    let cancelled = false;
+    let backend: TerminalBackend | null = null;
     let ws: WebSocket | null = null;
-    let isFirstMessage = true;
+    let resizeObserver: ResizeObserver | null = null;
+    let connectTimeout: ReturnType<typeof setTimeout> | undefined;
+    let fitTimeout: ReturnType<typeof setTimeout> | undefined;
 
-    const connectWs = () => {
-      if (!mountedRef.current) return;
+    // Clear the container completely before (re)mounting a terminal.
+    while (container.firstChild) container.removeChild(container.firstChild);
 
-      ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    (async () => {
+      const created = await createTerminalBackend(backendId, {
+        cursorBlink: true,
+        cursorStyle: "bar",
+        fontSize: 12,
+        fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
+        fontWeight: "400",
+        letterSpacing: 0,
+        scrollback: 10000,
+        allowProposedApi: true,
+        // Read non-reactively; live changes are handled by the effects below (xterm) or the
+        // remount token (ghostty), not by tearing down here.
+        lineHeight: useStore.getState().lineSpacing,
+        theme: terminalTheme(useStore.getState().resolvedTheme, color),
+      }).catch((err) => {
+        console.warn("[papyrus] terminal backend init failed", err);
+        return null;
+      });
 
-      ws.onopen = () => {
-        if (xtermRef.current) {
-          ws?.send(JSON.stringify({ type: "resize", cols: xtermRef.current.cols, rows: xtermRef.current.rows }));
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === "output") {
-            // On first message (buffered history), reset terminal state first
-            if (isFirstMessage) {
-              isFirstMessage = false;
-              // Clear screen, reset attributes, move cursor home
-              term.write("\x1b[2J\x1b[H\x1b[0m");
-            }
-            term.write(msg.data);
-          }
-        } catch (e) {
-          term.write(event.data);
-        }
-      };
-
-      ws.onerror = () => {
-        // Silently handle errors - don't spam the terminal
-      };
-
-      ws.onclose = () => {
-        // Only show if not intentionally closed
-      };
-    };
-
-    // Small delay to let server session be ready
-    const connectTimeout = setTimeout(connectWs, 100);
-
-    term.onData((data) => {
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "input", data }));
+      // Torn down while awaiting the backend (StrictMode / rapid dep change) → bail.
+      if (cancelled || !created) {
+        created?.dispose();
+        return;
       }
-    });
+      backend = created;
+      backendRef.current = created;
 
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        if (fitAddonRef.current) {
-          fitAddonRef.current.fit();
-        }
-        if (ws?.readyState === WebSocket.OPEN && xtermRef.current) {
-          ws.send(JSON.stringify({
-            type: "resize",
-            cols: xtermRef.current.cols,
-            rows: xtermRef.current.rows
-          }));
+      backend.open(container);
+      // Reset all terminal attributes and show the cursor before buffered content arrives.
+      backend.write("\x1b[0m\x1b[?25h");
+      fitTimeout = setTimeout(() => {
+        if (!cancelled) backend?.fit();
+      }, 50);
+
+      // Connect straight to the backend port (from /api/config) so dev bypasses Vite's WS
+      // proxy, which does not relay frames; falls back to the page origin (prod = same port).
+      const wsUrl = terminalWsUrl(window.location, serverPort, sessionId);
+      let isFirstMessage = true;
+
+      const connectWs = () => {
+        if (cancelled) return;
+
+        ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          const size = backend?.size;
+          if (size) ws?.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === "output") {
+              // The first message is buffered history: reset terminal state first.
+              if (isFirstMessage) {
+                isFirstMessage = false;
+                backend?.write("\x1b[2J\x1b[H\x1b[0m");
+              }
+              backend?.write(msg.data);
+            }
+          } catch {
+            backend?.write(event.data);
+          }
+        };
+      };
+
+      // Small delay to let the server session be ready.
+      connectTimeout = setTimeout(connectWs, 100);
+
+      backend.onData((data) => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "input", data }));
         }
       });
-    });
 
-    resizeObserver.observe(terminalRef.current);
+      resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          backend?.fit();
+          const size = backend?.size;
+          if (ws?.readyState === WebSocket.OPEN && size) {
+            ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+          }
+        });
+      });
+      resizeObserver.observe(container);
+    })();
 
     return () => {
-      mountedRef.current = false;
+      cancelled = true;
       clearTimeout(connectTimeout);
-      resizeObserver.disconnect();
+      clearTimeout(fitTimeout);
+      resizeObserver?.disconnect();
       ws?.close();
-      term.dispose();
+      backend?.dispose();
+      backendRef.current = null;
+      wsRef.current = null;
     };
-  }, [sessionId, color, serverPort]);
+  }, [sessionId, color, serverPort, backendId, remountToken]);
 
   // Re-theme the live terminal when the app theme (or node color) changes, without
-  // recreating it — keeps scrollback and the WebSocket intact.
+  // recreating it — keeps scrollback and the WebSocket intact. Backends that can't
+  // re-theme live return false and are handled by the remount token instead.
   useEffect(() => {
-    const term = xtermRef.current;
-    if (term) term.options.theme = terminalTheme(resolvedTheme, color);
+    backendRef.current?.setTheme(resolvedTheme, color);
   }, [resolvedTheme, color]);
 
-  // Apply line-spacing changes live. Unlike a re-theme, line height changes the row
-  // count, so refit and tell the PTY the new dimensions.
+  // Apply line-spacing changes live. Unlike a re-theme, line height changes the row count,
+  // so refit and tell the PTY the new dimensions. Backends without live support return
+  // false (the remount token already rebuilt the pane) and this no-ops.
   useEffect(() => {
-    const term = xtermRef.current;
-    if (!term) return;
-    term.options.lineHeight = lineSpacing;
-    fitAddonRef.current?.fit();
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+    const backend = backendRef.current;
+    if (backend && backend.setLineHeight(lineSpacing)) {
+      backend.fit();
+      const ws = wsRef.current;
+      const size = backend.size;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+      }
     }
   }, [lineSpacing]);
 
@@ -227,7 +170,7 @@ export function Terminal({ sessionId, color }: TerminalProps) {
       style={{
         padding: "12px",
         backgroundColor: "rgb(var(--color-terminal-bg))",
-        minHeight: "200px"
+        minHeight: "200px",
       }}
     />
   );

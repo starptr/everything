@@ -12,6 +12,13 @@ const clientPort = Number(process.env.CLIENT_PORT) || 6969;
 // directly to the backend port (from /api/config) — see components/terminalWs.ts.
 export default defineConfig({
   plugins: [react()],
+  // The libghostty backend (ghostty-web) is a lazy dynamic import, so Vite would only
+  // discover it mid-session on first use — re-optimize and full-page reload, which remounts
+  // the live terminal in a churn storm. Pre-bundle it here so it's ready at startup. This is
+  // a dev-only concern; the production build still code-splits it into its own lazy chunk.
+  optimizeDeps: {
+    include: ["ghostty-web"],
+  },
   server: {
     port: clientPort,
     proxy: {
