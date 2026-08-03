@@ -22,6 +22,7 @@ local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local seanime = import 'milky-way/lib/seanime.libsonnet';
 local shoko = import 'milky-way/lib/shoko.libsonnet';
 local suwayomi = import 'milky-way/lib/suwayomi.libsonnet';
+local immich = import 'milky-way/lib/immich.libsonnet';
 local autobrr = import 'milky-way/lib/autobrr.libsonnet';
 local buildarr = import 'milky-way/lib/buildarr.libsonnet';
 local seadexarr = import 'milky-way/lib/seadexarr.libsonnet';
@@ -338,6 +339,20 @@ local pubkeys = import 'magic/common/public_keys.json';
     authMode = "basic_auth",
     authUsername = secrets.suwayomi.username,
     authPassword = secrets.suwayomi.password,
+  ),
+
+  // Immich for band-practice photos/videos: a DEDICATED Immich instance, isolated from the anime
+  // stack above (its own DB + its own library volume; it does NOT touch the shared mdata PVC). It's
+  // this cluster's first multi-datastore app -- lib/immich.libsonnet hand-writes the Postgres
+  // (bespoke VectorChord image, iSCSI RWO PVC), the Valkey job queue (ephemeral), and the
+  // immich-server, plus their wiring. The photo/video library is a dedicated NFS RWX PVC (bulk media
+  // wants NFS; the DB stays on iSCSI since a DB is unsafe on NFS). WebUI via Tailscale L7 ingress;
+  // first-run admin setup + all config is interactive in the UI, so the only secret is the DB
+  // password (sops), shared by Postgres + the server via a Secret/secretKeyRef.
+  immichForCDBand: immich.new(
+    name = "immich-for-cd-band",
+    tailscaleHostname = "immich-for-cd-band",
+    dbPassword = secrets.immichForCDBand.dbPassword,
   ),
 
   // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against

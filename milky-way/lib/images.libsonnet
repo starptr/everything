@@ -216,6 +216,25 @@ local images = {
       digestForTailscaleOperatorNetworkL3Test: { hash: "sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab" },
       digestForTraefikAcmeTest: { hash: "sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab" },
     },
+    // Immich (self-hosted photo/video) -- the band-practice instance (lib/immich.libsonnet). Three
+    // pinned images: the server, the BESPOKE Postgres, and Valkey (the Redis-compatible job queue).
+    // The Postgres MUST be immich's own image -- it bundles the VectorChord + pgvecto.rs vector
+    // extensions Immich requires for smart search / embeddings; a stock Postgres will not work.
+    // Multi-arch INDEX digests (k3s resolves the per-node arch; the index includes linux/amd64 for
+    // methanol), same convention as the *arr/qbittorrent/jellyfin pins; tagHint is the readable
+    // version. Re-resolve with `docker buildx imagetools inspect <repo>:<tag>`.
+    "immich-server": {
+      fullyQualifiedRepository: "ghcr.io/immich-app/immich-server",
+      defaultDigest: { hash: "sha256:b434cb9287eea1471c9974845914d4dd328c9c2d652e446ed4930f99944f0ceb", tagHint: "v3.1.0" },
+    },
+    "immich-postgres": {
+      fullyQualifiedRepository: "ghcr.io/immich-app/postgres",
+      defaultDigest: { hash: "sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23", tagHint: "14-vectorchord0.4.3-pgvectors0.2.0" },
+    },
+    valkey: {
+      fullyQualifiedRepository: "docker.io/valkey/valkey",
+      defaultDigest: { hash: "sha256:fea8b3e67b15729d4bb70589eb03367bab9ad1ee89c876f54327fc7c6e618571", tagHint: "8-bookworm" },
+    },
     // Third-party images that lack a digest pin: migrated off inline tag strings, one tag each.
     "calibre-web-automated": {
       fullyQualifiedRepository: "docker.io/crocodilestick/calibre-web-automated",
