@@ -43,6 +43,12 @@ local images = import 'milky-way/lib/images.libsonnet';
 // lib carries no config-as-code -- only the DB password, from sops. That one secret is the single
 // source read by BOTH Postgres (POSTGRES_PASSWORD) and the server (DB_PASSWORD) via secretKeyRef, so
 // it never appears inline in any Deployment manifest.
+//
+// ---- Exposure ----
+// Always a tailnet-only L7 ingress (private). OPTIONALLY also a public HTTPS path: pass publicHostname
+// + issuerName to additionally emit a cert-manager Certificate (Let's Encrypt via the shared Cloudflare
+// DNS-01 ClusterIssuer) and a Traefik `websecure` Ingress, reached at https://<publicHostname>. Same
+// public-HTTPS pattern as lib/andref-ipfs-depot.libsonnet; the DNS record lives in eight/.
 {
   new(
     tailscaleHostname,                  // required, unique tailnet-wide -> https://<tailscaleHostname>.<tailnet>.ts.net
@@ -65,8 +71,15 @@ local images = import 'milky-way/lib/images.libsonnet';
     libraryStorageSize='500Gi',
     dbMountPath='/var/lib/postgresql/data',   // PVC mount; PGDATA is a subdir beneath it (see header)
     libraryMountPath='/data',                 // immich-server's in-container media root (compose maps UPLOAD_LOCATION here)
+    // Optional public HTTPS exposure (in addition to the tailnet ingress) -- see header.
+    publicHostname=null,                      // e.g. 'cd-jams.andref.app'; null -> tailnet-only
+    issuerName=null,                          // required when publicHostname is set: cert-manager ClusterIssuer name
   ):: {
     local this = self,
+
+    // Public exposure needs an issuer to obtain its cert from.
+    assert publicHostname == null || issuerName != null :
+      name + ': publicHostname requires issuerName (the cert-manager ClusterIssuer)',
     local dbName_ = name + '-db',
     local redisName = name + '-redis',
 
@@ -313,6 +326,55 @@ local images = import 'milky-way/lib/images.libsonnet';
         ingressClassName: 'tailscale',
         tls: [{ hosts: [tailscaleHostname] }],
         rules: [{
+          http: {
+            paths: [{
+              path: '/',
+              pathType: 'Prefix',
+              backend: {
+                service: {
+                  name: this.serverService.metadata.name,
+                  port: { number: utils.assertEqualAndReturn(this.serverService.spec.ports[0].port, port) },
+                },
+              },
+            }],
+          },
+        }],
+      },
+    },
+
+    // Public HTTPS (optional): cert-manager issues an LE cert (Cloudflare DNS-01 -- no inbound
+    // reachability needed to issue) into <name>-tls, which the hostNetwork Traefik serves. Same
+    // namespace as the ingress so Traefik can read the Secret.
+    [if publicHostname != null then 'certificate']: {
+      apiVersion: 'cert-manager.io/v1',
+      kind: 'Certificate',
+      metadata: { name: name + '-tls', namespace: namespace },
+      spec: {
+        secretName: name + '-tls',
+        dnsNames: [publicHostname],
+        issuerRef: { name: issuerName, kind: 'ClusterIssuer' },
+      },
+    },
+
+    // Public L7 ingress on the hostNetwork Traefik (methanol :443), websecure-only. Reached at
+    // https://<publicHostname> because that host CNAMEs to carless-drivers-ddns (home IP) and the
+    // router already forwards WAN 443 to methanol. Distinct name from the tailnet ingress above.
+    [if publicHostname != null then 'publicIngress']: {
+      apiVersion: 'networking.k8s.io/v1',
+      kind: 'Ingress',
+      metadata: {
+        name: name + '-public',
+        namespace: namespace,
+        annotations: { 'traefik.ingress.kubernetes.io/router.entrypoints': 'websecure' },
+      },
+      spec: {
+        ingressClassName: 'traefik',
+        tls: [{
+          hosts: [publicHostname],
+          secretName: utils.assertEqualAndReturn(this.certificate.spec.secretName, name + '-tls'),
+        }],
+        rules: [{
+          host: publicHostname,
           http: {
             paths: [{
               path: '/',

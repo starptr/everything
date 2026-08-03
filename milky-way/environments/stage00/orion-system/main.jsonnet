@@ -353,6 +353,10 @@ local pubkeys = import 'magic/common/public_keys.json';
     name = "immich-for-cd-band",
     tailscaleHostname = "immich-for-cd-band",
     dbPassword = secrets.immichForCDBand.dbPassword,
+    // Also expose publicly over HTTPS at cd-jams.andref.app (CNAME -> carless-drivers-ddns in eight/).
+    // Traefik `websecure` ingress + a cert-manager LE cert from the shared prod ClusterIssuer.
+    publicHostname = "cd-jams.andref.app",
+    issuerName = activeLetsEncryptIssuerName,
   ),
 
   // autobrr: download automation. Watches indexer announces (IRC/RSS), matches releases against

@@ -117,6 +117,18 @@
     value = "carless-drivers-ddns.andref.app.";
   };
 
+  # Public web UI for the immichForCDBand Immich instance (milky-way orion-system,
+  # lib/immich.libsonnet). CNAME to the home-IP DDNS target (same pattern as depot / ipfs /
+  # test-traefik-acme) so Traefik on methanol serves it with a cert-manager cert. DNS-only (grey
+  # cloud) -- resolves straight to the home IP so large video uploads bypass Cloudflare's proxy cap;
+  # the /-ddns$/ rejectlist does not match this label.
+  "cd-jams" = {
+    octodns.cloudflare = { auto-ttl = true; };
+    ttl = 300;
+    type = "CNAME";
+    value = "carless-drivers-ddns.andref.app.";
+  };
+
   old = {
     octodns.cloudflare = { auto-ttl = true; };
     ttl = 300;
