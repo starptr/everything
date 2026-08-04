@@ -4,20 +4,24 @@
 lib.fix (self: let
   mkRelativePathStringsForMachine = machine: {
     ${machine} = lib.fix (selfRelativePathStrings: {
-      everythingRepo = {
-        # MUT: List all `everythingRepo` values for each machine here.
-        "sodium" = "src/everything";
-      }.${machine};
-
-      venus = "${selfRelativePathStrings.everythingRepo}/venus";
-
-      jupiter-dotenv = "${selfRelativePathStrings.everythingRepo}/${self.jupiter-env-path-rel-to-everythingRepo}";
-
-      whale-digests = "${selfRelativePathStrings.everythingRepo}/exports/whale/digests";
-
       home = ""; # The home directory is an empty relative path to itself.
 
-      milky-way-secrets = "${selfRelativePathStrings.everythingRepo}/milky-way/secrets";
+      # DEPRECATED: it is NOT safe to assume that the `everythingRepo` is always at the same relative path to the home directory.
+      # This is because silverwood creates multiple checkouts of the everything repo, and its location changes frequently.
+
+      #everythingRepo = {
+      #  # MUT: List all `everythingRepo` values for each machine here.
+      #  "sodium" = "src/everything";
+      #}.${machine};
+
+      #venus = "${selfRelativePathStrings.everythingRepo}/venus";
+
+      #jupiter-dotenv = "${selfRelativePathStrings.everythingRepo}/${self.jupiter-env-path-rel-to-everythingRepo}";
+
+      #whale-digests = "${selfRelativePathStrings.everythingRepo}/exports/whale/digests";
+
+      #milky-way-secrets = "${selfRelativePathStrings.everythingRepo}/milky-way/secrets";
+
     });
   };
 in {
