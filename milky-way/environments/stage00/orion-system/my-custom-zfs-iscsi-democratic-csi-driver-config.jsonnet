@@ -1,5 +1,5 @@
 // Defined via sops-nix, updated via nixos-rebuild/darwin-rebuild.
-local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
+local secrets = (import 'milky-way/secrets.libsonnet')['k8s-secret-values.jsonnet'];
 
 // Based on https://github.com/democratic-csi/democratic-csi/blob/3974268272a84e9c22c47cae2fca847a8d422bad/examples/zfs-generic-iscsi.yaml
 {

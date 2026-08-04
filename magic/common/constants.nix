@@ -2,26 +2,25 @@
 # This file cannot use `config`, because we cannot assume whether this module is being used from home-manager or otherwise.
 { lib, ...}:
 lib.fix (self: let
-  mkRelativePathStringsForMachine = machine: {
+  mkRelativePathStringsForMachine = machine: let
+    # PRIVATE: not a relativePathStrings attribute. Silverwood makes the everything-repo
+    # checkout location vary, so nothing may depend on a single canonical checkout path.
+    # Kept only to feed `venus` below, which has no silverwood-safe source yet.
+    everythingRepo = {
+      # MUT: List all `everythingRepo` values for each machine here.
+      "sodium" = "src/everything";
+    }.${machine};
+  in {
     ${machine} = lib.fix (selfRelativePathStrings: {
       home = ""; # The home directory is an empty relative path to itself.
 
-      # DEPRECATED: it is NOT safe to assume that the `everythingRepo` is always at the same relative path to the home directory.
-      # This is because silverwood creates multiple checkouts of the everything repo, and its location changes frequently.
+      # Stopgap pin to the primary checkout: the ooss hot-file symlinks (venus/hot-files)
+      # need a fixed absolute path at activation and have no silverwood-safe source yet.
+      venus = "${everythingRepo}/venus";
 
-      #everythingRepo = {
-      #  # MUT: List all `everythingRepo` values for each machine here.
-      #  "sodium" = "src/everything";
-      #}.${machine};
-
-      #venus = "${selfRelativePathStrings.everythingRepo}/venus";
-
-      #jupiter-dotenv = "${selfRelativePathStrings.everythingRepo}/${self.jupiter-env-path-rel-to-everythingRepo}";
-
-      #whale-digests = "${selfRelativePathStrings.everythingRepo}/exports/whale/digests";
-
-      #milky-way-secrets = "${selfRelativePathStrings.everythingRepo}/milky-way/secrets";
-
+      # Home-relative sops decryption store. Decrypted secrets live here (outside any
+      # checkout); consumers needing them in-tree bridge them in per-checkout themselves.
+      secrets = ".config/sops-nix/secrets";
     });
   };
 in {
@@ -33,7 +32,6 @@ in {
   ];
 
   # MUT: Add any constants here
-  jupiter-env-path-rel-to-everythingRepo = ".env.jupiter";
 
   # Reusable public keys (SSH). Single source of truth: ./public_keys.json.
   publicKeys = builtins.fromJSON (builtins.readFile ./public_keys.json);

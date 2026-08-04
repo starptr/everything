@@ -57,9 +57,9 @@
     };
 
     home.shellAliases = {
-      # This assumes this repo is in ~/src/venus
-      sdrs = "sudo darwin-rebuild switch --flake ${config.magic.absolutePathStrings.sodium.everythingRepo}/flake-profiles/system-sodium";
-      drb = "darwin-rebuild build --flake ${config.magic.absolutePathStrings.sodium.everythingRepo}/flake-profiles/system-sodium";
+      # Run from the everything repo root.
+      sdrs = "sudo darwin-rebuild switch --flake ./flake-profiles/system-sodium";
+      drb = "darwin-rebuild build --flake ./flake-profiles/system-sodium";
       # TODO: package makemkv
       maybe-makemkvcon = "/Applications/MakeMKV.app/Contents/MacOS/makemkvcon";
       maybe-pulumi = "/opt/homebrew/bin/pulumi";
@@ -138,37 +138,37 @@
         format = "dotenv";
         mode = "0400";
         sopsFile = ./../../../secrets/personal/jupiter.env;
-        path = "${config.magic.absolutePathStrings.sodium.jupiter-dotenv}";
+        path = "${config.magic.absolutePathStrings.sodium.secrets}/jupiter.env";
       };
       secrets."k8s-config/k8s-secret-values.jsonnet" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/k8s-secret-values.jsonnet;
-        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/k8s-secret-values.jsonnet";
+        path = "${config.magic.absolutePathStrings.sodium.secrets}/k8s-secret-values.jsonnet";
       };
       secrets."k8s-config/qbt-gluetun.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/qbt-gluetun.conf;
-        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/qbt-gluetun.conf";
+        path = "${config.magic.absolutePathStrings.sodium.secrets}/qbt-gluetun.conf";
       };
       secrets."k8s-config/gluetun-vpn-proxy.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/gluetun-vpn-proxy.conf;
-        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/gluetun-vpn-proxy.conf";
+        path = "${config.magic.absolutePathStrings.sodium.secrets}/gluetun-vpn-proxy.conf";
       };
       secrets."k8s-config/thelounge-gluetun.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/thelounge-gluetun.conf;
-        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/thelounge-gluetun.conf";
+        path = "${config.magic.absolutePathStrings.sodium.secrets}/thelounge-gluetun.conf";
       };
       secrets."k8s-config/kubo-gluetun.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/kubo-gluetun.conf;
-        path = "${config.magic.absolutePathStrings.sodium.milky-way-secrets}/kubo-gluetun.conf";
+        path = "${config.magic.absolutePathStrings.sodium.secrets}/kubo-gluetun.conf";
       };
       # Private key the grand-central reverse-tunnel LaunchAgent authenticates with (its public
       # half is grand-central's tunnelKeys in milky-way main.jsonnet). Binary so the PEM round-

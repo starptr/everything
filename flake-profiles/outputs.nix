@@ -37,15 +37,17 @@ recursiveUpdateAll [
               ];
               enterShell = ''
                 hello
-                # Automatically export environment variables from the .env file
-                # We manually source the file instead of using the dotenv integration with devenv
-                # because the env file is not checked into git. Therefore, at evaluation time,
-                # the flake cannot read the file. Or at least this is my guess on why it doesn't work.
-                if [ -f "${magic.jupiter-env-path-rel-to-everythingRepo}" ]; then
-                  echo "Loading environment variables from ${magic.jupiter-env-path-rel-to-everythingRepo}"
-                  source "${magic.jupiter-env-path-rel-to-everythingRepo}"
+                # Automatically export the jupiter env vars from the sops-decrypted secret.
+                # It's a sops-nix-managed file (written on sodium to the home-relative `secrets`
+                # store, not checked into git), so we source it directly rather than via devenv's
+                # dotenv integration (the flake can't read it at evaluation time). Home-relative,
+                # so it's independent of which everything-repo checkout you launched the shell from.
+                jupiter_env="$HOME/${magic.relativePathStrings.sodium.secrets}/jupiter.env"
+                if [ -f "$jupiter_env" ]; then
+                  echo "Loading environment variables from $jupiter_env"
+                  source "$jupiter_env"
                 else
-                  echo "Warning: ${magic.jupiter-env-path-rel-to-everythingRepo} not found."
+                  echo "Warning: $jupiter_env not found."
                 fi
               '';
 

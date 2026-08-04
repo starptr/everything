@@ -38,7 +38,8 @@ local andrefIpfsDepot = import 'milky-way/lib/andref-ipfs-depot.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local letsEncryptCloudflare = import 'milky-way/lib/letsencrypt-cloudflare.libsonnet';
 local testTraefikAcme = import 'milky-way/lib/test-traefik-acme-ingress.libsonnet';
-local secrets = import 'milky-way/secrets/k8s-secret-values.jsonnet';
+local secretsRegistry = import 'milky-way/secrets.libsonnet';
+local secrets = secretsRegistry['k8s-secret-values.jsonnet'];
 // Reusable public keys (SSH). Source of truth: magic/common/public_keys.json, reached via the
 // milky-way/vendor/magic -> ../../magic symlink (same mechanism as vendor/exports). See magic/CLAUDE.md.
 local pubkeys = import 'magic/common/public_keys.json';
@@ -197,7 +198,7 @@ local pubkeys = import 'magic/common/public_keys.json';
   // The WireGuard key is read straight from the sops-managed ProtonVPN .conf (only Interface.
   // PrivateKey is used; gluetun selects its own PF-capable P2P server).
   qbittorrent: qbittorrent.new(
-    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/qbt-gluetun.conf'),
+    wireguardPrivateKey = wgConf.privateKeyOf(secretsRegistry['qbt-gluetun.conf']),
     tailscaleHostname = "qbittorrent",
     vpnProvider = "protonvpn",
     serverCountries = "United States",
@@ -235,7 +236,7 @@ local pubkeys = import 'magic/common/public_keys.json';
   // in-cluster only, at http://vpn-proxy.default.svc.cluster.local:8888. autobrr points its IRC proxy
   // there (configured in autobrr's UI; that's runtime DB state, not config-as-code here).
   vpnProxy: vpnProxy.new(
-    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/gluetun-vpn-proxy.conf'),
+    wireguardPrivateKey = wgConf.privateKeyOf(secretsRegistry['gluetun-vpn-proxy.conf']),
     vpnProvider = "protonvpn",
     serverCountries = "United States",
   ),
@@ -249,7 +250,7 @@ local pubkeys = import 'magic/common/public_keys.json';
   // L7 ingress. Create logins post-deploy:
   //   kubectl --context methanol exec deploy/thelounge -- s6-setuidgid abc thelounge add <user>
   thelounge: thelounge.new(
-    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/thelounge-gluetun.conf'),
+    wireguardPrivateKey = wgConf.privateKeyOf(secretsRegistry['thelounge-gluetun.conf']),
     tailscaleHostname = "thelounge",
     vpnProvider = "protonvpn",
     serverCountries = "United States",
@@ -653,7 +654,7 @@ local pubkeys = import 'magic/common/public_keys.json';
     // Third, least-privilege RPC grant (scoped to /api/v0/add) for the andref-ipfs-depot uploader.
     depotRpcToken = secrets.kubo.rpcTokenForAndrefIpfsDepot,
     tailscaleHostname = "ipfs-webui",
-    wireguardPrivateKey = wgConf.privateKeyOf(importstr 'milky-way/secrets/kubo-gluetun.conf'),
+    wireguardPrivateKey = wgConf.privateKeyOf(secretsRegistry['kubo-gluetun.conf']),
     vpnProvider = "protonvpn",
     serverCountries = "United States",
     // Public subdomain IPFS gateway: content served origin-isolated at https://<cid>.ipfs.andref.app,

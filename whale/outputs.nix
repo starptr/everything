@@ -1,8 +1,4 @@
 { self, nixpkgs, ... } @ inputs: let
-  magic = import ./../magic/common/constants.nix inputs.nixpkgs;
-  machine = "sodium"; # Current machine name
-  digests-directory-home-relative-pathstr = magic.relativePathStrings.${machine}.whale-digests;
-
   pkgsFor = system: import nixpkgs { inherit system; };
   # Images always target the k8s nodes' arch, regardless of the host driving the build.
   imagePkgs = pkgsFor "x86_64-linux";
@@ -101,6 +97,15 @@
         text = ''
           set -euo pipefail
 
+          # The digest is recorded cwd-relative, so run this from the everything repo root
+          # (where exports/whale/digests/ lives). Fail fast rather than writing it elsewhere.
+          digests_dir="exports/whale/digests"
+          if [[ ! -d "$digests_dir" ]]; then
+            echo "Error: '$digests_dir/' not found under $PWD." >&2
+            echo "Run this from the root of an everything repo checkout." >&2
+            exit 1
+          fi
+
           dest="docker://docker.io/yuto7/${name}:latest"
 
           echo "Checking credentials..."
@@ -120,7 +125,7 @@
           # registry (what you pull with image@sha256:...). This is the value
           # docker.io lists; do NOT use `inspect --raw | .config.digest` (that is the
           # config-blob digest, which is not a pullable manifest reference).
-          digestfile="$HOME/${digests-directory-home-relative-pathstr}/${name}.txt"
+          digestfile="$PWD/$digests_dir/${name}.txt"
           skopeo --insecure-policy copy --digestfile "$digestfile" "docker-archive:${builtImage}" "$dest"
           echo "Done!"
 
