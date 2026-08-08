@@ -1,0 +1,202 @@
+---
+// The app shell: file-tree sidebar + main pane (breadcrumbs, optional toolbar
+// slot, content). Light/dark follow the OS via prefers-color-scheme; Shiki emits
+// both theme palettes as CSS variables that the stylesheet swaps.
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import FileTree from '../components/FileTree.astro';
+import { buildTree } from '../lib/manifest';
+
+interface Props {
+  title: string;
+  path?: string;
+  view?: 'rendered' | 'raw' | 'tree';
+}
+const { title, path = '' } = Astro.props;
+const tree = buildTree();
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title === '' ? 'owl' : `${title} · owl`}</title>
+    <style is:global>
+      :root {
+        color-scheme: light dark;
+        --owl-bg: #ffffff;
+        --owl-fg: #1f2328;
+        --owl-muted: #656d76;
+        --owl-border: #d0d7de;
+        --owl-accent: #0969da;
+        --owl-code-bg: #f6f8fa;
+        --owl-comment-bg: #fff8e6;
+        --owl-comment-border: #d4a72c;
+        --owl-hl: #fff8c5;
+        --owl-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --owl-bg: #0d1117;
+          --owl-fg: #e6edf3;
+          --owl-muted: #8b949e;
+          --owl-border: #30363d;
+          --owl-accent: #4493f8;
+          --owl-code-bg: #161b22;
+          --owl-comment-bg: #1c1a12;
+          --owl-comment-border: #9e7b1e;
+          --owl-hl: #2e2a15;
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: flex;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: var(--owl-bg);
+        color: var(--owl-fg);
+        line-height: 1.5;
+      }
+      a { color: var(--owl-accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+
+      .owl-sidebar {
+        width: 20rem;
+        flex: 0 0 20rem;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+        overflow: auto;
+        border-right: 1px solid var(--owl-border);
+        padding: 0.75rem;
+        font-size: 0.85rem;
+      }
+      .owl-logo { display: block; font-weight: 700; font-size: 1.1rem; padding: 0.25rem 0.25rem 0.75rem; color: var(--owl-fg); }
+
+      .owl-tree { list-style: none; margin: 0; padding: 0 0 0 0.6rem; }
+      .owl-tree summary { cursor: pointer; padding: 0.1rem 0; color: var(--owl-fg); }
+      .owl-tree summary::marker { color: var(--owl-muted); }
+      .owl-tree-file a { display: block; padding: 0.1rem 0; color: var(--owl-fg); }
+      .owl-tree-file.owl-current > a { color: var(--owl-accent); font-weight: 600; }
+
+      .owl-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+      .owl-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid var(--owl-border);
+        position: sticky;
+        top: 0;
+        background: var(--owl-bg);
+        z-index: 1;
+      }
+      .owl-crumbs { font-size: 0.9rem; overflow-wrap: anywhere; }
+      .owl-crumbs .sep { color: var(--owl-muted); margin: 0 0.35rem; }
+      .owl-crumbs .cur { color: var(--owl-fg); font-weight: 600; }
+
+      .owl-toggle { display: flex; gap: 0; border: 1px solid var(--owl-border); border-radius: 0.4rem; overflow: hidden; flex: none; }
+      .owl-toggle a { padding: 0.25rem 0.7rem; color: var(--owl-fg); font-size: 0.85rem; }
+      .owl-toggle a.active { background: var(--owl-accent); color: #fff; }
+
+      .owl-content { padding: 1rem; min-width: 0; }
+
+      /* Shiki dual theme (defaultColor:false): Shiki supplies token colors only;
+         every code block — highlighted, plain, raw or rendered — shares one
+         background so there is a single, consistent source-code look. */
+      .shiki { background-color: var(--owl-code-bg); color: var(--owl-fg); }
+      .shiki span { color: var(--shiki-light); }
+      @media (prefers-color-scheme: dark) {
+        .shiki span { color: var(--shiki-dark); }
+      }
+      pre.shiki {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        border-radius: 0.4rem;
+        overflow-x: auto;
+        font-family: var(--owl-mono);
+        font-size: 0.85rem;
+        tab-size: 2;
+      }
+      .shiki .line { display: inline-block; width: 100%; }
+      .owl-line-hl { background: var(--owl-hl); }
+
+      /* Line-number gutter (both views). Absolute numbers come from the
+         data-line-no the highlighter stamps on each source line; attr-scoped so
+         markdown-it code fences (not Shiki output) never get an empty gutter. */
+      .shiki .line[data-line-no]::before {
+        content: attr(data-line-no);
+        display: inline-block;
+        width: 3ch;
+        margin-right: 1rem;
+        text-align: right;
+        color: var(--owl-muted);
+        user-select: none;
+      }
+
+      /* The rendered view interleaves code blocks with comment boxes. */
+      .owl-rendered > .shiki { border-radius: 0; }
+      .owl-rendered > .shiki:first-child { border-top-left-radius: 0.4rem; border-top-right-radius: 0.4rem; }
+      .owl-rendered > .shiki:last-child { border-bottom-left-radius: 0.4rem; border-bottom-right-radius: 0.4rem; }
+
+      .owl-comment {
+        background: var(--owl-comment-bg);
+        border-left: 3px solid var(--owl-comment-border);
+        padding: 0.4rem 1rem;
+        margin: 0.15rem 0;
+      }
+      .owl-comment > :first-child { margin-top: 0; }
+      .owl-comment > :last-child { margin-bottom: 0; }
+
+      .owl-prose { max-width: 52rem; }
+      .owl-prose pre { background: var(--owl-code-bg); padding: 0.75rem 1rem; border-radius: 0.4rem; overflow-x: auto; }
+      .owl-prose code { font-family: var(--owl-mono); font-size: 0.9em; }
+      .owl-prose :not(pre) > code { background: var(--owl-code-bg); padding: 0.1rem 0.3rem; border-radius: 0.3rem; }
+      .owl-prose img { max-width: 100%; }
+      .owl-readme { margin-top: 1.5rem; border-top: 1px solid var(--owl-border); padding-top: 1rem; }
+
+      .owl-listing ul { list-style: none; margin: 0 0 1rem; padding: 0; }
+      .owl-listing li { padding: 0.15rem 0; }
+      .owl-dir a { font-weight: 600; }
+
+      .owl-binary { color: var(--owl-muted); font-style: italic; padding: 1rem; }
+
+      @media (max-width: 720px) {
+        body { flex-direction: column; }
+        .owl-sidebar { width: 100%; flex-basis: auto; height: auto; position: static; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--owl-border); }
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="owl-sidebar">
+      <a class="owl-logo" href="/">owl</a>
+      <FileTree node={tree} current={path} />
+    </aside>
+    <main class="owl-main">
+      <header class="owl-header">
+        <Breadcrumbs path={path} />
+        <slot name="toolbar" />
+      </header>
+      <div class="owl-content">
+        <slot />
+      </div>
+    </main>
+    <script>
+      // Highlight an #L12 or #L12-L20 line range from the URL hash (raw view).
+      function applyHash(): void {
+        document.querySelectorAll('.owl-line-hl').forEach((el) => el.classList.remove('owl-line-hl'));
+        const m = location.hash.match(/^#L(\d+)(?:-L?(\d+))?$/);
+        if (!m) return;
+        const start = Number.parseInt(m[1], 10);
+        const end = m[2] ? Number.parseInt(m[2], 10) : start;
+        for (let n = start; n <= end; n++) {
+          document.getElementById(`L${n}`)?.classList.add('owl-line-hl');
+        }
+        document.getElementById(`L${start}`)?.scrollIntoView({ block: 'center' });
+      }
+      addEventListener('hashchange', applyHash);
+      applyHash();
+    </script>
+  </body>
+</html>

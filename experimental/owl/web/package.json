@@ -1,0 +1,21 @@
+{
+  "name": "owl-web",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "gen:manifest": "node scripts/gen-manifest.mjs",
+    "dev": "npm run gen:manifest && astro dev",
+    "build": "npm run gen:manifest && astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "astro": "^5.16.8",
+    "markdown-it": "^14.1.0",
+    "shiki": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2"
+  }
+}

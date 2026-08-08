@@ -1,0 +1,23 @@
+---
+// Directory index: subdirectories, then files. If the directory has a README.md,
+// it's rendered below the listing (GitHub-style).
+import { childrenOf, readTreeFile } from '../lib/manifest';
+import { renderMarkdown } from '../lib/markdown';
+
+interface Props {
+  dir: string;
+}
+const { dir } = Astro.props;
+const { dirs, files } = childrenOf(dir);
+const readme = files.find((f) => f.path.toLowerCase().endsWith('readme.md') && !f.binary);
+const readmeHtml = readme ? renderMarkdown(readTreeFile(readme.path)) : null;
+const basename = (p: string): string => p.split('/').pop() ?? p;
+---
+
+<div class="owl-listing">
+  <ul>
+    {dirs.map((d) => <li class="owl-dir"><a href={`/tree/${d}`}>{basename(d)}/</a></li>)}
+    {files.map((f) => <li class="owl-file"><a href={`/rendered/${f.path}`}>{basename(f.path)}</a></li>)}
+  </ul>
+  {readmeHtml && <div class="owl-prose owl-readme" set:html={readmeHtml} />}
+</div>

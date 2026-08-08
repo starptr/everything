@@ -1,0 +1,13 @@
+---
+// Toggle between the rendered and raw views of the same file.
+interface Props {
+  path: string;
+  view: 'rendered' | 'raw';
+}
+const { path, view } = Astro.props;
+---
+
+<div class="owl-toggle">
+  <a class={view === 'rendered' ? 'active' : ''} href={`/rendered/${path}`}>Rendered</a>
+  <a class={view === 'raw' ? 'active' : ''} href={`/raw/${path}`}>Raw</a>
+</div>

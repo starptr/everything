@@ -1,0 +1,67 @@
+# owl.fileset.txt — which files owl renders into the browsable site.
+#
+# This is owl's include/exclude manifest for a code checkout. It is NOT a
+# .gitignore: excluding a path here only hides it from owl's generated pages;
+# git tracking is untouched. Everything owl encounters is rendered by default;
+# the rules below subtract from that set (and `!` can add back).
+#
+# FORMAT (gitignore-like)
+#   #                Line comment. Blank lines are ignored.
+#   <glob>           Exclude paths matching this glob.
+#   !<glob>          Re-include paths matching this glob (negation).
+#   @import <path>   Inline another fileset / .gitignore-style file, with
+#                    <path> resolved relative to THIS file's directory.
+#
+# Later rules win, and @import inlines its rules at that position — so ordering
+# and negation across an import boundary are well-defined.
+#
+# MATCHING
+#   Each glob is compiled by the `globset` crate with literal_separator(true),
+#   and anchored gitignore-style:
+#     *  ?          match within a single path segment (never across `/`)
+#     **            spans path segments
+#     {a,b} [0-9]   alternation / character classes
+#   A pattern containing a `/` (e.g. `milky-way/vendor/`) is anchored to the
+#   checkout root; a pattern with no `/` (e.g. `*.lock`, `node_modules/`) matches
+#   at any depth. A trailing `/` matches a directory and everything under it.
+#   Paths are matched relative to the checkout root.
+#
+# ORDERING
+#   Since the last matching rule wins, subtree exclusions are listed LAST — after
+#   every `!` negation — so a negation can never re-include a file that lives
+#   inside an excluded tree (this is what keeps secrets/ absolute).
+#
+# Imported .gitignore files are read under these same rules — a best-effort
+# superset of gitignore syntax that covers the common cases.
+
+# --- File-type excludes (with their negations) --------------------------------
+
+# Machine-authored lock files: large and low browse value. Keep flake.lock
+# (except where it sits inside an excluded subtree — see ORDERING).
+*.lock
+!flake.lock
+
+# Binary CRDT snapshots: no meaningful raw-or-rendered view.
+*.loro
+
+# --- Subtree excludes (kept last; absolute) -----------------------------------
+
+# Git's own ignores (result/, .direnv/, .devenv*, .env, …) so on-disk build and
+# editor cruft owl would otherwise walk is skipped here too.
+@import .gitignore
+
+# VCS internals — owl walks the on-disk checkout, which contains these.
+.git/
+.jj/
+
+# Secrets: live credentials. Never render these into a published site.
+secrets/
+
+# Vendored third-party trees — not this repo's own source.
+milky-way/vendor/
+
+# Build & dependency output not covered by the root .gitignore.
+node_modules/
+target/
+dist/
+.astro/

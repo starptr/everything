@@ -1,0 +1,31 @@
+---
+// Recursive file-tree sidebar. Directories are collapsible <details>, expanded
+// along the path to the current file. Files link to their rendered view.
+import Self from './FileTree.astro';
+import type { TreeNode } from '../lib/manifest';
+
+interface Props {
+  node: TreeNode;
+  current: string;
+}
+const { node, current } = Astro.props;
+---
+
+<ul class="owl-tree">
+  {
+    node.children.map((child) =>
+      child.isDir ? (
+        <li class="owl-tree-dir">
+          <details open={current === child.path || current.startsWith(`${child.path}/`)}>
+            <summary>{child.name}</summary>
+            <Self node={child} current={current} />
+          </details>
+        </li>
+      ) : (
+        <li class={current === child.path ? 'owl-tree-file owl-current' : 'owl-tree-file'}>
+          <a href={`/rendered/${child.path}`}>{child.name}</a>
+        </li>
+      ),
+    )
+  }
+</ul>

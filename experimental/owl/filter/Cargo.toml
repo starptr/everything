@@ -1,0 +1,11 @@
+[package]
+name = "owl-filter"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+globset = "0.4"
+walkdir = "2"

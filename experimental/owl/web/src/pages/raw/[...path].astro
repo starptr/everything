@@ -1,0 +1,18 @@
+---
+import ViewToggle from '../../components/ViewToggle.astro';
+import Shell from '../../layouts/Shell.astro';
+import { files, type FileEntry } from '../../lib/manifest';
+import { renderRawHtml } from '../../lib/render';
+
+export function getStaticPaths() {
+  return files.map((entry) => ({ params: { path: entry.path }, props: { entry } }));
+}
+
+const { entry } = Astro.props as { entry: FileEntry };
+const html = await renderRawHtml(entry);
+---
+
+<Shell title={entry.path} path={entry.path} view="raw">
+  <ViewToggle slot="toolbar" path={entry.path} view="raw" />
+  <div class="owl-file-view owl-raw" set:html={html} />
+</Shell>

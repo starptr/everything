@@ -1,0 +1,26 @@
+---
+// Path breadcrumbs: each directory segment links to its tree page; the final
+// segment (current file or dir) is plain text.
+interface Props {
+  path: string;
+}
+const { path } = Astro.props;
+const parts = path === '' ? [] : path.split('/');
+const crumbs = parts.map((name, i) => ({
+  name,
+  path: parts.slice(0, i + 1).join('/'),
+  last: i === parts.length - 1,
+}));
+---
+
+<nav class="owl-crumbs">
+  <a href="/">owl</a>
+  {
+    crumbs.map((c) => (
+      <>
+        <span class="sep">/</span>
+        {c.last ? <span class="cur">{c.name}</span> : <a href={`/tree/${c.path}`}>{c.name}</a>}
+      </>
+    ))
+  }
+</nav>

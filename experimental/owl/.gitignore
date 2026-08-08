@@ -1,0 +1,15 @@
+# Rust
+/filter/target/
+
+# Node / Astro
+/web/node_modules/
+/web/dist/
+/web/.astro/
+
+# Written by scripts/gen-manifest.mjs at build time
+/web/.owl-tree/
+/web/src/generated/manifest.json
+
+# Nix
+result
+result-*

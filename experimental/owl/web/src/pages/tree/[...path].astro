@@ -1,0 +1,15 @@
+---
+import DirListing from '../../components/DirListing.astro';
+import Shell from '../../layouts/Shell.astro';
+import { allDirs } from '../../lib/manifest';
+
+export function getStaticPaths() {
+  return allDirs().map((path) => ({ params: { path } }));
+}
+
+const { path = '' } = Astro.params;
+---
+
+<Shell title={path} path={path} view="tree">
+  <DirListing dir={path} />
+</Shell>
