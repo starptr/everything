@@ -16,8 +16,8 @@ const BACKEND_ICON: Record<BackendId, LucideIcon> = {
 
 // Global appearance settings, docked to the right edge and toggled by the header gear.
 // Mirrors Sidebar's slide-in; sits above it (z-[60]) so the two never collide. Holds the
-// terminal controls: the emulator backend (segmented toggle) and line spacing (stepper);
-// the store persists both.
+// emulator backend selector, then a section of options for the selected emulator only —
+// line spacing (stepper) under xterm; ghostty has none yet. The store persists both fields.
 export function SettingsPanel() {
   const settingsOpen = useStore((s) => s.settingsOpen);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
@@ -28,6 +28,8 @@ export function SettingsPanel() {
 
   const atMin = lineSpacing <= MIN_LINE_SPACING;
   const atMax = lineSpacing >= MAX_LINE_SPACING;
+  const activeBackendLabel =
+    TERMINAL_BACKENDS.find((b) => b.id === terminalBackend)?.label ?? terminalBackend;
 
   return (
     <AnimatePresence>
@@ -82,38 +84,52 @@ export function SettingsPanel() {
                   })}
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-sm text-content">Line spacing</span>
-                <div className="flex items-center gap-1 rounded-md bg-canvas border border-border p-0.5">
-                  <button
-                    onClick={() => setLineSpacing(lineSpacing - LINE_SPACING_STEP)}
-                    disabled={atMin}
-                    aria-label="Decrease line spacing"
-                    className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
-                      atMin
-                        ? "text-content-faint opacity-40 cursor-not-allowed"
-                        : "text-content-subtle hover:text-content hover:bg-surface-active"
-                    }`}
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="w-10 text-center font-mono text-sm text-content tabular-nums">
-                    {lineSpacing.toFixed(2)}
-                  </span>
-                  <button
-                    onClick={() => setLineSpacing(lineSpacing + LINE_SPACING_STEP)}
-                    disabled={atMax}
-                    aria-label="Increase line spacing"
-                    className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
-                      atMax
-                        ? "text-content-faint opacity-40 cursor-not-allowed"
-                        : "text-content-subtle hover:text-content hover:bg-surface-active"
-                    }`}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+            </div>
+
+            {/* Options specific to the selected emulator */}
+            <div>
+              <label className="text-[10px] text-content-subtle uppercase tracking-wider">
+                {activeBackendLabel} options
+              </label>
+
+              {terminalBackend === "xterm" && (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-sm text-content">Line spacing</span>
+                  <div className="flex items-center gap-1 rounded-md bg-canvas border border-border p-0.5">
+                    <button
+                      onClick={() => setLineSpacing(lineSpacing - LINE_SPACING_STEP)}
+                      disabled={atMin}
+                      aria-label="Decrease line spacing"
+                      className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                        atMin
+                          ? "text-content-faint opacity-40 cursor-not-allowed"
+                          : "text-content-subtle hover:text-content hover:bg-surface-active"
+                      }`}
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-10 text-center font-mono text-sm text-content tabular-nums">
+                      {lineSpacing.toFixed(2)}
+                    </span>
+                    <button
+                      onClick={() => setLineSpacing(lineSpacing + LINE_SPACING_STEP)}
+                      disabled={atMax}
+                      aria-label="Increase line spacing"
+                      className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                        atMax
+                          ? "text-content-faint opacity-40 cursor-not-allowed"
+                          : "text-content-subtle hover:text-content hover:bg-surface-active"
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {terminalBackend === "ghostty" && (
+                <p className="mt-2 text-sm text-content-subtle">No settings for libghostty yet.</p>
+              )}
             </div>
           </div>
         </motion.div>
