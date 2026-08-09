@@ -11,10 +11,17 @@
 import { init, Terminal as GhosttyTerm, FitAddon, type ITheme } from "ghostty-web";
 import type { BackendOptions, TerminalBackend, TerminalSize } from "./backend";
 
+// ghostty-web's readResponse() answers only DSR, not the Primary Device Attributes query
+// (DA1, `ESC [ c` / `ESC [ 0 c`). A shell like fish blocks ~10s waiting for that reply
+// before drawing its prompt, so we answer it ourselves with the standard VT100/AVO response.
+const DA1_QUERY = /\x1b\[0?c/;
+const DA1_RESPONSE = "\x1b[?1;2c";
+
 class GhosttyBackend implements TerminalBackend {
   readonly id = "ghostty" as const;
   private term: GhosttyTerm;
   private fitAddon = new FitAddon();
+  private emitData?: (data: string) => void;
 
   constructor(o: BackendOptions) {
     this.term = new GhosttyTerm({
@@ -39,9 +46,12 @@ class GhosttyBackend implements TerminalBackend {
 
   write(data: string) {
     this.term.write(data);
+    // Answer DA1 on ghostty's behalf (xterm replies natively; this path is ghostty-only).
+    if (this.emitData && DA1_QUERY.test(data)) this.emitData(DA1_RESPONSE);
   }
 
   onData(cb: (data: string) => void) {
+    this.emitData = cb;
     this.term.onData(cb);
   }
 
