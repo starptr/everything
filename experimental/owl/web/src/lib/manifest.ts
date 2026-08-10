@@ -21,7 +21,8 @@ interface Manifest {
 export const files: FileEntry[] = (manifestJson as Manifest).files;
 
 /** Site title shown in the shell (breadcrumb root, sidebar logo, browser tab).
- *  Set by the fileset's `@title` directive; defaults to owl's own name. */
+ *  Set via the `OWL_TITLE` build env (owl's `title` Nix parameter); defaults to
+ *  owl's own name. */
 export const siteTitle: string = (manifestJson as Manifest).title ?? 'owl';
 
 // gen-manifest.mjs writes the file bodies under .owl-tree/ (outside src/, so

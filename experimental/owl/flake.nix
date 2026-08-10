@@ -59,7 +59,10 @@
         # `--ignore-scripts` + passthrough image service keep the build hermetic
         # (no sharp/libvips fetch), matching channel-party/web.
         renderTree =
-          tree:
+          {
+            tree,
+            title ? "owl",
+          }:
           pkgs.buildNpmPackage {
             pname = "owl-web";
             version = "0.1.0";
@@ -75,6 +78,8 @@
               ASTRO_TELEMETRY_DISABLED = "1";
               # Coerce to a store-path string: buildNpmPackage's `env` rejects path values.
               OWL_INPUT_DIR = "${tree}";
+              # Site title shown in owl's UI (breadcrumb root, sidebar, browser tab).
+              OWL_TITLE = title;
             };
 
             installPhase = ''
@@ -101,8 +106,12 @@
           {
             src,
             fileset ? "${src}/owl.fileset.txt",
+            title ? "owl",
           }:
-          renderTree (filterTree { inherit src fileset; });
+          renderTree {
+            tree = filterTree { inherit src fileset; };
+            inherit title;
+          };
       in
       {
         packages = {
@@ -113,7 +122,10 @@
           # dir). Renders the COMMITTED tree of the `everything` input, so commit
           # changes first. Point at a different checkout without editing the lock:
           #   nix build .#site --override-input everything git+file:///path/to/repo
-          site = renderCheckout { src = everything; };
+          site = renderCheckout {
+            src = everything;
+            title = "everything";
+          };
         };
 
         apps.default = flake-utils.lib.mkApp {

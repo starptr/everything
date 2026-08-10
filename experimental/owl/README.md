@@ -36,6 +36,14 @@ Commands run from `experimental/owl/`. `owl-filter` always walks the on-disk
 checkout and applies `owl.fileset.txt`; `owl-web` renders whatever tree it's
 handed via `$OWL_INPUT_DIR`.
 
+`owl-web`'s build (`gen-manifest` + `astro build`) reads two environment variables:
+
+- `OWL_INPUT_DIR` (required) — the pre-filtered tree to render (produce one with
+  `owl-filter`).
+- `OWL_TITLE` (optional, default `owl`) — the site title shown in the shell
+  (breadcrumb root, sidebar logo, browser-tab suffix). The Nix build sets it from
+  the `title` parameter (§4); `.#site` uses `everything`.
+
 ### 1. Development — `owl-filter` + `npm run dev`
 
 The fast inner loop: a hermetic pre-filter feeding Astro's live dev server (HMR).
@@ -45,7 +53,7 @@ The fast inner loop: a hermetic pre-filter feeding Astro's live dev server (HMR)
 # pre-filter a checkout (or any tree) into a pruned dir
 nix run .#owl-filter -- --fileset ../../owl.fileset.txt ../.. /tmp/owl-out
 # live server with hot reload — re-run the filter when browsed files change
-cd web && OWL_INPUT_DIR=/tmp/owl-out npm run dev        # http://localhost:4321
+cd web && OWL_INPUT_DIR=/tmp/owl-out OWL_TITLE=everything npm run dev   # http://localhost:4321
 ```
 
 **Scripts** (run from the repo root, no arguments) that wrap this whole loop:
@@ -108,10 +116,11 @@ For a consumer flake that has a checkout as a store path and wants the finished
 site, bypassing owl's own `everything` input:
 
 ```nix
-owl.lib.${system}.renderCheckout { src = ./some-checkout; }  # filter + render
-owl.lib.${system}.renderTree pruned-store-path               # render a pre-filtered tree
-owl.lib.${system}.filterTree { src = ...; fileset = ...; }   # just the pre-filter
-owl.packages.${system}.owl-filter                            # the filter binary
+# `title` is optional (default "owl") — the site name shown in owl's UI.
+owl.lib.${system}.renderCheckout { src = ./some-checkout; title = "my-repo"; } # filter + render
+owl.lib.${system}.renderTree { tree = pruned-store-path; title = "my-repo"; }  # render a pre-filtered tree
+owl.lib.${system}.filterTree { src = ...; fileset = ...; }                     # just the pre-filter
+owl.packages.${system}.owl-filter                                             # the filter binary
 ```
 
 **Scripts:** none — this path is for other flakes consuming owl, not local dev.

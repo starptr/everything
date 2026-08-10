@@ -4,8 +4,7 @@
 //! `/` in it is anchored to the checkout root, a pattern without one matches at
 //! any depth, and a trailing `/` matches a directory's whole subtree. A leading
 //! `!` re-includes; `@import <path>` inlines another fileset/.gitignore-style
-//! file (path relative to the importing file); `@title <text>` sets the site
-//! title owl shows in its UI (last one wins). Paths are matched checkout-root-
+//! file (path relative to the importing file). Paths are matched checkout-root-
 //! relative, later rules win, and an unmatched path defaults to "included". See
 //! the header of `owl.fileset.txt` for the source-of-truth format docs.
 
@@ -21,25 +20,17 @@ struct Rule {
     matchers: Vec<GlobMatcher>,
 }
 
-/// An ordered list of rules resolved from a fileset file (imports inlined in
-/// place), plus the site title from the last `@title` directive (if any).
+/// An ordered list of rules resolved from a fileset file (imports inlined in place).
 pub struct Fileset {
     rules: Vec<Rule>,
-    title: Option<String>,
 }
 
 impl Fileset {
     /// Load a fileset file, recursively inlining `@import`ed files.
     pub fn load(path: &Path) -> Result<Fileset> {
         let mut rules = Vec::new();
-        let mut title = None;
-        parse_file(path, &mut rules, &mut title, &mut Vec::new())?;
-        Ok(Fileset { rules, title })
-    }
-
-    /// The site title set by the last `@title` directive, if any.
-    pub fn title(&self) -> Option<&str> {
-        self.title.as_deref()
+        parse_file(path, &mut rules, &mut Vec::new())?;
+        Ok(Fileset { rules })
     }
 
     /// Whether a checkout-root-relative path is included. Default include; scan
@@ -57,20 +48,14 @@ impl Fileset {
     #[cfg(test)]
     fn from_str(content: &str) -> Result<Fileset> {
         let mut rules = Vec::new();
-        let mut title = None;
-        parse_lines(content, Path::new("."), &mut rules, &mut title, &mut Vec::new())?;
-        Ok(Fileset { rules, title })
+        parse_lines(content, Path::new("."), &mut rules, &mut Vec::new())?;
+        Ok(Fileset { rules })
     }
 }
 
 /// Read a fileset file and parse its lines. `visited` holds canonicalized paths
 /// already parsed, breaking `@import` cycles.
-fn parse_file(
-    path: &Path,
-    rules: &mut Vec<Rule>,
-    title: &mut Option<String>,
-    visited: &mut Vec<PathBuf>,
-) -> Result<()> {
+fn parse_file(path: &Path, rules: &mut Vec<Rule>, visited: &mut Vec<PathBuf>) -> Result<()> {
     let canon = path
         .canonicalize()
         .with_context(|| format!("resolving fileset {}", path.display()))?;
@@ -82,7 +67,7 @@ fn parse_file(
     let content = std::fs::read_to_string(&canon)
         .with_context(|| format!("reading fileset {}", canon.display()))?;
     let dir = canon.parent().unwrap_or_else(|| Path::new("."));
-    parse_lines(&content, dir, rules, title, visited)
+    parse_lines(&content, dir, rules, visited)
 }
 
 /// Parse the lines of a fileset, resolving `@import` relative to `dir`.
@@ -90,7 +75,6 @@ fn parse_lines(
     content: &str,
     dir: &Path,
     rules: &mut Vec<Rule>,
-    title: &mut Option<String>,
     visited: &mut Vec<PathBuf>,
 ) -> Result<()> {
     for (idx, raw) in content.lines().enumerate() {
@@ -98,23 +82,12 @@ fn parse_lines(
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        // `@title <text>`: set the UI title (last one wins). The whitespace/end
-        // guard keeps `@titlefoo` from matching; a bare `@title` is a no-op.
-        if let Some(rest) = line.strip_prefix("@title") {
-            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
-                let name = rest.trim();
-                if !name.is_empty() {
-                    *title = Some(name.to_string());
-                }
-                continue;
-            }
-        }
         if let Some(rest) = line.strip_prefix("@import") {
             let target = rest.trim();
             if target.is_empty() {
                 bail!("line {}: `@import` needs a path", idx + 1);
             }
-            parse_file(&dir.join(target), rules, title, visited)?;
+            parse_file(&dir.join(target), rules, visited)?;
             continue;
         }
         let (negated, pat) = match line.strip_prefix('!') {
@@ -230,16 +203,5 @@ mod tests {
     #[test]
     fn import_directive_needs_a_path() {
         assert!(Fileset::from_str("@import\n").is_err());
-    }
-
-    #[test]
-    fn title_directive_last_wins_and_defaults_none() {
-        assert!(Fileset::from_str("*.lock\n").unwrap().title().is_none());
-        let fs = Fileset::from_str("@title  Everything Repo \n@title final\n").unwrap();
-        assert_eq!(fs.title(), Some("final"));
-        // A bare `@title` sets nothing and is not parsed as a glob.
-        let fs = Fileset::from_str("@title\n").unwrap();
-        assert!(fs.title().is_none());
-        assert!(included(&fs, "anything"));
     }
 }

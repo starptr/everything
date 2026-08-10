@@ -23,4 +23,5 @@ nix run "$here#owl-filter" -- --fileset "$fileset" "$repo_root" "$input"
 echo "==> npm run dev: http://localhost:4321  (renderer HMR; content frozen; Ctrl-C to stop)"
 cd "$here/web"
 export OWL_INPUT_DIR="$input"
+export OWL_TITLE=everything   # site title (matches `nix build .#site`)
 nix shell nixpkgs#nodejs --command bash -c '[ -d node_modules ] || npm ci; npm run dev'

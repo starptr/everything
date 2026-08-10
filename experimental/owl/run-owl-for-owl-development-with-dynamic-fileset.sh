@@ -21,7 +21,7 @@ refilter=$(mktemp "${TMPDIR:-/tmp}/owl-refilter.XXXXXX")
 cat > "$refilter" <<EOF
 set -e
 nix run "$here#owl-filter" -- --fileset "$fileset" "$repo_root" "$input"
-cd "$here/web" && OWL_INPUT_DIR="$input" nix shell nixpkgs#nodejs --command npm run gen:manifest
+cd "$here/web" && OWL_INPUT_DIR="$input" OWL_TITLE=everything nix shell nixpkgs#nodejs --command npm run gen:manifest
 EOF
 
 watcher=""
@@ -46,4 +46,5 @@ watcher=$!
 echo "==> npm run dev: http://localhost:4321  (content tracks the repo; Ctrl-C to stop)"
 cd "$here/web"
 export OWL_INPUT_DIR="$input"
+export OWL_TITLE=everything   # site title (matches `nix build .#site`)
 nix shell nixpkgs#nodejs --command bash -c '[ -d node_modules ] || npm ci; npm run dev'
