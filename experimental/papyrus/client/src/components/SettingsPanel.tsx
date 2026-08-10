@@ -6,7 +6,9 @@ import {
   MIN_LINE_SPACING,
   MAX_LINE_SPACING,
   TERMINAL_BACKENDS,
+  TERMINAL_FONTS,
   type BackendId,
+  type FontId,
 } from "../settings";
 
 const BACKEND_ICON: Record<BackendId, LucideIcon> = {
@@ -14,10 +16,39 @@ const BACKEND_ICON: Record<BackendId, LucideIcon> = {
   ghostty: Ghost,
 };
 
+// A vertical list of the selectable terminal fonts; each row previews itself in its own font.
+// Shared by both emulator sections (bound to that emulator's font state).
+function FontPicker({ value, onChange }: { value: FontId; onChange: (id: FontId) => void }) {
+  return (
+    <div className="mt-1.5 flex flex-col gap-1 rounded-md bg-canvas border border-border p-0.5">
+      {TERMINAL_FONTS.map(({ id, label, stack }) => {
+        const active = value === id;
+        return (
+          <button
+            key={id}
+            onClick={() => onChange(id)}
+            aria-pressed={active}
+            aria-label={`Use ${label}`}
+            style={{ fontFamily: stack }}
+            className={`w-full px-2 py-1.5 rounded text-sm text-left truncate transition-colors ${
+              active
+                ? "text-content bg-surface-active"
+                : "text-content-subtle hover:text-content hover:bg-surface-active"
+            }`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Global appearance settings, docked to the right edge and toggled by the header gear.
 // Mirrors Sidebar's slide-in; sits above it (z-[60]) so the two never collide. Holds the
-// emulator backend selector, then a section of options for the selected emulator only —
-// line spacing (stepper) under xterm; ghostty has none yet. The store persists both fields.
+// emulator backend selector, then a section of options for the selected emulator only — a
+// per-emulator font picker (both), plus line spacing (stepper) under xterm. The store persists
+// each field.
 export function SettingsPanel() {
   const settingsOpen = useStore((s) => s.settingsOpen);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
@@ -25,6 +56,10 @@ export function SettingsPanel() {
   const setTerminalBackend = useStore((s) => s.setTerminalBackend);
   const lineSpacing = useStore((s) => s.lineSpacing);
   const setLineSpacing = useStore((s) => s.setLineSpacing);
+  const xtermFont = useStore((s) => s.xtermFont);
+  const setXtermFont = useStore((s) => s.setXtermFont);
+  const ghosttyFont = useStore((s) => s.ghosttyFont);
+  const setGhosttyFont = useStore((s) => s.setGhosttyFont);
 
   const atMin = lineSpacing <= MIN_LINE_SPACING;
   const atMax = lineSpacing >= MAX_LINE_SPACING;
@@ -93,42 +128,51 @@ export function SettingsPanel() {
               </label>
 
               {terminalBackend === "xterm" && (
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-sm text-content">Line spacing</span>
-                  <div className="flex items-center gap-1 rounded-md bg-canvas border border-border p-0.5">
-                    <button
-                      onClick={() => setLineSpacing(lineSpacing - LINE_SPACING_STEP)}
-                      disabled={atMin}
-                      aria-label="Decrease line spacing"
-                      className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
-                        atMin
-                          ? "text-content-faint opacity-40 cursor-not-allowed"
-                          : "text-content-subtle hover:text-content hover:bg-surface-active"
-                      }`}
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="w-10 text-center font-mono text-sm text-content tabular-nums">
-                      {lineSpacing.toFixed(2)}
-                    </span>
-                    <button
-                      onClick={() => setLineSpacing(lineSpacing + LINE_SPACING_STEP)}
-                      disabled={atMax}
-                      aria-label="Increase line spacing"
-                      className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
-                        atMax
-                          ? "text-content-faint opacity-40 cursor-not-allowed"
-                          : "text-content-subtle hover:text-content hover:bg-surface-active"
-                      }`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                <>
+                  <div className="mt-2">
+                    <span className="text-sm text-content">Font</span>
+                    <FontPicker value={xtermFont} onChange={setXtermFont} />
                   </div>
-                </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-sm text-content">Line spacing</span>
+                    <div className="flex items-center gap-1 rounded-md bg-canvas border border-border p-0.5">
+                      <button
+                        onClick={() => setLineSpacing(lineSpacing - LINE_SPACING_STEP)}
+                        disabled={atMin}
+                        aria-label="Decrease line spacing"
+                        className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                          atMin
+                            ? "text-content-faint opacity-40 cursor-not-allowed"
+                            : "text-content-subtle hover:text-content hover:bg-surface-active"
+                        }`}
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-10 text-center font-mono text-sm text-content tabular-nums">
+                        {lineSpacing.toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => setLineSpacing(lineSpacing + LINE_SPACING_STEP)}
+                        disabled={atMax}
+                        aria-label="Increase line spacing"
+                        className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                          atMax
+                            ? "text-content-faint opacity-40 cursor-not-allowed"
+                            : "text-content-subtle hover:text-content hover:bg-surface-active"
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
 
               {terminalBackend === "ghostty" && (
-                <p className="mt-2 text-sm text-content-subtle">No settings for libghostty yet.</p>
+                <div className="mt-2">
+                  <span className="text-sm text-content">Font</span>
+                  <FontPicker value={ghosttyFont} onChange={setGhosttyFont} />
+                </div>
               )}
             </div>
           </div>
