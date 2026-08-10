@@ -11,6 +11,10 @@ dist/
 client/dist/
 *.tsbuildinfo
 
+# Terminal fonts, generated from nix (flake `terminalFonts` / scripts/sync-terminal-fonts.sh).
+# Bundled into the build; never committed (Nerd Font TTFs are ~10 MB each).
+client/public/fonts/
+
 # Environment
 .env
 .env.local

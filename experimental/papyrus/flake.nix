@@ -46,6 +46,17 @@
         # shells out to it for all durable state.
         silverwood-bin = silverwood.packages.${system}.default;
 
+        # The terminal fonts the client self-hosts, assembled from nixpkgs so they're
+        # reproducible (no CDN) and each ships real Regular/Bold/Italic/BoldItalic faces.
+        # Single source of truth for both the client build (preBuild below) and the dev
+        # sync script (scripts/sync-terminal-fonts.sh); `nix build .#terminalFonts`.
+        terminalFonts = pkgs.runCommandLocal "papyrus-terminal-fonts" { } ''
+          mkdir -p $out
+          cp ${pkgs.jetbrains-mono}/share/fonts/truetype/JetBrainsMono-{Regular,Bold,Italic,BoldItalic}.ttf $out/
+          cp ${pkgs.nerd-fonts.iosevka}/share/fonts/truetype/NerdFonts/Iosevka/IosevkaNerdFont{,Mono}-{Regular,Bold,Italic,BoldItalic}.ttf $out/
+          cp ${pkgs.nerd-fonts.iosevka-term}/share/fonts/truetype/NerdFonts/IosevkaTerm/IosevkaTermNerdFont{,Mono}-{Regular,Bold,Italic,BoldItalic}.ttf $out/
+        '';
+
         # The Vite/React client, built to static `dist`. Pure JS (no native
         # modules); installed + built with bun from client/bun.nix.
         client = b2n.mkDerivation {
@@ -53,7 +64,14 @@
           version = "1.2.1";
           src = ./client;
           bunDeps = b2n.fetchBunDeps { bunNix = ./client/bun.nix; };
-          buildPhase = "bun run build"; # package.json build: tsc && vite build -> dist
+          # Drop the self-hosted fonts into Vite's publicDir first (inline, not a preBuild hook —
+          # the custom buildPhase string below would skip runHook preBuild), so Vite copies them
+          # verbatim into dist/fonts/ and they're served at /fonts/*.ttf (see index.css).
+          buildPhase = ''
+            mkdir -p public/fonts
+            cp ${terminalFonts}/*.ttf public/fonts/
+            bun run build
+          ''; # package.json build: tsc && vite build -> dist
           installPhase = ''
             runHook preInstall
             cp -r dist "$out"
@@ -115,7 +133,7 @@
       {
         packages = {
           default = papyrus;
-          inherit client;
+          inherit client terminalFonts;
         };
 
         checks = {

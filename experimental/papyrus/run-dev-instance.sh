@@ -7,5 +7,8 @@ set -euo pipefail
 # Run from this script's dir so `path:../silverwood` and `bun run dev` resolve.
 cd "$(dirname "$0")"
 
+# Self-hosted terminal fonts are bundled from nix and gitignored — populate them for Vite.
+./scripts/sync-terminal-fonts.sh
+
 exec nix shell path:../silverwood nixpkgs#bun --impure \
   --command bash -c 'PORT=7968 CLIENT_PORT=7969 bun run dev'

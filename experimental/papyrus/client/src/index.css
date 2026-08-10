@@ -2,6 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Self-hosted terminal fonts. The .ttf are bundled from nixpkgs by the flake (`terminalFonts`)
+   and served at /fonts/*.ttf (dev: client/public/fonts via scripts/sync-terminal-fonts.sh;
+   prod: dist/fonts). Every family declares all four real faces (Regular/Bold/Italic/
+   BoldItalic) so terminal attributes render without browser synthesis. Selectable per emulator
+   in Settings — see settings.ts TERMINAL_FONTS. Keep families/files in sync with both. */
+@font-face {
+  font-family: "JetBrains Mono"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "JetBrains Mono"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("/fonts/JetBrainsMono-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "JetBrains Mono"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("/fonts/JetBrainsMono-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "JetBrains Mono"; font-weight: 700; font-style: italic; font-display: swap;
+  src: url("/fonts/JetBrainsMono-BoldItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaNerdFont-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaNerdFont-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaNerdFont-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font"; font-weight: 700; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaNerdFont-BoldItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font Mono"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaNerdFontMono-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font Mono"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaNerdFontMono-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font Mono"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaNerdFontMono-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Iosevka Nerd Font Mono"; font-weight: 700; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaNerdFontMono-BoldItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFont-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFont-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFont-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font"; font-weight: 700; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFont-BoldItalic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font Mono"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFontMono-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font Mono"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFontMono-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font Mono"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFontMono-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "IosevkaTerm Nerd Font Mono"; font-weight: 700; font-style: italic; font-display: swap;
+  src: url("/fonts/IosevkaTermNerdFontMono-BoldItalic.ttf") format("truetype");
+}
+
 /* Theme tokens. Each theme is a named block of semantic color variables (space-
    separated RGB channels, consumed via `rgb(var(--x) / <alpha-value>)` from
    tailwind.config.js). `:root` holds the dark defaults; a theme is applied by
