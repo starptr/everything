@@ -86,7 +86,7 @@ commit lands there and you re-lock, plain `nix build .#site` renders a tree
 *without* owl — and errors if it has no `owl.fileset.txt`. Use (a) until then.
 Deploy `result/` to any static host.
 
-**Script** (repo root, no arguments): `use-owl-for-general-development.sh` is this
+**Script** (repo root, no arguments): `run-owl-for-general-development.sh` is this
 option applied to your **live working tree** — it filters the on-disk checkout (so
 new files appear and deleted ones vanish, no `git add` or commit), runs the hermetic
 `nix build .#site` above, and serves the result. Use it to browse a feature in

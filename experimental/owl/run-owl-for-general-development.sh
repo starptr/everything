@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# use-owl-for-general-development.sh — browse THIS checkout's live working tree with a
+# run-owl-for-general-development.sh — browse THIS checkout's live working tree with a
 # HERMETIC owl (pinned filter + renderer). For developing a feature OTHER than owl:
 # you get a stable, correct owl over your current files, built once and served.
 #
