@@ -6,8 +6,9 @@
 // themes are emitted as CSS variables and swapped by prefers-color-scheme (see
 // Shell.astro).
 
-import { codeToHtml, codeToTokens } from 'shiki';
+import { codeToHast, codeToTokens, hastToHtml } from 'shiki';
 import type { ShikiTransformer, ThemedToken } from 'shiki';
+import type { Element, ElementContent, Root } from 'hast';
 
 const THEMES = { light: 'github-light', dark: 'github-dark' } as const;
 
@@ -30,26 +31,74 @@ function lineNumbers(startLine: number): ShikiTransformer {
   };
 }
 
-/**
- * Highlight code to dual-theme HTML with a line-number gutter. An unknown or
- * unavailable grammar degrades to Shiki's `plaintext` (no token colors, identical
- * markup) instead of a bespoke fallback, so every code block renders the same way.
- */
-export async function highlightToHtml(
+// Tokenize a chunk once to a hast tree (dual themes as CSS vars + gutter). An
+// unknown or unavailable grammar degrades to `plaintext` — identical markup, no
+// token colors — so every code block renders the same way.
+async function toHast(
   code: string,
   lang: string | undefined,
-  startLine = 1,
-): Promise<string> {
+  startLine: number,
+): Promise<Root> {
   const opts = {
     themes: THEMES,
     defaultColor: false,
     transformers: [lineNumbers(startLine)],
   } as const;
   try {
-    return await codeToHtml(code, { lang: lang ?? PLAIN, ...opts });
+    return await codeToHast(code, { lang: lang ?? PLAIN, ...opts });
   } catch {
-    return await codeToHtml(code, { lang: PLAIN, ...opts });
+    return await codeToHast(code, { lang: PLAIN, ...opts });
   }
+}
+
+/**
+ * Highlight a whole chunk to dual-theme HTML with a line-number gutter, numbered
+ * from `startLine`. Used by the raw and plain views (the entire file in one pass).
+ */
+export async function highlightToHtml(
+  code: string,
+  lang: string | undefined,
+  startLine = 1,
+): Promise<string> {
+  return hastToHtml(await toHast(code, lang, startLine));
+}
+
+/** A file tokenized once, exposing contiguous line ranges as separate blocks. */
+export interface HighlightedLines {
+  /** Number of source lines (1:1 with `code.split('\n')`). */
+  count: number;
+  /** Render source lines `[start, end)` (0-based) as one `<pre class="shiki">`. */
+  block(start: number, end: number): string;
+}
+
+/**
+ * Tokenize a file ONCE, then hand back its highlighted lines to be sliced into
+ * blocks. The rendered view of a `code` file interleaves prose boxes with source;
+ * re-tokenizing each source run in isolation would lose stateful grammar context
+ * (Astro's `---` frontmatter fence, template literals, multi-line comments), so
+ * every block is cut from this single whole-file pass and stays correctly colored.
+ */
+export async function highlightLines(
+  code: string,
+  lang: string | undefined,
+): Promise<HighlightedLines> {
+  const root = await toHast(code, lang, 1);
+  const pre = root.children.find((c): c is Element => c.type === 'element') as Element;
+  const codeEl = pre.children.find((c): c is Element => c.type === 'element') as Element;
+  const lineEls = codeEl.children.filter((c): c is Element => c.type === 'element');
+  return {
+    count: lineEls.length,
+    block(start, end) {
+      const kids: ElementContent[] = [];
+      for (let k = start; k < end; k++) {
+        if (k > start) kids.push({ type: 'text', value: '\n' });
+        kids.push(lineEls[k]);
+      }
+      const codeNode: Element = { type: 'element', tagName: 'code', properties: {}, children: kids };
+      const preNode: Element = { ...pre, children: [codeNode] };
+      return hastToHtml({ type: 'root', children: [preNode] });
+    },
+  };
 }
 
 // Per-line comment classification — the ONLY place the comment-detection engine
