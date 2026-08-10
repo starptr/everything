@@ -21,6 +21,7 @@ const tree = buildTree();
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{siteTitle} - owl</title>
+    <link rel="icon" type="image/gif" href="/owl-cat.gif" />
     <style is:global>
       :root {
         color-scheme: light dark;
@@ -69,8 +70,10 @@ const tree = buildTree();
         padding: 0.75rem;
         font-size: 0.85rem;
       }
-      .owl-logo { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.25rem 0.25rem 0.75rem; color: var(--owl-fg); }
+      .owl-logo { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; padding: 0.25rem 0.25rem 0.75rem; color: var(--owl-fg); }
       .owl-logo:hover { text-decoration: none; }
+      .owl-logo-img { height: 2.25rem; width: auto; flex: 0 0 auto; border-radius: 0.35rem; }
+      .owl-logo-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
       .owl-logo-name { font-weight: 700; font-size: 1.1rem; }
       .owl-logo-now { font-size: 0.72rem; font-weight: 400; color: var(--owl-muted); }
 
@@ -179,8 +182,11 @@ const tree = buildTree();
   <body>
     <aside class="owl-sidebar">
       <a class="owl-logo" href="/">
-        <span class="owl-logo-name">owl</span>
-        <span class="owl-logo-now">now showing: {siteTitle}</span>
+        <img class="owl-logo-img" src="/owl-cat.gif" alt="" width="165" height="173" />
+        <span class="owl-logo-text">
+          <span class="owl-logo-name">owl</span>
+          <span class="owl-logo-now">now showing: {siteTitle}</span>
+        </span>
       </a>
       <FileTree node={tree} current={path} view={treeView} />
     </aside>
