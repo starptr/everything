@@ -131,8 +131,11 @@ const tree = buildTree();
       .shiki .line[data-line-no]::before {
         content: attr(data-line-no);
         display: inline-block;
+        box-sizing: content-box; /* keep the 3ch number width off the padding/border */
         width: 3ch;
+        padding-right: 1rem;
         margin-right: 1rem;
+        border-right: 1px solid var(--owl-border);
         text-align: right;
         color: var(--owl-muted);
         user-select: none;
