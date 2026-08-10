@@ -4,14 +4,13 @@
 // both theme palettes as CSS variables that the stylesheet swaps.
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import FileTree from '../components/FileTree.astro';
-import { buildTree } from '../lib/manifest';
+import { buildTree, siteTitle } from '../lib/manifest';
 
 interface Props {
-  title: string;
   path?: string;
   view?: 'rendered' | 'raw' | 'tree';
 }
-const { title, path = '', view = 'rendered' } = Astro.props;
+const { path = '', view = 'rendered' } = Astro.props;
 // Sidebar links stay in the current file view; directory (tree) pages fall back to rendered.
 const treeView = view === 'raw' ? 'raw' : 'rendered';
 const tree = buildTree();
@@ -21,7 +20,7 @@ const tree = buildTree();
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title === '' ? 'owl' : `${title} · owl`}</title>
+    <title>{siteTitle} - owl</title>
     <style is:global>
       :root {
         color-scheme: light dark;
@@ -70,7 +69,10 @@ const tree = buildTree();
         padding: 0.75rem;
         font-size: 0.85rem;
       }
-      .owl-logo { display: block; font-weight: 700; font-size: 1.1rem; padding: 0.25rem 0.25rem 0.75rem; color: var(--owl-fg); }
+      .owl-logo { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.25rem 0.25rem 0.75rem; color: var(--owl-fg); }
+      .owl-logo:hover { text-decoration: none; }
+      .owl-logo-name { font-weight: 700; font-size: 1.1rem; }
+      .owl-logo-now { font-size: 0.72rem; font-weight: 400; color: var(--owl-muted); }
 
       .owl-tree { list-style: none; margin: 0; padding: 0 0 0 0.6rem; }
       .owl-tree summary { cursor: pointer; padding: 0.1rem 0; color: var(--owl-fg); }
@@ -176,7 +178,10 @@ const tree = buildTree();
   </head>
   <body>
     <aside class="owl-sidebar">
-      <a class="owl-logo" href="/">owl</a>
+      <a class="owl-logo" href="/">
+        <span class="owl-logo-name">owl</span>
+        <span class="owl-logo-now">now showing: {siteTitle}</span>
+      </a>
       <FileTree node={tree} current={path} view={treeView} />
     </aside>
     <main class="owl-main">

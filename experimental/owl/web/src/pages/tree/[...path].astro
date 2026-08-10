@@ -10,6 +10,6 @@ export function getStaticPaths() {
 const { path = '' } = Astro.params;
 ---
 
-<Shell title={path} path={path} view="tree">
+<Shell path={path} view="tree">
   <DirListing dir={path} />
 </Shell>

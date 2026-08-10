@@ -1,6 +1,7 @@
 ---
 // Path breadcrumbs: each directory segment links to its tree page; the final
-// segment (current file or dir) is plain text.
+// segment (current file or dir) is plain text. The root crumb is the site title.
+import { siteTitle } from '../lib/manifest';
 interface Props {
   path: string;
 }
@@ -14,7 +15,7 @@ const crumbs = parts.map((name, i) => ({
 ---
 
 <nav class="owl-crumbs">
-  <a href="/">owl</a>
+  <a href="/">{siteTitle}</a>
   {
     crumbs.map((c) => (
       <>

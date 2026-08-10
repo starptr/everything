@@ -14,10 +14,15 @@ export interface FileEntry {
 }
 
 interface Manifest {
+  title?: string | null;
   files: FileEntry[];
 }
 
 export const files: FileEntry[] = (manifestJson as Manifest).files;
+
+/** Site title shown in the shell (breadcrumb root, sidebar logo, browser tab).
+ *  Set by the fileset's `@title` directive; defaults to owl's own name. */
+export const siteTitle: string = (manifestJson as Manifest).title ?? 'owl';
 
 // gen-manifest.mjs writes the file bodies under .owl-tree/ (outside src/, so
 // Astro's dep scanner ignores them); astro build runs with cwd at the project

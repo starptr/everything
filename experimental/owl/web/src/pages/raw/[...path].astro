@@ -12,7 +12,7 @@ const { entry } = Astro.props as { entry: FileEntry };
 const html = await renderRawHtml(entry);
 ---
 
-<Shell title={entry.path} path={entry.path} view="raw">
+<Shell path={entry.path} view="raw">
   <ViewToggle slot="toolbar" path={entry.path} view="raw" />
   <div class="owl-file-view owl-raw" set:html={html} />
 </Shell>

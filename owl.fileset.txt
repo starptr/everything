@@ -11,6 +11,8 @@
 #   !<glob>          Re-include paths matching this glob (negation).
 #   @import <path>   Inline another fileset / .gitignore-style file, with
 #                    <path> resolved relative to THIS file's directory.
+#   @title <text>    Site title shown in owl's UI (breadcrumb root, sidebar
+#                    logo, browser tab). Last one wins; defaults to "owl".
 #
 # Later rules win, and @import inlines its rules at that position — so ordering
 # and negation across an import boundary are well-defined.
@@ -33,6 +35,11 @@
 #
 # Imported .gitignore files are read under these same rules — a best-effort
 # superset of gitignore syntax that covers the common cases.
+
+# --- Site title ---------------------------------------------------------------
+
+# Shown as the breadcrumb root, sidebar logo, and browser-tab suffix.
+@title everything
 
 # --- File-type excludes (with their negations) --------------------------------
 

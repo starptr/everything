@@ -65,6 +65,15 @@ fn main() -> Result<()> {
         copied += 1;
     }
 
+    // owl's own metadata sidecar: the site title from the fileset. gen-manifest
+    // reads it into the manifest and does not render it as a page.
+    if let Some(title) = fileset.title() {
+        fs::create_dir_all(&args.out)
+            .with_context(|| format!("mkdir {}", args.out.display()))?;
+        let meta = args.out.join(".owl-title");
+        fs::write(&meta, title).with_context(|| format!("writing {}", meta.display()))?;
+    }
+
     eprintln!("owl-filter: copied {copied} files to {}", args.out.display());
     Ok(())
 }

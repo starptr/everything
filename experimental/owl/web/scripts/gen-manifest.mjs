@@ -41,6 +41,7 @@ async function walk(absDir) {
     } else if (d.isFile()) {
       const abs = join(absDir, d.name);
       const rel = relative(root, abs).split(sep).join('/');
+      if (rel === '.owl-title') continue; // owl metadata sidecar, not a rendered page
       const buf = await readFile(abs);
       const dest = join(treeDir, rel);
       await mkdir(dirname(dest), { recursive: true });
@@ -51,10 +52,18 @@ async function walk(absDir) {
   }
 }
 
+// The site title owl-filter wrote from the fileset's `@title` directive, if any.
+let title = null;
+try {
+  title = (await readFile(join(root, '.owl-title'), 'utf8')).trim() || null;
+} catch {
+  // No sidecar (no `@title` in the fileset): the web layer falls back to "owl".
+}
+
 await rm(treeDir, { recursive: true, force: true });
 await mkdir(treeDir, { recursive: true });
 await walk(root);
 files.sort((a, b) => a.path.localeCompare(b.path));
 await mkdir(genDir, { recursive: true });
-await writeFile(join(genDir, 'manifest.json'), JSON.stringify({ files }));
-console.log(`gen-manifest: ${files.length} files from ${root}`);
+await writeFile(join(genDir, 'manifest.json'), JSON.stringify({ title, files }));
+console.log(`gen-manifest: ${files.length} files from ${root}${title ? ` (title: ${title})` : ''}`);
