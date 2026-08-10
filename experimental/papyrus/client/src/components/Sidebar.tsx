@@ -23,6 +23,7 @@ import {
   GitBranch,
 } from "lucide-react";
 import { useStore, SessionTab } from "../stores/useStore";
+import { AgentIcon } from "./AgentIcon";
 import { type PendingOptimism, shouldDropOptimism } from "./sessionOptimism";
 import { Terminal } from "./Terminal";
 import { NewSessionMenu } from "./NewSessionMenu";
@@ -327,9 +328,9 @@ export function Sidebar() {
           {/* Header */}
           <div className="flex-shrink-0 px-4 py-3 border-b border-border">
             <div className="flex items-center gap-3">
-              <div
-                className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: displayColor }}
+              <AgentIcon
+                icon={editIcon || (node?.data?.icon as string) || "cpu"}
+                color={displayColor}
               />
               <div className="flex-1 min-w-0">
                 <h2 className="text-sm font-medium text-content truncate">

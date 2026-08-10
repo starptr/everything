@@ -1,4 +1,5 @@
 import { GitBranch, Folder } from "lucide-react";
+import { AgentIcon } from "../AgentIcon";
 
 // A single node indicator folding connection + checkout state (no live agent
 // activity — that needed the plugin hook). Precedence: checkout problems first,
@@ -17,7 +18,7 @@ interface AgentNodeCardProps {
   selected: boolean;
   displayColor: string;
   displayName: string;
-  Icon: any;
+  icon: string;
   agentId: string;
   connected: boolean;
   checkoutState?: string;
@@ -32,7 +33,7 @@ export function AgentNodeCard({
   selected,
   displayColor,
   displayName,
-  Icon,
+  icon,
   agentId,
   connected,
   checkoutState,
@@ -63,8 +64,8 @@ export function AgentNodeCard({
           : "0 4px 12px rgba(0, 0, 0, 0.4)",
       }}
     >
-      {/* Color bar at top */}
-      <div className="h-1 rounded-t-lg" style={{ backgroundColor: displayColor }} />
+      {/* Top edge: the workstream's connection-status color */}
+      <div className="h-1 rounded-t-lg" style={{ backgroundColor: indicator.color }} />
 
       {/* Indicator banner: connection + checkout */}
       <div className="px-3 py-1.5 flex items-center gap-2">
@@ -77,12 +78,7 @@ export function AgentNodeCard({
       <div className="p-3 relative">
         {/* Agent name and icon */}
         <div className="flex items-center gap-2.5">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: `${displayColor}20` }}
-          >
-            <Icon className="w-5 h-5" style={{ color: displayColor }} />
-          </div>
+          <AgentIcon icon={icon} color={displayColor} />
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-content truncate leading-tight">{displayName}</h3>
             <p className="text-[10px] text-content-subtle">{agentId}</p>
