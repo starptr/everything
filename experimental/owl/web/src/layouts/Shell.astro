@@ -31,8 +31,6 @@ const tree = buildTree();
         --owl-border: #d0d7de;
         --owl-accent: #0969da;
         --owl-code-bg: #f6f8fa;
-        --owl-comment-bg: #fff8e6;
-        --owl-comment-border: #d4a72c;
         --owl-hl: #fff8c5;
         --owl-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
       }
@@ -44,8 +42,6 @@ const tree = buildTree();
           --owl-border: #30363d;
           --owl-accent: #4493f8;
           --owl-code-bg: #161b22;
-          --owl-comment-bg: #1c1a12;
-          --owl-comment-border: #9e7b1e;
           --owl-hl: #2e2a15;
         }
       }
@@ -146,11 +142,15 @@ const tree = buildTree();
       .owl-rendered > .shiki:first-child { border-top-left-radius: 0.4rem; border-top-right-radius: 0.4rem; }
       .owl-rendered > .shiki:last-child { border-bottom-left-radius: 0.4rem; border-bottom-right-radius: 0.4rem; }
 
+      /* Prose lifted from comment runs. Neutral (no callout color): it reads as
+         distinct from code by inverting the fill — code blocks are filled gray, a
+         comment box is page-colored with a full border. */
       .owl-comment {
-        background: var(--owl-comment-bg);
-        border-left: 3px solid var(--owl-comment-border);
-        padding: 0.4rem 1rem;
-        margin: 0.15rem 0;
+        background: var(--owl-bg);
+        border: 1px solid var(--owl-border);
+        border-radius: 0.4rem;
+        padding: 0.5rem 1rem;
+        margin: 0.4rem 0;
       }
       .owl-comment > :first-child { margin-top: 0; }
       .owl-comment > :last-child { margin-bottom: 0; }
