@@ -87,8 +87,12 @@ export async function classifyCommentLines(
   }
 }
 
+// A real comment scope follows the TextMate convention `comment.line.*` /
+// `comment.block.*`. Astro tags its `---` frontmatter fence with a *bare*
+// `comment` scope — a structural JS/HTML divider, not prose — so match the
+// sub-scoped form to keep the fence as code instead of lifting it into a box.
 function isCommentToken(token: ThemedToken): boolean {
   const ex = token.explanation;
   if (!ex || ex.length === 0) return false;
-  return ex.every((e) => e.scopes.some((s) => s.scopeName.includes('comment')));
+  return ex.every((e) => e.scopes.some((s) => s.scopeName.startsWith('comment.')));
 }
