@@ -46,6 +46,7 @@ export interface TerminalBackend {
   setTheme(themeName: ThemeName, cursorColor: string): boolean;
   setLineHeight(value: number): boolean;
   setFont(fontFamily: string): boolean;
+  setFontSize(px: number): boolean;
   dispose(): void;
 }
 

@@ -68,6 +68,11 @@ class XtermBackend implements TerminalBackend {
     return true;
   }
 
+  setFontSize(px: number): boolean {
+    this.term.options.fontSize = px;
+    return true;
+  }
+
   dispose() {
     this.term.dispose();
   }

@@ -1,26 +1,36 @@
 // UNIT test (mine to maintain — see ../../TESTING.md): the clamp/step-snap and the
-// tolerant (de)serialization that back the line-spacing stepper, the emulator toggle, and
-// the per-emulator font pickers.
+// tolerant (de)serialization that back the line-spacing stepper, the emulator toggle, the
+// per-emulator font pickers, and the per-(emulator, font) font-size stepper.
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
   DEFAULT_FONT,
+  DEFAULT_FONT_SIZE,
   DEFAULT_LINE_SPACING,
   DEFAULT_TERMINAL_BACKEND,
+  FONT_SIZE_STORAGE_KEY,
   GHOSTTY_FONT_STORAGE_KEY,
   LINE_SPACING_STORAGE_KEY,
+  MAX_FONT_SIZE,
   MAX_LINE_SPACING,
+  MIN_FONT_SIZE,
   MIN_LINE_SPACING,
   TERMINAL_BACKEND_STORAGE_KEY,
   XTERM_FONT_STORAGE_KEY,
+  clampFontSize,
   clampLineSpacing,
+  fontSizeFor,
+  fontSizeKey,
   fontStack,
   loadFont,
+  loadFontSizes,
   loadLineSpacing,
   loadTerminalBackend,
   parseFont,
+  parseFontSizes,
   parseLineSpacing,
   parseTerminalBackend,
   saveFont,
+  saveFontSizes,
   saveLineSpacing,
   saveTerminalBackend,
 } from "./settings";
@@ -168,5 +178,94 @@ describe("fontStack", () => {
   test("resolves a known id to its self-hosted CSS stack", () => {
     expect(fontStack("iosevka-term-mono")).toBe('"IosevkaTerm Nerd Font Mono", monospace');
     expect(fontStack(DEFAULT_FONT)).toBe('"JetBrains Mono", monospace');
+  });
+});
+
+describe("clampFontSize", () => {
+  test("clamps below the minimum up to MIN", () => {
+    expect(clampFontSize(1)).toBe(MIN_FONT_SIZE);
+  });
+
+  test("clamps above the maximum down to MAX", () => {
+    expect(clampFontSize(999)).toBe(MAX_FONT_SIZE);
+  });
+
+  test("rounds to a whole pixel", () => {
+    expect(clampFontSize(13.4)).toBe(13);
+    expect(clampFontSize(13.6)).toBe(14);
+  });
+
+  test("passes a valid whole value through unchanged", () => {
+    expect(clampFontSize(16)).toBe(16);
+  });
+
+  test("non-finite input falls back to the default", () => {
+    expect(clampFontSize(NaN)).toBe(DEFAULT_FONT_SIZE);
+    expect(clampFontSize(Infinity)).toBe(DEFAULT_FONT_SIZE);
+  });
+});
+
+describe("parseFontSizes", () => {
+  test("null (nothing stored) yields an empty map", () => {
+    expect(parseFontSizes(null)).toEqual({});
+  });
+
+  test("corrupt JSON or a non-object yields an empty map rather than throwing", () => {
+    expect(parseFontSizes("not json")).toEqual({});
+    expect(parseFontSizes("42")).toEqual({});
+    expect(parseFontSizes("null")).toEqual({});
+  });
+
+  test("drops entries whose value isn't a finite number", () => {
+    expect(parseFontSizes('{"xterm:iosevka":"big","ghostty:iosevka":15}')).toEqual({
+      "ghostty:iosevka": 15,
+    });
+  });
+
+  test("clamps surviving values into range", () => {
+    expect(parseFontSizes('{"xterm:iosevka":999}')).toEqual({
+      "xterm:iosevka": MAX_FONT_SIZE,
+    });
+  });
+});
+
+describe("loadFontSizes / saveFontSizes", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test("defaults to an empty map when nothing is stored", () => {
+    expect(loadFontSizes()).toEqual({});
+  });
+
+  test("persists the whole map under the papyrus:fontSizes key and reads back", () => {
+    const map = { "xterm:iosevka": 14, "ghostty:jetbrains-mono": 18 };
+    saveFontSizes(map);
+    expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe(JSON.stringify(map));
+    expect(loadFontSizes()).toEqual(map);
+  });
+
+  test("a corrupt stored value loads as an empty map", () => {
+    localStorage.setItem(FONT_SIZE_STORAGE_KEY, "{bogus");
+    expect(loadFontSizes()).toEqual({});
+  });
+});
+
+describe("fontSizeFor / fontSizeKey", () => {
+  test("keys a pair as `${backend}:${font}`", () => {
+    expect(fontSizeKey("xterm", "iosevka")).toBe("xterm:iosevka");
+  });
+
+  test("an unset pair falls back to the default size", () => {
+    expect(fontSizeFor({}, "xterm", "iosevka")).toBe(DEFAULT_FONT_SIZE);
+  });
+
+  test("each (emulator, font) pair resolves its own stored size", () => {
+    const map = { "xterm:iosevka": 14, "ghostty:iosevka": 20, "xterm:jetbrains-mono": 11 };
+    expect(fontSizeFor(map, "xterm", "iosevka")).toBe(14);
+    expect(fontSizeFor(map, "ghostty", "iosevka")).toBe(20);
+    expect(fontSizeFor(map, "xterm", "jetbrains-mono")).toBe(11);
+    // A pair absent from the map still defaults.
+    expect(fontSizeFor(map, "ghostty", "jetbrains-mono")).toBe(DEFAULT_FONT_SIZE);
   });
 });

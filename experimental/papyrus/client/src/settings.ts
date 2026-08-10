@@ -135,3 +135,66 @@ export function saveFont(storageKey: string, id: FontId): void {
 export function fontStack(id: FontId): string {
   return (TERMINAL_FONTS.find((f) => f.id === id) ?? TERMINAL_FONTS[0]).stack;
 }
+
+// --- Terminal font size ---
+//
+// Font size in px, remembered independently per (emulator, font) pair — different fonts render
+// at different apparent sizes, so each combination keeps its own value. Persisted as a single
+// JSON map under one key, keyed by `${backend}:${font}`; a missing pair falls back to
+// DEFAULT_FONT_SIZE. Values are clamped to a sane px range and rounded to whole pixels.
+
+export const FONT_SIZE_STORAGE_KEY = "papyrus:fontSizes";
+
+export const MIN_FONT_SIZE = 6;
+export const MAX_FONT_SIZE = 40;
+export const FONT_SIZE_STEP = 1;
+// 12 is what xterm/ghostty panes were previously hardcoded to.
+export const DEFAULT_FONT_SIZE = 12;
+
+// The map key for an (emulator, font) pair.
+export function fontSizeKey(backend: BackendId, font: FontId): string {
+  return `${backend}:${font}`;
+}
+
+// Clamp to [MIN, MAX] and round to a whole pixel. Non-finite input falls back to the default.
+export function clampFontSize(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULT_FONT_SIZE;
+  return Math.round(Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, n)));
+}
+
+// A lenient parse: corrupt JSON, a non-object, or entries whose value isn't a finite number are
+// dropped (they fall back to DEFAULT_FONT_SIZE at read). Surviving values are clamped.
+export function parseFontSizes(raw: string | null): Record<string, number> {
+  if (raw === null) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v)) out[k] = clampFontSize(v);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function loadFontSizes(): Record<string, number> {
+  if (typeof localStorage === "undefined") return {};
+  return parseFontSizes(localStorage.getItem(FONT_SIZE_STORAGE_KEY));
+}
+
+export function saveFontSizes(map: Record<string, number>): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(FONT_SIZE_STORAGE_KEY, JSON.stringify(map));
+}
+
+// The effective size for an (emulator, font) pair, defaulting when unset.
+export function fontSizeFor(
+  map: Record<string, number>,
+  backend: BackendId,
+  font: FontId,
+): number {
+  const v = map[fontSizeKey(backend, font)];
+  return typeof v === "number" && Number.isFinite(v) ? clampFontSize(v) : DEFAULT_FONT_SIZE;
+}

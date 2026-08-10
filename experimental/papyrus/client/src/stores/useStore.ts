@@ -13,11 +13,15 @@ import {
   type FontId,
   GHOSTTY_FONT_STORAGE_KEY,
   XTERM_FONT_STORAGE_KEY,
+  clampFontSize,
   clampLineSpacing,
+  fontSizeKey,
   loadFont,
+  loadFontSizes,
   loadLineSpacing,
   loadTerminalBackend,
   saveFont,
+  saveFontSizes,
   saveLineSpacing,
   saveTerminalBackend,
 } from "../settings";
@@ -136,6 +140,9 @@ interface AppState {
   setXtermFont: (id: FontId) => void;
   ghosttyFont: FontId;
   setGhosttyFont: (id: FontId) => void;
+  // Font size (px) is per (emulator, font) pair, keyed by `${backend}:${font}` in this map.
+  fontSizes: Record<string, number>;
+  setFontSize: (backend: BackendId, font: FontId, size: number) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -236,4 +243,12 @@ export const useStore = create<AppState>((set) => ({
     saveFont(GHOSTTY_FONT_STORAGE_KEY, id);
     set({ ghosttyFont: id });
   },
+  // Terminal reads the active (emulator, font) pair's size live (xterm) or via a remount (ghostty).
+  fontSizes: loadFontSizes(),
+  setFontSize: (backend, font, size) =>
+    set((state) => {
+      const next = { ...state.fontSizes, [fontSizeKey(backend, font)]: clampFontSize(size) };
+      saveFontSizes(next);
+      return { fontSizes: next };
+    }),
 }));
