@@ -31,9 +31,7 @@ export function Header() {
       {/* Logo */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-500 to-orange-500 flex items-center justify-center">
-            <div className="w-2 h-2 rounded-full bg-white" />
-          </div>
+          <img src="/logo.jpg" alt="papyrus" className="w-6 h-6 rounded-md object-cover" />
           <span className="text-sm font-semibold text-content">papyrus</span>
         </div>
 
