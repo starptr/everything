@@ -4,9 +4,9 @@
 // ships an xterm-shaped Terminal + its own FitAddon, so this mirrors xtermBackend closely.
 //
 // Two option gaps vs xterm: no lineHeight, and no fontWeight/letterSpacing/allowProposedApi.
-// We pass only what ghostty-web understands. Because it has no line-height (and to stay
-// safe about runtime option mutation), setTheme/setLineHeight return false — Terminal.tsx
-// then remounts the pane at the new settings via its remount token.
+// We pass only what ghostty-web understands. setTheme recolors live via the renderer (ghostty
+// repaints every frame), so a cursor recolor needs no rebuild; setLineHeight/setFont return
+// false, and Terminal.tsx remounts the pane for those via its remount token.
 //
 // Three shims paper over ghostty-web quirks that xterm handles natively: we answer the DA1
 // query (see below), hide the input textarea's caret (see open()), and correct cell sizing —
@@ -16,6 +16,8 @@
 
 import { init, Terminal as GhosttyTerm, FitAddon, type ITheme } from "ghostty-web";
 import type { BackendOptions, TerminalBackend, TerminalSize } from "./backend";
+import { terminalTheme } from "./palette";
+import type { ThemeName } from "../theme";
 
 // ghostty-web's readResponse() answers only DSR, not the Primary Device Attributes query
 // (DA1, `ESC [ c` / `ESC [ 0 c`). A shell like fish blocks ~10s waiting for that reply
@@ -90,14 +92,19 @@ class GhosttyBackend implements TerminalBackend {
     return { cols: this.term.cols, rows: this.term.rows };
   }
 
-  // No live mutation: theme/line-height/font are all folded into Terminal.tsx's remount token,
-  // which rebuilds the pane with the new settings baked into the constructor. A font remount
-  // re-runs createGhosttyBackend (awaits document.fonts.ready) and open() (re-measures the cell
-  // via roundCellWidth), so the new font is sized correctly.
-  setTheme(): boolean {
-    return false;
+  // ghostty-web ignores theme set via options after open() (its handler just warns), but the
+  // renderer applies theme live and repaints every frame via the render loop. So update the
+  // renderer directly: the cursor recolors on the next frame — no rebuild, no flash.
+  setTheme(themeName: ThemeName, cursorColor: string): boolean {
+    if (!this.term.renderer) return false;
+    this.term.renderer.setTheme(terminalTheme(themeName, cursorColor) as ITheme);
+    return true;
   }
 
+  // Line-height and font can't mutate live: Terminal.tsx folds them into its remount token,
+  // rebuilding the pane with the new settings baked into the constructor. A font remount re-runs
+  // createGhosttyBackend (awaits document.fonts.ready) and open() (re-measures the cell via
+  // roundCellWidth), so the new font is sized correctly.
   setLineHeight(): boolean {
     return false;
   }

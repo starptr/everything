@@ -14,6 +14,11 @@ export function Terminal({ sessionId, color }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const backendRef = useRef<TerminalBackend | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  // `color` only tints the cursor. Held in a ref so the mount effect can read it at creation
+  // without listing it as a dep — live changes re-theme via the setTheme effect below, not a
+  // full rebuild (which would tear down the pane + WebSocket and replay history: a flash).
+  const colorRef = useRef(color);
+  colorRef.current = color;
   const serverPort = useStore((s) => s.serverPort);
   const resolvedTheme = useStore((s) => s.resolvedTheme);
   const lineSpacing = useStore((s) => s.lineSpacing);
@@ -62,9 +67,10 @@ export function Terminal({ sessionId, color }: TerminalProps) {
         scrollback: 10000,
         allowProposedApi: true,
         // Read non-reactively; live changes are handled by the effects below (xterm) or the
-        // remount token (ghostty), not by tearing down here.
+        // remount token (ghostty), not by tearing down here. The theme's cursor color (the
+        // workstream color) likewise re-themes live via the setTheme effect below.
         lineHeight: useStore.getState().lineSpacing,
-        theme: terminalTheme(useStore.getState().resolvedTheme, color),
+        theme: terminalTheme(useStore.getState().resolvedTheme, colorRef.current),
       }).catch((err) => {
         console.warn("[papyrus] terminal backend init failed", err);
         return null;
@@ -150,7 +156,7 @@ export function Terminal({ sessionId, color }: TerminalProps) {
       backendRef.current = null;
       wsRef.current = null;
     };
-  }, [sessionId, color, serverPort, backendId, remountToken]);
+  }, [sessionId, serverPort, backendId, remountToken]);
 
   // Re-theme the live terminal when the app theme (or node color) changes, without
   // recreating it — keeps scrollback and the WebSocket intact. Backends that can't
