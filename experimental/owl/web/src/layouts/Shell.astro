@@ -11,7 +11,9 @@ interface Props {
   path?: string;
   view?: 'rendered' | 'raw' | 'tree';
 }
-const { title, path = '' } = Astro.props;
+const { title, path = '', view = 'rendered' } = Astro.props;
+// Sidebar links stay in the current file view; directory (tree) pages fall back to rendered.
+const treeView = view === 'raw' ? 'raw' : 'rendered';
 const tree = buildTree();
 ---
 
@@ -172,7 +174,7 @@ const tree = buildTree();
   <body>
     <aside class="owl-sidebar">
       <a class="owl-logo" href="/">owl</a>
-      <FileTree node={tree} current={path} />
+      <FileTree node={tree} current={path} view={treeView} />
     </aside>
     <main class="owl-main">
       <header class="owl-header">
