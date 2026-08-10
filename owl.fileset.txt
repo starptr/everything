@@ -65,3 +65,7 @@ node_modules/
 target/
 dist/
 .astro/
+# owl-web's own scratch: gen-manifest copies the pre-filtered tree here for the dev
+# server. Ignored by experimental/owl/.gitignore, but that isn't the root one we
+# @import — so exclude it explicitly, else owl renders the whole repo again, nested.
+.owl-tree/

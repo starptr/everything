@@ -30,52 +30,95 @@ checkout ─▶ owl-filter (Rust/globset) ─▶ pruned tree ─▶ owl-web (Ast
   one function (`src/lib/highlight.ts` → `classifyCommentLines`) so tree-sitter
   can replace it later without a rewrite.
 
-## Dev loop
+## Build / run
 
-`owl-filter` and `node` come from the dev shell (`nix develop`).
+Commands run from `experimental/owl/`. `owl-filter` always walks the on-disk
+checkout and applies `owl.fileset.txt`; `owl-web` renders whatever tree it's
+handed via `$OWL_INPUT_DIR`.
+
+### 1. Development — `owl-filter` + `npm run dev`
+
+The fast inner loop: a hermetic pre-filter feeding Astro's live dev server (HMR).
+`npm` needs `node` (e.g. `nix develop`, or `nix shell nixpkgs#nodejs`).
 
 ```bash
-# 1. produce a pre-filtered tree from a checkout
-owl-filter --fileset ../../owl.fileset.txt ../.. /tmp/owl-out
-
-# 2. render it
-cd web
-OWL_INPUT_DIR=/tmp/owl-out npm install   # first time
-OWL_INPUT_DIR=/tmp/owl-out npm run build  # gen-manifest + astro build -> web/dist
-npx serve dist                            # browse http://localhost:3000
+# pre-filter a checkout (or any tree) into a pruned dir
+nix run .#owl-filter -- --fileset ../../owl.fileset.txt ../.. /tmp/owl-out
+# live server with hot reload — re-run the filter when browsed files change
+cd web && OWL_INPUT_DIR=/tmp/owl-out npm run dev        # http://localhost:4321
 ```
 
-`npm run dev` (with `OWL_INPUT_DIR` set) gives the live Astro dev server.
+**Scripts** (run from the repo root, no arguments) that wrap this whole loop:
+`run-owl-for-owl-development-with-frozen-fileset.sh` does the filter-once + `npm run
+dev` above — renderer hot-reloads, content frozen — the everyday choice for hacking
+on owl; `run-owl-for-owl-development-with-dynamic-fileset.sh` adds a watcher that
+re-filters on every repo change, so new/changed/deleted files show up live.
 
-## Build (Nix)
+Iterating on the filter itself? `cargo run --manifest-path filter/Cargo.toml --`
+rebuilds faster than `nix run`.
+
+> **Do not use `npm run build`.** It is a non-hermetic, non-development static
+> build (local `node`/npm, no fileset pre-filter, no reproducibility) with no use
+> case here: for development use `npm run dev`; for a real static site use the
+> hermetic Nix build below.
+
+### 2. Hermetic static site — `nix build .#site`
+
+Renders a checkout to deployable static HTML in `result/`, reproducibly.
 
 ```bash
-nix build .#site                # the whole monorepo as a static site -> result/
-nix build .#owl-filter          # just the Rust filter binary -> result/bin/owl-filter
-nix run  .#owl-filter -- --fileset <fileset> <src> <out>
-nix flake check                 # clippy(-Dwarnings) + fmt + audit + nextest
+nix build .#site        # renders the `everything` input at the commit flake.lock pins
 ```
 
-`.#site` renders the `everything` input **at the commit `flake.lock` pins it to**
-— a `git+file` input, so `.gitignore` is respected and no `--impure` is needed —
-*not* your current working tree. To build a specific commit or checkout:
+`.#site` renders the **committed** tree of the `everything` input (a `git+file`
+input, so `.gitignore` is respected and no `--impure` is needed) — *not* your
+working tree. To target a different commit or checkout:
 
 ```bash
-nix flake update everything          # re-pin to the input repo's HEAD, then build
-# ...or point at any checkout without touching the lock (e.g. a local working copy):
+# a) any checkout, without touching the lock:
 nix build .#site --override-input everything git+file:///path/to/checkout
+# b) re-pin `everything` to the input repo's HEAD, then build:
+nix flake update everything && nix build .#site
 ```
 
-Gotcha: the lock pins `everything` to `/Users/yuto/src/everything`, so until an
-owl commit lands there and you re-lock, plain `nix build .#site` renders a tree
-without owl — and *errors* if that tree has no `owl.fileset.txt` for the filter to
-load. Until then, use `--override-input` pointing at the checkout that holds your
-work. Deploy `result/` to any static host.
+Gotcha: the lock pins `everything` to `/Users/yuto/src/everything`; until an owl
+commit lands there and you re-lock, plain `nix build .#site` renders a tree
+*without* owl — and errors if it has no `owl.fileset.txt`. Use (a) until then.
+Deploy `result/` to any static host.
 
-Lower-level pieces are also exposed for consumers wiring their own inputs:
-`packages.owl-filter` and the functions `lib.{filterTree,renderTree,renderCheckout}`.
+**Script** (repo root, no arguments): `use-owl-for-general-development.sh` is this
+option applied to your **live working tree** — it filters the on-disk checkout (so
+new files appear and deleted ones vanish, no `git add` or commit), runs the hermetic
+`nix build .#site` above, and serves the result. Use it to browse a feature in
+progress; see the script header for details.
+
+### 3. Filter binary only — `nix build .#owl-filter`
+
+```bash
+nix build .#owl-filter                                   # -> result/bin/owl-filter
+nix run  .#owl-filter -- --fileset <fileset> <src> <out> # also apps.default
+```
+
+**Scripts:** none wrap this standalone, though all three scripts call
+`nix run .#owl-filter` internally to prune the tree they render.
+
+### 4. As a library in another flake
+
+For a consumer flake that has a checkout as a store path and wants the finished
+site, bypassing owl's own `everything` input:
+
+```nix
+owl.lib.${system}.renderCheckout { src = ./some-checkout; }  # filter + render
+owl.lib.${system}.renderTree pruned-store-path               # render a pre-filtered tree
+owl.lib.${system}.filterTree { src = ...; fileset = ...; }   # just the pre-filter
+owl.packages.${system}.owl-filter                            # the filter binary
+```
+
+**Scripts:** none — this path is for other flakes consuming owl, not local dev.
+
 Regenerate `npmDepsHash` on `web/package-lock.json` changes:
-`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`.
+`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`. `Cargo.lock` and
+`flake.lock` must stay committed (crane needs the lock for reproducible builds).
 
 ## Notes & limitations (v1)
 
