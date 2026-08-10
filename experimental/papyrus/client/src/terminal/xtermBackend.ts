@@ -63,6 +63,11 @@ class XtermBackend implements TerminalBackend {
     return true;
   }
 
+  setFont(fontFamily: string): boolean {
+    this.term.options.fontFamily = fontFamily;
+    return true;
+  }
+
   dispose() {
     this.term.dispose();
   }

@@ -10,9 +10,14 @@ import {
 } from "../theme";
 import {
   type BackendId,
+  type FontId,
+  GHOSTTY_FONT_STORAGE_KEY,
+  XTERM_FONT_STORAGE_KEY,
   clampLineSpacing,
+  loadFont,
   loadLineSpacing,
   loadTerminalBackend,
+  saveFont,
   saveLineSpacing,
   saveTerminalBackend,
 } from "../settings";
@@ -126,6 +131,11 @@ interface AppState {
   setTerminalBackend: (id: BackendId) => void;
   lineSpacing: number;
   setLineSpacing: (value: number) => void;
+  // Font is per-emulator (independent): xterm and ghostty each remember their own.
+  xtermFont: FontId;
+  setXtermFont: (id: FontId) => void;
+  ghosttyFont: FontId;
+  setGhosttyFont: (id: FontId) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -214,5 +224,16 @@ export const useStore = create<AppState>((set) => ({
     const clamped = clampLineSpacing(value);
     saveLineSpacing(clamped);
     set({ lineSpacing: clamped });
+  },
+  // Terminal reads the active emulator's font live (xterm) or via a remount (ghostty).
+  xtermFont: loadFont(XTERM_FONT_STORAGE_KEY),
+  setXtermFont: (id) => {
+    saveFont(XTERM_FONT_STORAGE_KEY, id);
+    set({ xtermFont: id });
+  },
+  ghosttyFont: loadFont(GHOSTTY_FONT_STORAGE_KEY),
+  setGhosttyFont: (id) => {
+    saveFont(GHOSTTY_FONT_STORAGE_KEY, id);
+    set({ ghosttyFont: id });
   },
 }));

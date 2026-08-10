@@ -45,6 +45,7 @@ export interface TerminalBackend {
   // the caller remounts the pane at the new settings instead (graceful degradation).
   setTheme(themeName: ThemeName, cursorColor: string): boolean;
   setLineHeight(value: number): boolean;
+  setFont(fontFamily: string): boolean;
   dispose(): void;
 }
 

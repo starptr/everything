@@ -90,13 +90,19 @@ class GhosttyBackend implements TerminalBackend {
     return { cols: this.term.cols, rows: this.term.rows };
   }
 
-  // No live mutation: both are folded into Terminal.tsx's remount token, which rebuilds the
-  // pane with the new theme/line settings baked into the constructor.
+  // No live mutation: theme/line-height/font are all folded into Terminal.tsx's remount token,
+  // which rebuilds the pane with the new settings baked into the constructor. A font remount
+  // re-runs createGhosttyBackend (awaits document.fonts.ready) and open() (re-measures the cell
+  // via roundCellWidth), so the new font is sized correctly.
   setTheme(): boolean {
     return false;
   }
 
   setLineHeight(): boolean {
+    return false;
+  }
+
+  setFont(): boolean {
     return false;
   }
 

@@ -3,6 +3,7 @@ import { useStore } from "../stores/useStore";
 import { terminalWsUrl } from "./terminalWs";
 import { createTerminalBackend, type TerminalBackend } from "../terminal/backend";
 import { terminalTheme } from "../terminal/palette";
+import { fontStack } from "../settings";
 
 interface TerminalProps {
   sessionId: string;
@@ -17,11 +18,17 @@ export function Terminal({ sessionId, color }: TerminalProps) {
   const resolvedTheme = useStore((s) => s.resolvedTheme);
   const lineSpacing = useStore((s) => s.lineSpacing);
   const backendId = useStore((s) => s.terminalBackend);
+  const xtermFont = useStore((s) => s.xtermFont);
+  const ghosttyFont = useStore((s) => s.ghosttyFont);
 
-  // Backends that can't mutate theme/line-height live (ghostty) fold those into a remount
-  // token, so changing either rebuilds the pane at the right settings. xterm applies both
-  // live, so its token is constant and its rebuild triggers stay exactly the old deps.
-  const remountToken = backendId === "xterm" ? "" : `${resolvedTheme}:${lineSpacing}`;
+  // Font is per-emulator; the active pane renders the current backend's font.
+  const activeFont = backendId === "xterm" ? xtermFont : ghosttyFont;
+
+  // Backends that can't mutate theme/line-height/font live (ghostty) fold those into a
+  // remount token, so changing any of them rebuilds the pane at the right settings. xterm
+  // applies all three live, so its token is constant and its rebuild triggers stay the old deps.
+  const remountToken =
+    backendId === "xterm" ? "" : `${resolvedTheme}:${lineSpacing}:${ghosttyFont}`;
 
   useEffect(() => {
     const container = terminalRef.current;
@@ -45,7 +52,11 @@ export function Terminal({ sessionId, color }: TerminalProps) {
         cursorBlink: true,
         cursorStyle: "bar",
         fontSize: 12,
-        fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
+        // Read non-reactively; live font changes are handled by the setFont effect (xterm) or
+        // the remount token (ghostty), not by tearing down here.
+        fontFamily: fontStack(
+          backendId === "xterm" ? useStore.getState().xtermFont : useStore.getState().ghosttyFont,
+        ),
         fontWeight: "400",
         letterSpacing: 0,
         scrollback: 10000,
@@ -162,6 +173,21 @@ export function Terminal({ sessionId, color }: TerminalProps) {
       }
     }
   }, [lineSpacing]);
+
+  // Apply font changes live for the active emulator. Like line spacing, a new font changes
+  // cell metrics → row/col count, so refit and tell the PTY. Backends without live support
+  // (ghostty) return false and are handled by the remount token instead.
+  useEffect(() => {
+    const backend = backendRef.current;
+    if (backend && backend.setFont(fontStack(activeFont))) {
+      backend.fit();
+      const ws = wsRef.current;
+      const size = backend.size;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+      }
+    }
+  }, [activeFont]);
 
   return (
     <div

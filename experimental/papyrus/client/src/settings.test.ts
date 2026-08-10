@@ -1,18 +1,26 @@
 // UNIT test (mine to maintain — see ../../TESTING.md): the clamp/step-snap and the
-// tolerant (de)serialization that back the line-spacing stepper and the emulator toggle.
+// tolerant (de)serialization that back the line-spacing stepper, the emulator toggle, and
+// the per-emulator font pickers.
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
+  DEFAULT_FONT,
   DEFAULT_LINE_SPACING,
   DEFAULT_TERMINAL_BACKEND,
+  GHOSTTY_FONT_STORAGE_KEY,
   LINE_SPACING_STORAGE_KEY,
   MAX_LINE_SPACING,
   MIN_LINE_SPACING,
   TERMINAL_BACKEND_STORAGE_KEY,
+  XTERM_FONT_STORAGE_KEY,
   clampLineSpacing,
+  fontStack,
+  loadFont,
   loadLineSpacing,
   loadTerminalBackend,
+  parseFont,
   parseLineSpacing,
   parseTerminalBackend,
+  saveFont,
   saveLineSpacing,
   saveTerminalBackend,
 } from "./settings";
@@ -113,5 +121,52 @@ describe("loadTerminalBackend / saveTerminalBackend", () => {
   test("a corrupt stored value loads as the default", () => {
     localStorage.setItem(TERMINAL_BACKEND_STORAGE_KEY, "bogus");
     expect(loadTerminalBackend()).toBe(DEFAULT_TERMINAL_BACKEND);
+  });
+});
+
+describe("parseFont", () => {
+  test("null (nothing stored) falls back to the default font", () => {
+    expect(parseFont(null)).toBe(DEFAULT_FONT);
+  });
+
+  test("known font ids pass through", () => {
+    expect(parseFont("iosevka")).toBe("iosevka");
+    expect(parseFont("iosevka-term-mono")).toBe("iosevka-term-mono");
+  });
+
+  test("an unknown id falls back to the default rather than passing through", () => {
+    expect(parseFont("comic-sans")).toBe(DEFAULT_FONT);
+    expect(parseFont("")).toBe(DEFAULT_FONT);
+  });
+});
+
+describe("loadFont / saveFont", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test("defaults when nothing is stored", () => {
+    expect(loadFont(XTERM_FONT_STORAGE_KEY)).toBe(DEFAULT_FONT);
+    expect(loadFont(GHOSTTY_FONT_STORAGE_KEY)).toBe(DEFAULT_FONT);
+  });
+
+  test("each emulator persists independently under its own key", () => {
+    saveFont(XTERM_FONT_STORAGE_KEY, "iosevka");
+    saveFont(GHOSTTY_FONT_STORAGE_KEY, "iosevka-term-mono");
+    expect(localStorage.getItem(XTERM_FONT_STORAGE_KEY)).toBe("iosevka");
+    expect(loadFont(XTERM_FONT_STORAGE_KEY)).toBe("iosevka");
+    expect(loadFont(GHOSTTY_FONT_STORAGE_KEY)).toBe("iosevka-term-mono");
+  });
+
+  test("a corrupt stored value loads as the default", () => {
+    localStorage.setItem(XTERM_FONT_STORAGE_KEY, "bogus");
+    expect(loadFont(XTERM_FONT_STORAGE_KEY)).toBe(DEFAULT_FONT);
+  });
+});
+
+describe("fontStack", () => {
+  test("resolves a known id to its self-hosted CSS stack", () => {
+    expect(fontStack("iosevka-term-mono")).toBe('"IosevkaTerm Nerd Font Mono", monospace');
+    expect(fontStack(DEFAULT_FONT)).toBe('"JetBrains Mono", monospace');
   });
 });

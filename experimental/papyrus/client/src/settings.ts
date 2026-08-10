@@ -74,3 +74,64 @@ export function saveTerminalBackend(id: BackendId): void {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(TERMINAL_BACKEND_STORAGE_KEY, id);
 }
+
+// --- Terminal font ---
+//
+// The font each emulator renders with, chosen per-emulator. Every entry is self-hosted:
+// bundled from nixpkgs by the flake (`terminalFonts`) and served at /fonts/*.ttf via the
+// @font-face rules in index.css, so each ships real Regular/Bold/Italic/BoldItalic faces
+// (no browser synthesis). "…Mono" variants keep Nerd Font icon glyphs single-cell.
+
+export type FontId =
+  | "jetbrains-mono"
+  | "iosevka"
+  | "iosevka-mono"
+  | "iosevka-term"
+  | "iosevka-term-mono";
+
+export const XTERM_FONT_STORAGE_KEY = "papyrus:xtermFont";
+export const GHOSTTY_FONT_STORAGE_KEY = "papyrus:ghosttyFont";
+export const DEFAULT_FONT: FontId = "jetbrains-mono";
+
+// Display metadata + the CSS stack each id resolves to (self-hosted family first, monospace
+// as the last-resort fallback). Array order is the order shown in the Settings font picker.
+export const TERMINAL_FONTS: { id: FontId; label: string; stack: string }[] = [
+  { id: "jetbrains-mono", label: "JetBrains Mono", stack: '"JetBrains Mono", monospace' },
+  { id: "iosevka", label: "Iosevka Nerd Font", stack: '"Iosevka Nerd Font", monospace' },
+  {
+    id: "iosevka-mono",
+    label: "Iosevka Nerd Font Mono",
+    stack: '"Iosevka Nerd Font Mono", monospace',
+  },
+  {
+    id: "iosevka-term",
+    label: "IosevkaTerm Nerd Font",
+    stack: '"IosevkaTerm Nerd Font", monospace',
+  },
+  {
+    id: "iosevka-term-mono",
+    label: "IosevkaTerm Nerd Font Mono",
+    stack: '"IosevkaTerm Nerd Font Mono", monospace',
+  },
+];
+
+// A lenient parse: unknown/legacy/corrupt values fall back to the default font.
+export function parseFont(raw: string | null): FontId {
+  return TERMINAL_FONTS.some((f) => f.id === raw) ? (raw as FontId) : DEFAULT_FONT;
+}
+
+// Load/save are parametric on the storage key so xterm and ghostty each persist their own.
+export function loadFont(storageKey: string): FontId {
+  if (typeof localStorage === "undefined") return DEFAULT_FONT;
+  return parseFont(localStorage.getItem(storageKey));
+}
+
+export function saveFont(storageKey: string, id: FontId): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(storageKey, id);
+}
+
+// Resolve a font id to its CSS font-family stack (falling back to the default's).
+export function fontStack(id: FontId): string {
+  return (TERMINAL_FONTS.find((f) => f.id === id) ?? TERMINAL_FONTS[0]).stack;
+}
