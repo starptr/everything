@@ -49,9 +49,10 @@ const tree = buildTree();
       }
 
       * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; }
+      html, body { margin: 0; }
       body {
         display: flex;
+        min-height: 100vh;
         font-family: system-ui, -apple-system, sans-serif;
         background: var(--owl-bg);
         color: var(--owl-fg);
