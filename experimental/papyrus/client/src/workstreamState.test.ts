@@ -28,6 +28,18 @@ describe("workstreamStateLabel", () => {
     expect(color).toBe("#6B7280");
   });
 
+  test("initialized-without-checkout: base label only, amber (provisioning-adjacent)", () => {
+    const { label, color } = workstreamStateLabel({
+      overallState: "active - basic.initialized-without-checkout",
+      kind: "basic",
+      checkoutState: "initialized-without-checkout",
+      connected: false,
+      tabs: [],
+    });
+    expect(label).toBe("active - basic.initialized-without-checkout");
+    expect(color).toBe("#FBBF24");
+  });
+
   test("pending: base label only, amber", () => {
     const { label, color } = workstreamStateLabel({
       overallState: "active - basic.pending",

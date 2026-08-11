@@ -20,7 +20,9 @@ export const PAPYRUS_NS = "app.andref.papyrus";
 export interface CheckoutMode {
   checkout_mode: string;
   initial_source: string;
-  state: "pending" | "ready" | "failed";
+  // `initialized-without-checkout` = registered with the checkout deferred (papyrus
+  // creates with `--checkout-extent skip`, then provisions in the background).
+  state: "initialized-without-checkout" | "pending" | "ready" | "failed";
 }
 
 // Where the checkout physically lives: which forest, and (per forest kind) where.
@@ -136,11 +138,33 @@ export function create(params: {
   path: string[]; // chosen subcommand names, e.g. ["basic", "apfs-cow"]
   args: string[]; // positional values along that path, in order
 }): Promise<Workstream> {
-  // Blocks on provisioning (e.g. `jj git clone --colocate`); the checkout carries a
-  // pending→ready state machine, so the returned workstream is the finished one.
-  // `path`/`args` come from `new-schema` and become argv verbatim (no shell); an
-  // invalid path/arg is rejected by silverwood, the single validator.
-  return run(["new", ...params.path, ...params.args, "--name", params.name]);
+  // Register the workstream WITHOUT provisioning (`--checkout-extent skip`): this is
+  // the fast, validating phase — precheck + write the doc — and returns the workstream
+  // in the `initialized-without-checkout` state. It does NOT block on the (slow) clone;
+  // the caller provisions via `checkout()` in the background. So a synchronous
+  // validation/precheck error still throws here (non-zero exit), but an async
+  // provisioning failure does not. `--checkout-extent` is a flag on the `basic` variant,
+  // so it goes right after the variant segment; `path`/`args` come from `new-schema` and
+  // become argv verbatim (no shell) — silverwood is the single validator.
+  const [variant, ...rest] = params.path;
+  return run([
+    "new",
+    variant,
+    "--checkout-extent",
+    "skip",
+    ...rest,
+    ...params.args,
+    "--name",
+    params.name,
+  ]);
+}
+
+/// Provision the checkout of a workstream created with `create` (which defers it).
+/// Blocks on provisioning (e.g. `jj git clone --colocate`); the returned workstream is
+/// `ready` on success. Throws if provisioning fails (the workstream is left `failed`,
+/// recoverable) or the workstream is not awaiting a checkout. Serialized per id.
+export function checkout(id: string): Promise<Workstream> {
+  return serialize(id, () => run(["workstream", id, "basic", "checkout"]));
 }
 
 export function archive(id: string): Promise<void> {
@@ -243,7 +267,7 @@ export function checkoutLocation(ws: Workstream): string | undefined {
 /// The provisioning state to surface to the canvas (carried by the checkout mode).
 export function checkoutState(
   ws: Workstream,
-): "ready" | "pending" | "failed" | "none" {
+): "initialized-without-checkout" | "ready" | "pending" | "failed" | "none" {
   return ws.mode?.state ?? "none";
 }
 

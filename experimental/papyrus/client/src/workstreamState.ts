@@ -27,10 +27,14 @@ export function workstreamStateLabel(input: WorkstreamStateInput): {
     label = `${n}/${tabs.length} Connected`;
   }
 
+  // `initialized-without-checkout` (deferred checkout, about to provision) is grouped
+  // with `pending` as a not-ready-yet amber.
+  const provisioning =
+    checkoutState === "pending" || checkoutState === "initialized-without-checkout";
   const color =
     checkoutState === "failed"
       ? "#EF4444"
-      : checkoutState === "pending"
+      : provisioning
         ? "#FBBF24"
         : connected
           ? "#22C55E"

@@ -194,8 +194,11 @@ async function recordFreshSession(
   }
 }
 
-// Create a node = create a silverwood workstream (clones its checkout), then spawn
-// its Claude Code terminal. Blocks on the clone; the node comes up ready.
+// Create a node = register a silverwood workstream, then respond at the accept
+// boundary so the New Workstream modal closes immediately. The (possibly slow) checkout
+// is provisioned in the BACKGROUND; the node appears pending → ready/failed via the
+// reconcile loop, and the initial terminal spawns once the checkout is ready. Only a
+// synchronous validation error keeps the modal open (a 400 below).
 apiRoutes.post("/sessions", async (c) => {
   const body = await c.req.json();
   const { name, path, args, position, source } = body;
@@ -231,24 +234,34 @@ apiRoutes.post("/sessions", async (c) => {
   if (position) await sw.setKv(ws.id, "position", position);
 
   const cwd = sw.checkoutLocation(ws) || "";
-  let initialSessionId: string | undefined;
-  if (sw.checkoutState(ws) === "ready" && cwd) {
-    initialSessionId = randomUUID();
-    const session = spawnTerminal({
-      sessionKey: initialSessionId,
-      workstreamId: ws.id,
-      cwd,
-      resume: false,
+
+  // Provision the checkout in the background — deliberately NOT awaited, so the response
+  // returns now (modal closes). On ready, spawn the workstream's initial terminal; a
+  // provisioning failure surfaces as `basic.failed` on the canvas via reconcile, not here.
+  const wsId = ws.id;
+  sw.checkout(wsId)
+    .then(async (ready) => {
+      const readyCwd = sw.checkoutLocation(ready);
+      if (sw.checkoutState(ready) === "ready" && readyCwd) {
+        const initialSessionId = randomUUID();
+        const session = spawnTerminal({
+          sessionKey: initialSessionId,
+          workstreamId: wsId,
+          cwd: readyCwd,
+          resume: false,
+        });
+        await recordFreshSession(wsId, initialSessionId, session);
+      }
+    })
+    .catch((e: any) => {
+      logError(`\x1b[38;5;141m[checkout]\x1b[0m ${wsId}: ${e.message}`);
     });
-    await recordFreshSession(ws.id, initialSessionId, session);
-  }
 
   return c.json({
     sessionId: ws.id,
     nodeId: ws.id,
     cwd,
     checkoutState: sw.checkoutState(ws),
-    initialSessionId,
   });
 });
 
