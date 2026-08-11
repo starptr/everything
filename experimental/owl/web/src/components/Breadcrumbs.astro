@@ -24,4 +24,59 @@ const crumbs = parts.map((name, i) => ({
       </>
     ))
   }
+  {path !== '' && (
+    <button
+      type="button"
+      class="owl-copy-path"
+      data-owl-copy-path={path}
+      aria-label="Copy path"
+      title="Copy path"
+    >
+      <svg
+        class="copy-icon"
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+      </svg>
+      <svg
+        class="check-icon"
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    </button>
+  )}
 </nav>
+
+<script>
+  // Copy the current file's relative path (embedded at build time) to the clipboard,
+  // flashing a checkmark on success. No-op if clipboard access is blocked.
+  document.querySelectorAll('.owl-copy-path').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(btn.getAttribute('data-owl-copy-path') ?? '');
+      } catch {
+        return;
+      }
+      btn.classList.add('owl-copied');
+      setTimeout(() => btn.classList.remove('owl-copied'), 1200);
+    });
+  });
+</script>

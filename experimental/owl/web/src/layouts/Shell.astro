@@ -100,6 +100,18 @@ const tree = buildTree();
       .owl-crumbs .sep { color: var(--owl-muted); margin: 0 0.35rem; }
       .owl-crumbs .cur { color: var(--owl-fg); font-weight: 600; }
 
+      .owl-copy-path {
+        display: inline-flex; align-items: center; vertical-align: middle;
+        margin-left: 0.4rem; padding: 0.15rem; line-height: 0;
+        border: none; background: none; border-radius: 0.3rem;
+        color: var(--owl-muted); cursor: pointer;
+      }
+      .owl-copy-path:hover { color: var(--owl-fg); background: var(--owl-code-bg); }
+      .owl-copy-path .check-icon { display: none; }
+      .owl-copy-path.owl-copied { color: var(--owl-accent); }
+      .owl-copy-path.owl-copied .copy-icon { display: none; }
+      .owl-copy-path.owl-copied .check-icon { display: inline; }
+
       .owl-toggle { display: flex; gap: 0; border: 1px solid var(--owl-border); border-radius: 0.4rem; overflow: hidden; flex: none; }
       .owl-toggle a { padding: 0.25rem 0.7rem; color: var(--owl-fg); font-size: 0.85rem; }
       .owl-toggle a.active { background: var(--owl-accent); color: #fff; }
