@@ -28,6 +28,7 @@ import { type PendingOptimism, shouldDropOptimism } from "./sessionOptimism";
 import { Terminal } from "./Terminal";
 import { NewSessionMenu } from "./NewSessionMenu";
 import { useResizablePane } from "./useResizablePane";
+import { workstreamStateLabel } from "../workstreamState";
 
 const presetColors = [
   "#F97316", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#FBBF24", "#14B8A6"
@@ -295,15 +296,15 @@ export function Sidebar() {
   };
 
   const displayColor = editColor || session?.customColor || session?.color || "#888";
-  // Workstream-level indicator: checkout problems first, then connection.
-  const headerStatus =
-    session?.checkoutState === "failed"
-      ? { label: "Checkout failed", color: "#EF4444" }
-      : session?.checkoutState === "pending"
-        ? { label: "Cloning…", color: "#FBBF24" }
-        : session?.connected
-          ? { label: "Connected", color: "#22C55E" }
-          : { label: "Disconnected", color: "#6B7280" };
+  // Workstream-level indicator: silverwood's algebraic state, plus the N/M-connected
+  // agent count for a Ready Basic workstream.
+  const headerStatus = workstreamStateLabel({
+    overallState: session?.overallState,
+    kind: session?.kind,
+    checkoutState: session?.checkoutState,
+    connected: session?.connected ?? false,
+    tabs,
+  });
 
   return (
     <AnimatePresence>

@@ -35,6 +35,8 @@ export interface Workstream {
   status: "active" | "archived";
   created_at: string;
   kind: string;
+  // Algebraic state string, e.g. `active - basic.ready` (silverwood's single source of truth).
+  overall_state: string;
   mode?: CheckoutMode;
   location?: Location;
   kv?: Record<string, Record<string, string>>;

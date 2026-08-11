@@ -1,6 +1,7 @@
 import { NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
 import { useStore } from "../../stores/useStore";
+import { workstreamStateLabel } from "../../workstreamState";
 import { AgentNodeCard } from "./AgentNodeCard";
 import { AgentNodeContextMenu } from "./AgentNodeContextMenu";
 import { useAgentNodeState } from "./useAgentNodeState";
@@ -23,6 +24,16 @@ export const AgentNode = ({ id, data, selected }: NodeProps) => {
 
   // Get the full session for other data
   const session = useStore((state) => state.sessions.get(id));
+
+  // Workstream-level state indicator: silverwood's algebraic state, plus the
+  // N/M-connected agent count for a Ready Basic workstream.
+  const indicator = workstreamStateLabel({
+    overallState: session?.overallState,
+    kind: session?.kind,
+    checkoutState,
+    connected,
+    tabs: session?.tabs,
+  });
 
   const {
     contextMenu,
@@ -49,7 +60,7 @@ export const AgentNode = ({ id, data, selected }: NodeProps) => {
           icon={displayIcon}
           agentId={nodeData.agentId}
           connected={connected}
-          checkoutState={checkoutState}
+          indicator={indicator}
           cwd={session?.cwd}
           originalCwd={session?.originalCwd}
           gitBranch={session?.gitBranch}

@@ -138,6 +138,10 @@ async function buildNode(ws: sw.Workstream) {
     // checkout state. No live agent-activity status (that needed the hook).
     connected: tabs.some((t) => t.connected),
     checkoutState: cstate,
+    // Algebraic state from silverwood + the workstream kind (client gates the
+    // "N/M Connected" agent count to Basic workstreams).
+    overallState: ws.overall_state,
+    kind: ws.kind,
     source: ws.mode?.initial_source,
     sessions: tabs,
   };

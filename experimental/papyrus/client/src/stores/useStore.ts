@@ -74,6 +74,10 @@ export interface AgentSession {
   // Node visuals: any session connected in this papyrus instance, + checkout state.
   connected: boolean;
   checkoutState?: string;
+  // Silverwood's algebraic state string (e.g. `active - basic.ready`) and the
+  // workstream kind (gates the "N/M Connected" agent count to Basic workstreams).
+  overallState?: string;
+  kind?: string;
   customName?: string;
   customColor?: string;
   notes?: string;

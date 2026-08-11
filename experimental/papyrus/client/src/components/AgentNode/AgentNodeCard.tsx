@@ -1,19 +1,6 @@
 import { GitBranch, Folder } from "lucide-react";
 import { AgentIcon } from "../AgentIcon";
 
-// A single node indicator folding connection + checkout state (no live agent
-// activity — that needed the plugin hook). Precedence: checkout problems first,
-// then whether a session is connected in this papyrus instance.
-function nodeIndicator(
-  connected: boolean,
-  checkoutState?: string,
-): { label: string; color: string } {
-  if (checkoutState === "failed") return { label: "Checkout failed", color: "#EF4444" };
-  if (checkoutState === "pending") return { label: "Cloning…", color: "#FBBF24" };
-  if (connected) return { label: "Connected", color: "#22C55E" };
-  return { label: "Disconnected", color: "#6B7280" };
-}
-
 interface AgentNodeCardProps {
   selected: boolean;
   displayColor: string;
@@ -21,7 +8,8 @@ interface AgentNodeCardProps {
   icon: string;
   agentId: string;
   connected: boolean;
-  checkoutState?: string;
+  // The workstream-level state indicator (label + color), computed by the parent.
+  indicator: { label: string; color: string };
   cwd?: string;
   originalCwd?: string; // Mother repo path when using worktrees
   gitBranch?: string;
@@ -36,7 +24,7 @@ export function AgentNodeCard({
   icon,
   agentId,
   connected,
-  checkoutState,
+  indicator,
   cwd,
   originalCwd,
   gitBranch,
@@ -45,7 +33,6 @@ export function AgentNodeCard({
 }: AgentNodeCardProps) {
   // agentId is available for future use if needed
   void agentId;
-  const indicator = nodeIndicator(connected, checkoutState);
 
   // Extract directory name - use originalCwd (mother repo) if available, otherwise cwd
   const displayCwd = originalCwd || cwd;

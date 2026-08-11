@@ -441,7 +441,8 @@ fn run(cli: Cli) -> CliResult {
 
         Command::Ls { all } => {
             let list = forest.list(all)?;
-            emit(json, &list, || {
+            let items: Vec<_> = list.iter().map(workstream_json).collect();
+            emit(json, &items, || {
                 for ws in &list {
                     println!(
                         "{}  {:8}  {}",
@@ -456,7 +457,7 @@ fn run(cli: Cli) -> CliResult {
 
         Command::Show { id } => {
             let ws = forest.get(parse_id(&id)?)?;
-            emit(json, &ws, || print_workstream(&ws));
+            emit(json, &workstream_json(&ws), || print_workstream(&ws));
             Ok(())
         }
 
@@ -464,7 +465,7 @@ fn run(cli: Cli) -> CliResult {
             let id = parse_id(&id)?;
             forest.archive(id)?;
             let ws = forest.get(id)?;
-            emit(json, &ws, || println!("archived {}", ws.id));
+            emit(json, &workstream_json(&ws), || println!("archived {}", ws.id));
             Ok(())
         }
 
@@ -472,7 +473,7 @@ fn run(cli: Cli) -> CliResult {
             let id = parse_id(&id)?;
             forest.remove(id, force)?;
             let ws = forest.get(id)?;
-            emit(json, &ws, || println!("deleted {}", ws.id));
+            emit(json, &workstream_json(&ws), || println!("deleted {}", ws.id));
             Ok(())
         }
 
@@ -480,7 +481,7 @@ fn run(cli: Cli) -> CliResult {
             let id = parse_id(&id)?;
             forest.rename(id, &name)?;
             let ws = forest.get(id)?;
-            emit(json, &ws, || print_workstream(&ws));
+            emit(json, &workstream_json(&ws), || print_workstream(&ws));
             Ok(())
         }
 
@@ -513,7 +514,7 @@ fn run_new(forest: &Forest, json: bool, name: Option<String>, variant: NewVarian
             mode: mode.into_new_mode()?,
         },
     })?;
-    emit(json, &ws, || print_workstream(&ws));
+    emit(json, &workstream_json(&ws), || print_workstream(&ws));
     Ok(())
 }
 
@@ -782,6 +783,17 @@ fn emit<T: serde::Serialize>(json: bool, value: &T, human: impl FnOnce()) {
     } else {
         human();
     }
+}
+
+/// Serialize a workstream to JSON with the derived `overall_state` injected — the same
+/// single-source-of-truth string the human output surfaces as its `state:` line, exposed
+/// to `--json` consumers (e.g. papyrus).
+fn workstream_json(ws: &Workstream) -> serde_json::Value {
+    let mut value = serde_json::to_value(ws).unwrap_or_default();
+    if let serde_json::Value::Object(map) = &mut value {
+        map.insert("overall_state".into(), ws.body.overall_state().into());
+    }
+    value
 }
 
 fn print_workstream(ws: &Workstream) {

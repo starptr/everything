@@ -134,6 +134,8 @@ function AppContent() {
           cwd: n.cwd,
           connected: !!n.connected,
           checkoutState: n.checkoutState,
+          overallState: n.overallState,
+          kind: n.kind,
           customName: n.customName,
           customColor: n.customColor,
           notes: n.notes,
