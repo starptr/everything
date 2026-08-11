@@ -35,4 +35,8 @@ pages=$(find -L "$site" -name '*.html' | wc -l | tr -d ' ')
 echo
 echo "owl site for your working tree: $out_link -> $site ($pages pages)"
 echo "==> serving http://localhost:3000  (Ctrl-C to stop)"
-exec nix shell nixpkgs#nodejs --command npx --yes serve "$site"
+# `serve` treats a path whose last segment has a dot (e.g. /rendered/.sops.yaml) as a
+# file, so it shows a directory listing instead of the page. serve.json's renderSingle
+# makes it serve each page directory's lone index.html. Real static hosts resolve these
+# URLs natively — this only patches the local `serve` helper.
+exec nix shell nixpkgs#nodejs --command npx --yes serve "$site" -c "$here/serve.json"
