@@ -1,10 +1,16 @@
 ---
 import DirListing from '../../components/DirListing.astro';
 import Shell from '../../layouts/Shell.astro';
-import { allDirs } from '../../lib/manifest';
+import { allDirs, dirReadmeHash, navHash } from '../../lib/manifest';
 
 export function getStaticPaths() {
-  return allDirs().map((path) => ({ params: { path } }));
+  // A tree page renders its directory's listing (structure → navHash) and, if present,
+  // that directory's README (content → dirReadmeHash). cacheKey folds in both, plus the
+  // path for uniqueness, so the page is reused unless one of those actually changes.
+  return allDirs().map((path) => ({
+    params: { path },
+    cacheKey: `${path}:${navHash}:${dirReadmeHash(path)}`,
+  }));
 }
 
 const { path = '' } = Astro.params;

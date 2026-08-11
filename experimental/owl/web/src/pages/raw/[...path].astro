@@ -1,11 +1,17 @@
 ---
 import ViewToggle from '../../components/ViewToggle.astro';
 import Shell from '../../layouts/Shell.astro';
-import { files, type FileEntry } from '../../lib/manifest';
+import { files, navHash, type FileEntry } from '../../lib/manifest';
 import { renderRawHtml } from '../../lib/render';
 
 export function getStaticPaths() {
-  return files.map((entry) => ({ params: { path: entry.path }, props: { entry } }));
+  // cacheKey = path (unique) + navHash (sidebar) + hash (this file's body); changes
+  // only when this page's output would, so unchanged pages are copied from cache.
+  return files.map((entry) => ({
+    params: { path: entry.path },
+    props: { entry },
+    cacheKey: `${entry.path}:${navHash}:${entry.hash}`,
+  }));
 }
 
 const { entry } = Astro.props as { entry: FileEntry };

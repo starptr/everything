@@ -5,25 +5,39 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import manifestJson from '../generated/manifest.json';
-
 export interface FileEntry {
   path: string;
   size: number;
   binary: boolean;
+  /** 64-bit content hash (gen-manifest); the per-file half of a page's cacheKey. */
+  hash: string;
 }
 
 interface Manifest {
   title?: string | null;
+  navHash?: string;
   files: FileEntry[];
 }
 
-export const files: FileEntry[] = (manifestJson as Manifest).files;
+// Read the generated manifest via fs, NOT a static `import`: importing the JSON would
+// put it in every page's module dependency graph, so any content edit (which rewrites
+// the manifest) would bust incrementalBuild's whole per-page cache. An fs read keeps it
+// out of the graph — per-page data changes flow through cacheKeys instead. cwd is the
+// project root during `astro build` (owl-render chdir's there), same as treeDir below.
+const manifest = JSON.parse(
+  readFileSync(join(process.cwd(), 'src', 'generated', 'manifest.json'), 'utf8'),
+) as Manifest;
+
+export const files: FileEntry[] = manifest.files;
+
+/** Hash of the file-tree structure (paths only) inlined into every page's sidebar;
+ *  the shared half of every page's cacheKey (see gen-manifest.mjs). */
+export const navHash: string = manifest.navHash ?? '';
 
 /** Site title shown in the shell (breadcrumb root, sidebar logo, browser tab).
  *  Set via the `OWL_TITLE` build env (owl's `title` Nix parameter); defaults to
  *  owl's own name. */
-export const siteTitle: string = (manifestJson as Manifest).title ?? 'owl';
+export const siteTitle: string = manifest.title ?? 'owl';
 
 // gen-manifest.mjs writes the file bodies under .owl-tree/ (outside src/, so
 // Astro's dep scanner ignores them); astro build runs with cwd at the project
@@ -65,6 +79,16 @@ export function childrenOf(dir: string): { dirs: string[]; files: FileEntry[] } 
     dirs: [...subdirs].sort(),
     files: childFiles.sort((a, b) => a.path.localeCompare(b.path)),
   };
+}
+
+/** Content hash of the README.md a tree page would inline for `dir` (mirrors
+ *  DirListing's selection), or '' if none. The per-directory half of a tree page's
+ *  cacheKey, so a README edit re-renders the directory page that renders it. */
+export function dirReadmeHash(dir: string): string {
+  const readme = childrenOf(dir).files.find(
+    (f) => f.path.toLowerCase().endsWith('readme.md') && !f.binary,
+  );
+  return readme?.hash ?? '';
 }
 
 export interface TreeNode {

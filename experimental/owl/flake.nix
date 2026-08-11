@@ -53,41 +53,54 @@
         filterDeps = craneLib.buildDepsOnly filterArgs;
         owl-filter = craneLib.buildPackage (filterArgs // { cargoArtifacts = filterDeps; });
 
-        # --- owl-web: the Astro renderer, parameterized by the pre-filtered tree --
-        # buildNpmPackage runs `npm run build` (gen-manifest + astro build). The
-        # tree to render is handed in via OWL_INPUT_DIR; owl-web does no filtering.
-        # `--ignore-scripts` + passthrough image service keep the build hermetic
-        # (no sharp/libvips fetch), matching channel-party/web.
+        # --- owl-render: the Astro renderer as a runtime binary ------------------
+        # buildNpmPackage materializes node_modules from the lock but does NOT run
+        # `astro build` (dontNpmBuild); we install the whole package (node_modules +
+        # source) and wrap scripts/owl-render.mjs as `owl-render <tree> <out>`. The
+        # tree is a RUNTIME argument, so one artifact renders any tree — and with
+        # `--incremental` + a persistent `--work-dir`, re-invoking on a changed tree
+        # re-renders only the changed pages. `--ignore-scripts` keeps npm ci hermetic
+        # (esbuild/sharp ship prebuilt platform packages via the lock, so there is no
+        # postinstall fetch).
+        owl-render = pkgs.buildNpmPackage {
+          pname = "owl-render";
+          version = "0.1.0";
+          src = ./web;
+
+          # Hash of the npm dependency cache. Regenerate when web/package-lock.json
+          # changes: `nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`.
+          npmDepsHash = "sha256-NaNb/EL+NEUgGxu8ObCI2kiIMfo6gn1ip08REITlgeI=";
+
+          npmFlags = [ "--ignore-scripts" ];
+          dontNpmBuild = true; # `astro build` runs at runtime, over the given tree
+
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          env.ASTRO_TELEMETRY_DISABLED = "1";
+
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out/libexec"
+            cp -r . "$out/libexec/owl-web"
+            makeWrapper ${pkgs.nodejs}/bin/node "$out/bin/owl-render" \
+              --add-flags "$out/libexec/owl-web/scripts/owl-render.mjs" \
+              --set ASTRO_TELEMETRY_DISABLED 1
+            runHook postInstall
+          '';
+        };
+
+        # --- render a pre-filtered tree to a static site (hermetic, FULL build) --
+        # A thin wrapper over the owl-render binary with NO --incremental, so the
+        # offline artifact is always a complete from-scratch render (owl.fileset.txt is
+        # already applied to `tree`; owl-render does no filtering). owl-render
+        # materializes its own writable work dir since the store is read-only.
         renderTree =
           {
             tree,
             title ? "owl",
           }:
-          pkgs.buildNpmPackage {
-            pname = "owl-web";
-            version = "0.1.0";
-            src = ./web;
-
-            # Hash of the npm dependency cache. Regenerate when web/package-lock.json
-            # changes: `nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`.
-            npmDepsHash = "sha256-NwZDqIBtC+fd6uHA1vcC04YDD386jfpY7MQD/qYSsUY=";
-
-            npmFlags = [ "--ignore-scripts" ];
-
-            env = {
-              ASTRO_TELEMETRY_DISABLED = "1";
-              # Coerce to a store-path string: buildNpmPackage's `env` rejects path values.
-              OWL_INPUT_DIR = "${tree}";
-              # Site title shown in owl's UI (breadcrumb root, sidebar, browser tab).
-              OWL_TITLE = title;
-            };
-
-            installPhase = ''
-              runHook preInstall
-              cp -r dist "$out"
-              runHook postInstall
-            '';
-          };
+          pkgs.runCommand "owl-web" { } ''
+            ${owl-render}/bin/owl-render ${tree} "$out" --title ${lib.escapeShellArg title}
+          '';
 
         # --- compose: filter a checkout, then render the pruned tree -------------
         # filterTree runs owl-filter over `src` using `fileset`, producing a tree
@@ -116,7 +129,7 @@
       {
         packages = {
           default = owl-filter;
-          inherit owl-filter;
+          inherit owl-filter owl-render;
 
           # The whole monorepo rendered to a static site (result/ is the deployable
           # dir). Renders the COMMITTED tree of the `everything` input, so commit
