@@ -300,6 +300,20 @@ impl WorkstreamKind {
             WorkstreamKind::Basic { .. } => BASIC_KIND,
         }
     }
+
+    /// The kind-qualified state label, e.g. `basic.pending`.
+    ///
+    /// The `.<state>` suffix exists only for kinds that carry a [`CheckoutState`]
+    /// (today: `Basic`). A future kind that does not use `CheckoutState` renders just
+    /// its `tag()` (e.g. `basic-external`), or its own state type. The exhaustive match
+    /// forces each new kind to decide. Uses the stored lowercase/kebab forms.
+    pub fn state_label(&self) -> String {
+        match self {
+            WorkstreamKind::Basic { mode, .. } => {
+                format!("{}.{}", self.tag(), mode.state().as_str())
+            }
+        }
+    }
 }
 
 /// The stored body of a workstream document — everything but its id (the id is
@@ -340,6 +354,14 @@ impl WorkstreamBody {
     /// The provisioning state, if this workstream's kind has a checkout.
     pub fn state(&self) -> Option<CheckoutState> {
         self.mode().map(CheckoutMode::state)
+    }
+
+    /// The workstream's overall state as one algebraic string:
+    /// `<status> - <kind>[.<checkout-state>]`, e.g. `active - basic.pending`. Composes
+    /// the lifecycle [`Status`] with the kind's [`WorkstreamKind::state_label`], reusing
+    /// the stored lowercase/kebab forms.
+    pub fn overall_state(&self) -> String {
+        format!("{} - {}", self.status.as_str(), self.kind.state_label())
     }
 
     /// The agent sessions associated with this workstream, decoded from the
@@ -504,5 +526,48 @@ mod tests {
         };
         let json = serde_json::to_value(&kind).unwrap();
         assert_eq!(json["kind"], serde_json::json!(kind.tag()));
+    }
+
+    fn basic_body(status: Status, state: CheckoutState) -> WorkstreamBody {
+        WorkstreamBody {
+            name: "ws".into(),
+            status,
+            created_at: "2020-01-01T00:00:00Z".into(),
+            kind: WorkstreamKind::Basic {
+                mode: CheckoutMode::JjColocated {
+                    initial_source: "https://example.com/x.git".into(),
+                    state,
+                },
+                location: Location {
+                    forest_id: ForestId::generate(),
+                    within: LocationWithinForest::BasicForest {
+                        path: "/tmp/x".into(),
+                    },
+                },
+            },
+            kv: BTreeMap::new(),
+        }
+    }
+
+    /// `overall_state` composes lifecycle status with the kind-qualified checkout
+    /// state, using the stored lowercase/kebab forms.
+    #[test]
+    fn overall_state_algebraic_form() {
+        assert_eq!(
+            basic_body(Status::Active, CheckoutState::Pending).overall_state(),
+            "active - basic.pending"
+        );
+        assert_eq!(
+            basic_body(Status::Archived, CheckoutState::Ready).overall_state(),
+            "archived - basic.ready"
+        );
+        assert_eq!(
+            basic_body(Status::Deleted, CheckoutState::Failed).overall_state(),
+            "deleted - basic.failed"
+        );
+
+        // The kind segment alone is `<kind>.<state>`.
+        let body = basic_body(Status::Active, CheckoutState::Pending);
+        assert_eq!(body.kind.state_label(), "basic.pending");
     }
 }

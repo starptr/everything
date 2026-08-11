@@ -791,6 +791,7 @@ fn print_workstream(ws: &Workstream) {
         enum_str(ws.body.status),
         ws.body.name
     );
+    println!("  state:    {}", ws.body.overall_state());
     println!("  kind:     {}", ws.body.kind.tag());
     if let Some(mode) = ws.body.mode() {
         println!("  mode:     {} [{}]", mode.tag(), enum_str(mode.state()));
