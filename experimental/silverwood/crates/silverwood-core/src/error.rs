@@ -45,6 +45,16 @@ pub enum Error {
     #[error("workstream not found: {0}")]
     NotFound(WorkstreamId),
 
+    /// A checkout was requested on a workstream that is not awaiting one — it was not
+    /// created with the checkout deferred (`--checkout-extent skip`), or has already
+    /// been checked out (or is mid-provision). Only an `initialized-without-checkout`
+    /// workstream can be checked out.
+    #[error("workstream {id} is not awaiting checkout (state: {state})")]
+    NotAwaitingCheckout {
+        id: WorkstreamId,
+        state: &'static str,
+    },
+
     /// A workstream was not deemed safe to remove (and `--force` was not given).
     #[error("workstream {0} is not safe to remove; pass --force to remove anyway")]
     UnsafeToRemove(WorkstreamId),

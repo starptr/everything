@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    agent_shell_plan, base_shell_plan, AbsolutePath, AgentKind, AgentSession, CheckoutState,
-    DoctorReport, Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode, NewKind,
-    NewWorkstream, SpawnSeed, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
+    agent_shell_plan, base_shell_plan, AbsolutePath, AgentKind, AgentSession, CheckoutExtent,
+    CheckoutState, DoctorReport, Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode,
+    NewKind, NewWorkstream, SpawnSeed, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -40,7 +40,8 @@ enum Command {
     /// Open the forest (creating it if absent) and print its identity.
     Info,
 
-    /// Create a workstream, provisioning its checkout.
+    /// Create a workstream. Whether its checkout is provisioned now or deferred is
+    /// chosen per kind (basic: `--checkout-extent full|skip`).
     New {
         /// Human-friendly name (accepted at any `new` subcommand level).
         #[arg(long, global = true)]
@@ -84,6 +85,15 @@ enum Command {
         id: String,
         /// The new display name.
         name: String,
+    },
+
+    /// Per-kind workstream management operations. The `<KIND>` subcommand (e.g.
+    /// `basic`) is validated against the workstream's actual kind.
+    Workstream {
+        /// The workstream id (from `silverwood ls`).
+        id: String,
+        #[command(subcommand)]
+        kind: WorkstreamCommand,
     },
 
     /// Namespaced key-value state (frontend-owned).
@@ -254,9 +264,52 @@ enum SessionCreate {
 enum NewVariant {
     /// A basic workstream, materialized by a checkout mode.
     Basic {
+        /// Whether to provision the checkout now (`full`) or register the workstream and
+        /// defer provisioning to `silverwood workstream <ID> basic checkout` (`skip`).
+        #[arg(long, value_enum)]
+        checkout_extent: CheckoutExtentArg,
         #[command(subcommand)]
         mode: NewModeArg,
     },
+}
+
+/// CLI spelling of [`CheckoutExtent`] for `new basic --checkout-extent`.
+#[derive(Clone, Copy, ValueEnum)]
+enum CheckoutExtentArg {
+    /// Provision the checkout now, before the command returns.
+    Full,
+    /// Register only; provision later via `workstream <ID> basic checkout`.
+    Skip,
+}
+
+impl From<CheckoutExtentArg> for CheckoutExtent {
+    fn from(arg: CheckoutExtentArg) -> Self {
+        match arg {
+            CheckoutExtentArg::Full => CheckoutExtent::Full,
+            CheckoutExtentArg::Skip => CheckoutExtent::Skip,
+        }
+    }
+}
+
+/// Per-kind management operations for `silverwood workstream <ID> <KIND> …`. The kind
+/// subcommand is validated against the workstream's actual kind at dispatch. Only
+/// `basic` today (`WorkstreamKind` is `#[non_exhaustive]`); the kebab name matches the
+/// stored `kind` tag.
+#[derive(Subcommand)]
+enum WorkstreamCommand {
+    /// Operations on a basic workstream.
+    Basic {
+        #[command(subcommand)]
+        op: BasicOp,
+    },
+}
+
+/// Operations on a basic workstream (`silverwood workstream <ID> basic <OP>`).
+#[derive(Subcommand)]
+enum BasicOp {
+    /// Provision the checkout of a workstream created with `--checkout-extent skip`.
+    /// Fails if the workstream has already been checked out (or is mid-provision).
+    Checkout,
 }
 
 /// A `basic` workstream's checkout mode — the second `new` subcommand level. Each variant
@@ -465,7 +518,9 @@ fn run(cli: Cli) -> CliResult {
             let id = parse_id(&id)?;
             forest.archive(id)?;
             let ws = forest.get(id)?;
-            emit(json, &workstream_json(&ws), || println!("archived {}", ws.id));
+            emit(json, &workstream_json(&ws), || {
+                println!("archived {}", ws.id)
+            });
             Ok(())
         }
 
@@ -473,7 +528,9 @@ fn run(cli: Cli) -> CliResult {
             let id = parse_id(&id)?;
             forest.remove(id, force)?;
             let ws = forest.get(id)?;
-            emit(json, &workstream_json(&ws), || println!("deleted {}", ws.id));
+            emit(json, &workstream_json(&ws), || {
+                println!("deleted {}", ws.id)
+            });
             Ok(())
         }
 
@@ -484,6 +541,8 @@ fn run(cli: Cli) -> CliResult {
             emit(json, &workstream_json(&ws), || print_workstream(&ws));
             Ok(())
         }
+
+        Command::Workstream { id, kind } => run_workstream(&forest, json, &id, kind),
 
         Command::Kv(cmd) => run_kv(&forest, json, cmd),
         Command::Session(cmd) => run_session(&forest, json, cmd),
@@ -507,15 +566,39 @@ fn run(cli: Cli) -> CliResult {
 
 fn run_new(forest: &Forest, json: bool, name: Option<String>, variant: NewVariant) -> CliResult {
     let name = name.ok_or("`--name <NAME>` is required")?;
-    let NewVariant::Basic { mode } = variant;
+    let NewVariant::Basic {
+        mode,
+        checkout_extent,
+    } = variant;
     let ws = forest.create_workstream(NewWorkstream {
         name,
         kind: NewKind::Basic {
             mode: mode.into_new_mode()?,
+            checkout_extent: checkout_extent.into(),
         },
     })?;
     emit(json, &workstream_json(&ws), || print_workstream(&ws));
     Ok(())
+}
+
+fn run_workstream(forest: &Forest, json: bool, id: &str, kind: WorkstreamCommand) -> CliResult {
+    let id = parse_id(id)?;
+    let WorkstreamCommand::Basic { op } = kind;
+
+    // The `basic` subcommand asserts the workstream's kind; reject a mismatch so the
+    // per-kind operation only runs on the kind it was written for.
+    let actual = forest.get(id)?.body.kind.tag();
+    if actual != "basic" {
+        return Err(format!("workstream {id} is not a basic workstream (it is {actual})").into());
+    }
+
+    match op {
+        BasicOp::Checkout => {
+            let ws = forest.checkout_workstream(id)?;
+            emit(json, &workstream_json(&ws), || print_workstream(&ws));
+            Ok(())
+        }
+    }
 }
 
 fn run_kv(forest: &Forest, json: bool, cmd: KvCommand) -> CliResult {

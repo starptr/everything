@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use silverwood_core::{
-    CheckoutProvider, HttpsGitUrl, NewCheckoutMode, NewKind, NewWorkstream, Result,
+    CheckoutExtent, CheckoutProvider, HttpsGitUrl, NewCheckoutMode, NewKind, NewWorkstream, Result,
 };
 
 /// A fresh, unique temp dir for an isolated forest.
@@ -25,8 +25,13 @@ impl CheckoutProvider for FakeOk {
     }
 }
 
-/// A `NewWorkstream` with a valid public HTTPS source.
+/// A `NewWorkstream` with a valid public HTTPS source, provisioned in full.
 pub fn new_ws(name: &str) -> NewWorkstream {
+    new_ws_extent(name, CheckoutExtent::Full)
+}
+
+/// A `NewWorkstream` with a valid public HTTPS source and the given checkout extent.
+pub fn new_ws_extent(name: &str, checkout_extent: CheckoutExtent) -> NewWorkstream {
     NewWorkstream {
         name: name.into(),
         kind: NewKind::Basic {
@@ -34,6 +39,7 @@ pub fn new_ws(name: &str) -> NewWorkstream {
                 initial_source: HttpsGitUrl::parse("https://github.com/octocat/Hello-World.git")
                     .unwrap(),
             },
+            checkout_extent,
         },
     }
 }

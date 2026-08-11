@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::Result;
 use crate::id::{ForestId, WorkstreamId};
 use crate::source::{AbsolutePath, HttpsGitUrl};
 
@@ -81,9 +82,14 @@ pub enum CheckoutMode {
 
 /// Provisioning state of a per-forest checkout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum CheckoutState {
-    /// The document exists; the working copy is not yet provisioned.
+    /// Registered with the checkout deliberately deferred (`new … --checkout-extent
+    /// skip`): the document exists but no working copy was ever provisioned. Distinct
+    /// from `Pending`; a workstream in this state can be provisioned later via
+    /// `Forest::checkout_workstream` (`silverwood workstream … checkout`).
+    InitializedWithoutCheckout,
+    /// The document exists and its working copy is actively being provisioned.
     Pending,
     /// The working copy has been provisioned successfully.
     Ready,
@@ -171,11 +177,38 @@ impl CheckoutMode {
             | CheckoutMode::ApfsCowDirenvUnsafe { initial_source, .. } => initial_source,
         }
     }
+
+    /// Reconstruct the creation-side [`NewCheckoutMode`] from this stored mode by
+    /// re-parsing its `initial_source` back into the typed seed. Used to re-drive the
+    /// provider when checking out a workstream that was created with the checkout
+    /// deferred (`InitializedWithoutCheckout`). The stored source was validated at
+    /// creation, so a parse failure here means the document is corrupt.
+    pub fn to_new_mode(&self) -> Result<NewCheckoutMode> {
+        Ok(match self {
+            CheckoutMode::JjColocated { initial_source, .. } => NewCheckoutMode::JjColocated {
+                initial_source: HttpsGitUrl::parse(initial_source)?,
+            },
+            CheckoutMode::JjColocatedDirenvUnsafe { initial_source, .. } => {
+                NewCheckoutMode::JjColocatedDirenvUnsafe {
+                    initial_source: HttpsGitUrl::parse(initial_source)?,
+                }
+            }
+            CheckoutMode::ApfsCow { initial_source, .. } => NewCheckoutMode::ApfsCow {
+                source_path: AbsolutePath::parse(initial_source)?,
+            },
+            CheckoutMode::ApfsCowDirenvUnsafe { initial_source, .. } => {
+                NewCheckoutMode::ApfsCowDirenvUnsafe {
+                    source_path: AbsolutePath::parse(initial_source)?,
+                }
+            }
+        })
+    }
 }
 
 impl CheckoutState {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
+            CheckoutState::InitializedWithoutCheckout => "initialized-without-checkout",
             CheckoutState::Pending => "pending",
             CheckoutState::Ready => "ready",
             CheckoutState::Failed => "failed",
@@ -412,7 +445,23 @@ pub enum NewKind {
     Basic {
         /// How to materialize the checkout (carries its seed; `state` is core-owned).
         mode: NewCheckoutMode,
+        /// Whether to provision the checkout now or defer it (see [`CheckoutExtent`]).
+        checkout_extent: CheckoutExtent,
     },
+}
+
+/// Whether creation should provision the checkout synchronously or only register the
+/// workstream and defer provisioning. `Full` runs the (possibly slow) provider before
+/// returning — the workstream comes back `Ready`/`Failed`. `Skip` returns immediately
+/// with the checkout `InitializedWithoutCheckout`, to be provisioned later via
+/// [`crate::Forest::checkout_workstream`]. Only meaningful for kinds that have a
+/// checkout (today: `Basic`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckoutExtent {
+    /// Provision the checkout now, before returning.
+    Full,
+    /// Register only; leave the checkout unprovisioned (`InitializedWithoutCheckout`).
+    Skip,
 }
 
 /// Creation-side counterpart to [`CheckoutMode`]: the caller supplies the
@@ -466,6 +515,7 @@ mod tests {
             serde_json::json!(Status::Deleted.as_str())
         );
         for state in [
+            CheckoutState::InitializedWithoutCheckout,
             CheckoutState::Pending,
             CheckoutState::Ready,
             CheckoutState::Failed,
@@ -564,6 +614,10 @@ mod tests {
         assert_eq!(
             basic_body(Status::Deleted, CheckoutState::Failed).overall_state(),
             "deleted - basic.failed"
+        );
+        assert_eq!(
+            basic_body(Status::Active, CheckoutState::InitializedWithoutCheckout).overall_state(),
+            "active - basic.initialized-without-checkout"
         );
 
         // The kind segment alone is `<kind>.<state>`.

@@ -8,10 +8,10 @@ mod common;
 
 use std::path::Path;
 
-use common::{new_ws, temp_forest, FakeOk};
+use common::{new_ws, new_ws_extent, temp_forest, FakeOk};
 use silverwood_core::{
-    CheckoutProvider, CheckoutState, Error, Forest, LocationWithinForest, NewCheckoutMode, Result,
-    Status,
+    CheckoutExtent, CheckoutProvider, CheckoutState, Error, Forest, LocationWithinForest,
+    NewCheckoutMode, Result, Status,
 };
 
 /// A provider that always fails provisioning.
@@ -102,6 +102,76 @@ fn failed_provision_is_recoverable() {
     let all = forest.list(false).unwrap();
     assert_eq!(all.len(), 1);
     assert_eq!(all[0].body.state(), Some(CheckoutState::Failed));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn skip_defers_provisioning_then_checkout_readies() {
+    let dir = temp_forest("skip-ready");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+
+    // A skip create registers the workstream without provisioning its checkout.
+    let ws = forest
+        .create_workstream(new_ws_extent("deferred", CheckoutExtent::Skip))
+        .unwrap();
+    assert_eq!(
+        ws.body.state(),
+        Some(CheckoutState::InitializedWithoutCheckout)
+    );
+    let LocationWithinForest::BasicForest { path } = &ws.body.location().unwrap().within else {
+        panic!("expected a basic-forest location");
+    };
+    assert!(
+        !Path::new(path).exists(),
+        "skip must not provision the checkout (FakeOk would have created it)"
+    );
+
+    // Checking it out runs the provider and flips to Ready.
+    let ready = forest.checkout_workstream(ws.id).unwrap();
+    assert_eq!(ready.body.state(), Some(CheckoutState::Ready));
+    assert!(
+        Path::new(path).is_dir(),
+        "checkout must now be provisioned on disk"
+    );
+
+    // A second checkout is rejected — it is no longer awaiting one.
+    assert!(matches!(
+        forest.checkout_workstream(ws.id).unwrap_err(),
+        Error::NotAwaitingCheckout { .. }
+    ));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn skip_then_failed_checkout_records_failed() {
+    let dir = temp_forest("skip-fail");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeFail)).unwrap();
+
+    // The skip create SUCCEEDS despite the always-failing provider — proof it never
+    // provisioned at creation time.
+    let ws = forest
+        .create_workstream(new_ws_extent("deferred", CheckoutExtent::Skip))
+        .unwrap();
+    assert_eq!(
+        ws.body.state(),
+        Some(CheckoutState::InitializedWithoutCheckout)
+    );
+
+    // Checking out runs the failing provider and records a recoverable Failed.
+    let err = forest.checkout_workstream(ws.id).unwrap_err();
+    assert!(matches!(err, Error::Provision(_)));
+    assert_eq!(
+        forest.get(ws.id).unwrap().body.state(),
+        Some(CheckoutState::Failed)
+    );
+
+    // A Failed checkout is not re-checkout-able via this command.
+    assert!(matches!(
+        forest.checkout_workstream(ws.id).unwrap_err(),
+        Error::NotAwaitingCheckout { .. }
+    ));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

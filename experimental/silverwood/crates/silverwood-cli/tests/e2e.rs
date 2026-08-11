@@ -69,6 +69,8 @@ fn new_creates_a_ready_colocated_checkout() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             EXAMPLE_SOURCE,
             "--name",
@@ -113,6 +115,56 @@ fn new_creates_a_ready_colocated_checkout() {
     assert_eq!(json(&dir, &["--json", "show", id]), listed[0]);
 }
 
+/// `--checkout-extent skip` registers without cloning; `workstream <id> basic checkout`
+/// then provisions it, and a second checkout is rejected. The register step needs no
+/// network, but the checkout step clones, so this is `#[ignore]`d like the rest.
+#[test]
+#[ignore = "network + jj; run via `cargo test -- --ignored`"]
+fn skip_then_checkout_provisions_and_rejects_recheckout() {
+    let dir = forest();
+
+    // Register with the checkout deferred: no clone yet.
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "basic",
+            "--checkout-extent",
+            "skip",
+            "jj-colocated",
+            EXAMPLE_SOURCE,
+            "--name",
+            "deferred",
+        ],
+    );
+    let id = ws["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        ws["overall_state"],
+        "active - basic.initialized-without-checkout"
+    );
+    let location = ws["location"]["within"]["path"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        !Path::new(&location).exists(),
+        "skip must not clone: {location}"
+    );
+
+    // Checking out clones now and flips to ready.
+    let checked_out = json(&dir, &["--json", "workstream", &id, "basic", "checkout"]);
+    assert_eq!(checked_out["overall_state"], "active - basic.ready");
+    assert!(
+        Path::new(&location).join("README.md").is_file(),
+        "checkout must be provisioned on disk"
+    );
+
+    // A second checkout is rejected — it is no longer awaiting one.
+    let stderr = fails(&dir, &["workstream", &id, "basic", "checkout"]);
+    assert!(stderr.contains("not awaiting checkout"), "got: {stderr}");
+}
+
 /// The apfs-cow mode copy-on-write clones a local directory into the checkout. No
 /// network, but it needs a real APFS volume (macOS temp dirs are APFS) and shells out
 /// to `/bin/cp -c`, so it is `#[ignore]`d like the rest and must run on macOS. The
@@ -133,6 +185,8 @@ fn new_apfs_cow_creates_a_ready_checkout() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "apfs-cow",
             src_path,
             "--name",
@@ -179,6 +233,8 @@ fn new_apfs_cow_direnv_unsafe_creates_a_ready_checkout() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "apfs-cow-direnv-unsafe",
             src_path,
             "--name",
@@ -218,6 +274,8 @@ fn new_direnv_unsafe_mode_is_ready() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated-direnv-unsafe",
             EXAMPLE_SOURCE,
             "--name",
@@ -247,6 +305,8 @@ fn spawn_plan_reflects_checkout_mode() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             EXAMPLE_SOURCE,
             "--name",
@@ -275,6 +335,8 @@ fn spawn_plan_reflects_checkout_mode() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated-direnv-unsafe",
             EXAMPLE_SOURCE,
             "--name",
@@ -476,6 +538,8 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             EXAMPLE_SOURCE,
             "--name",
@@ -521,6 +585,8 @@ fn remove_deletes_checkout_but_keeps_deleted_tombstone() {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             EXAMPLE_SOURCE,
             "--name",

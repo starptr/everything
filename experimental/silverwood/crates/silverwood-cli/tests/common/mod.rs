@@ -90,6 +90,8 @@ pub fn create(dir: &TempDir, name: &str) -> String {
             "--json",
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             EXAMPLE_SOURCE,
             "--name",

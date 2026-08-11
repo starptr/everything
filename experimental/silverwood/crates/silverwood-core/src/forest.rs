@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
+use loro::LoroDoc;
 use serde::Serialize;
 
 use crate::apfs;
@@ -17,9 +18,9 @@ use crate::id::{ForestId, WorkstreamId};
 use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::workstream::{
-    AgentKind, CheckoutMode, CheckoutState, DoctorReport, Location, LocationWithinForest,
-    NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream, WorkstreamBody,
-    WorkstreamKind, RESERVED_NS_PREFIX,
+    AgentKind, CheckoutExtent, CheckoutMode, CheckoutState, DoctorReport, Location,
+    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream,
+    WorkstreamBody, WorkstreamKind, RESERVED_NS_PREFIX,
 };
 
 /// The outcome for one document in a [`Forest::upgrade_all`] pass.
@@ -109,50 +110,39 @@ impl Forest {
         &self.config
     }
 
-    /// Create a workstream, provisioning its checkout.
+    /// Create a workstream, provisioning its checkout unless deferred.
     ///
-    /// The document is written first with the checkout `Pending`, then the
-    /// checkout is provisioned, then the state is flipped to `Ready`/`Failed`
-    /// in place. A failed provision leaves a recoverable workstream (its
-    /// document persists with state `Failed`) and surfaces the error.
+    /// The document is written first (with the checkout `Pending` for a `Full`
+    /// create, or `InitializedWithoutCheckout` for a `Skip` create). A `Full` create
+    /// then provisions the checkout and flips the state to `Ready`/`Failed` in place;
+    /// a failed provision leaves a recoverable workstream (its document persists with
+    /// state `Failed`) and surfaces the error. A `Skip` create returns immediately with
+    /// the checkout unprovisioned, to be materialized later by [`Self::checkout_workstream`].
     pub fn create_workstream(&self, new: NewWorkstream) -> Result<Workstream> {
-        let NewKind::Basic { mode: new_mode } = &new.kind;
+        let NewKind::Basic {
+            mode: new_mode,
+            checkout_extent,
+        } = &new.kind;
 
         let working_copies = self.root.join(WORKING_COPIES_DIR);
 
         // Mode-specific creation preconditions that must reject *before* anything is
         // persisted (a hard failure, unlike a provisioning error, which leaves a
-        // recoverable `Failed` document). Today only apfs-cow has one.
+        // recoverable `Failed` document). Today only apfs-cow has one. Runs for both
+        // extents, so a deferred (`Skip`) create still rejects a bad seed up front.
         precheck_new_mode(new_mode, &working_copies)?;
 
         let id = WorkstreamId::generate();
         let dest = working_copies.join(id.to_string());
 
-        // The stored mode starts `pending`; core flips it after provisioning. Each
-        // NewCheckoutMode maps to its matching pending CheckoutMode (dest/location and
-        // the provision call below are mode-independent).
-        let mode = match new_mode {
-            NewCheckoutMode::JjColocated { initial_source } => CheckoutMode::JjColocated {
-                initial_source: initial_source.as_str().to_string(),
-                state: CheckoutState::Pending,
-            },
-            NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source } => {
-                CheckoutMode::JjColocatedDirenvUnsafe {
-                    initial_source: initial_source.as_str().to_string(),
-                    state: CheckoutState::Pending,
-                }
-            }
-            NewCheckoutMode::ApfsCow { source_path } => CheckoutMode::ApfsCow {
-                initial_source: source_path.as_str().to_string(),
-                state: CheckoutState::Pending,
-            },
-            NewCheckoutMode::ApfsCowDirenvUnsafe { source_path } => {
-                CheckoutMode::ApfsCowDirenvUnsafe {
-                    initial_source: source_path.as_str().to_string(),
-                    state: CheckoutState::Pending,
-                }
-            }
+        // The stored mode's initial state depends on the extent: `Full` starts `Pending`
+        // (core flips it after provisioning below); `Skip` rests at
+        // `InitializedWithoutCheckout`. dest/location are mode- and extent-independent.
+        let initial_state = match checkout_extent {
+            CheckoutExtent::Full => CheckoutState::Pending,
+            CheckoutExtent::Skip => CheckoutState::InitializedWithoutCheckout,
         };
+        let mode = stored_mode(new_mode, initial_state);
 
         // The location records this forest as the single materialization site.
         let body = WorkstreamBody {
@@ -171,19 +161,69 @@ impl Forest {
             kv: BTreeMap::new(),
         };
 
-        // Persist the pending document, then provision, then record the outcome
-        // by mutating the same in-memory document in place.
         let doc = doc::build(self.peer_id(), &body)?;
         self.docs.save(id, &doc::snapshot(&doc)?)?;
 
-        let provisioned = self.provider.provision(new_mode, &dest);
+        match checkout_extent {
+            // Registered only; the caller provisions later via `checkout_workstream`.
+            CheckoutExtent::Skip => self.get(id),
+            // Provision now, recording the outcome in place.
+            CheckoutExtent::Full => self.provision_checkout(id, &doc, new_mode, &dest),
+        }
+    }
+
+    /// Provision the checkout of a workstream that was created with the checkout
+    /// deferred (`InitializedWithoutCheckout`).
+    ///
+    /// Validates the workstream is basic and has not been checked out, then runs the
+    /// same `Pending` → `Ready`/`Failed` provisioning as a `Full` create. Errors
+    /// [`Error::NotAwaitingCheckout`] (leaving the document untouched) if it is already
+    /// checked out, mid-provision, or previously failed.
+    pub fn checkout_workstream(&self, id: WorkstreamId) -> Result<Workstream> {
+        let bytes = self.docs.load(id)?.ok_or(Error::NotFound(id))?;
+        let ws = doc::hydrate(id, &bytes)?;
+
+        // Basic is the only kind, so this destructure is irrefutable in-crate; a future
+        // non-checkout kind would branch here.
+        let WorkstreamKind::Basic { mode, location } = &ws.body.kind;
+        if mode.state() != CheckoutState::InitializedWithoutCheckout {
+            return Err(Error::NotAwaitingCheckout {
+                id,
+                state: mode.state().as_str(),
+            });
+        }
+
+        let new_mode = mode.to_new_mode()?;
+        let LocationWithinForest::BasicForest { path } = &location.within;
+        let dest = PathBuf::from(path);
+
+        let doc = doc::load(self.peer_id(), &bytes)?;
+        self.provision_checkout(id, &doc, &new_mode, &dest)
+    }
+
+    /// Provision `new_mode` into `dest` for the already-persisted workstream `id`,
+    /// marking it `Pending` while the provider runs and recording `Ready`/`Failed`
+    /// afterward — mutating the same in-memory document in place so lineage is
+    /// preserved. Surfaces a provisioning error after persisting the recoverable
+    /// `Failed` state. Shared by a `Full` create and [`Self::checkout_workstream`].
+    fn provision_checkout(
+        &self,
+        id: WorkstreamId,
+        doc: &LoroDoc,
+        new_mode: &NewCheckoutMode,
+        dest: &Path,
+    ) -> Result<Workstream> {
+        doc::set_state(doc, CheckoutState::Pending)?;
+        self.docs.save(id, &doc::snapshot(doc)?)?;
+
+        let provisioned = self.provider.provision(new_mode, dest);
         let state = if provisioned.is_ok() {
             CheckoutState::Ready
         } else {
             CheckoutState::Failed
         };
-        doc::set_state(&doc, state)?;
-        self.docs.save(id, &doc::snapshot(&doc)?)?;
+        doc::set_state(doc, state)?;
+        self.docs.save(id, &doc::snapshot(doc)?)?;
 
         provisioned?;
         self.get(id)
@@ -485,6 +525,32 @@ impl Forest {
 /// Create `path` (and parents) if it does not already exist.
 fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).map_err(|e| Error::io(path, e))
+}
+
+/// Build the stored [`CheckoutMode`] for a new checkout from its creation-side seed,
+/// stamping the given initial provisioning `state`. dest/location are handled by the
+/// caller; only the mode's seed and state are set here.
+fn stored_mode(new_mode: &NewCheckoutMode, state: CheckoutState) -> CheckoutMode {
+    match new_mode {
+        NewCheckoutMode::JjColocated { initial_source } => CheckoutMode::JjColocated {
+            initial_source: initial_source.as_str().to_string(),
+            state,
+        },
+        NewCheckoutMode::JjColocatedDirenvUnsafe { initial_source } => {
+            CheckoutMode::JjColocatedDirenvUnsafe {
+                initial_source: initial_source.as_str().to_string(),
+                state,
+            }
+        }
+        NewCheckoutMode::ApfsCow { source_path } => CheckoutMode::ApfsCow {
+            initial_source: source_path.as_str().to_string(),
+            state,
+        },
+        NewCheckoutMode::ApfsCowDirenvUnsafe { source_path } => CheckoutMode::ApfsCowDirenvUnsafe {
+            initial_source: source_path.as_str().to_string(),
+            state,
+        },
+    }
 }
 
 /// Validate a mode's creation preconditions that must reject *before* any document

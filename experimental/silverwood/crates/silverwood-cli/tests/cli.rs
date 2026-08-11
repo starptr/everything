@@ -4,6 +4,8 @@
 
 mod common;
 
+use std::path::Path;
+
 use common::{fails, forest, json, run};
 
 #[test]
@@ -66,6 +68,8 @@ fn new_with_non_https_source_is_rejected_without_cloning() {
         &[
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             "git@github.com:a/b.git",
             "--name",
@@ -77,6 +81,8 @@ fn new_with_non_https_source_is_rejected_without_cloning() {
         &[
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             "http://github.com/a/b.git",
             "--name",
@@ -97,15 +103,29 @@ fn new_subcommand_structure_mirrors_the_data_model() {
     fails(&dir, &["new"]);
     fails(&dir, &["new", "basic"]);
 
+    // `basic` demands its `--checkout-extent` (full|skip); omitting it is a clap error.
+    let stderr = fails(&dir, &["new", "basic", "jj-colocated", "--name", "x"]);
+    assert!(stderr.contains("checkout-extent"), "got: {stderr}");
+
     // A mode leaf demands its seed: the `<SOURCE_HTTPS_URL>` positional.
-    let stderr = fails(&dir, &["new", "basic", "jj-colocated"]);
+    let stderr = fails(
+        &dir,
+        &["new", "basic", "--checkout-extent", "full", "jj-colocated"],
+    );
     assert!(stderr.contains("SOURCE_HTTPS_URL"), "got: {stderr}");
 
     // `--name` is required (enforced in the handler); omitting it fails before the
     // source is ever validated.
     let stderr = fails(
         &dir,
-        &["new", "basic", "jj-colocated", "http://github.com/a/b.git"],
+        &[
+            "new",
+            "basic",
+            "--checkout-extent",
+            "full",
+            "jj-colocated",
+            "http://github.com/a/b.git",
+        ],
     );
     assert!(stderr.contains("--name"), "got: {stderr}");
 
@@ -118,6 +138,8 @@ fn new_subcommand_structure_mirrors_the_data_model() {
             "--name",
             "x",
             "basic",
+            "--checkout-extent",
+            "full",
             "jj-colocated",
             "http://github.com/a/b.git",
         ],
@@ -125,25 +147,48 @@ fn new_subcommand_structure_mirrors_the_data_model() {
     assert!(stderr.contains("scheme must be https"), "got: {stderr}");
 
     // The apfs-cow mode leaf demands its own seed: an `<ABSOLUTE_PATH>` positional...
-    let stderr = fails(&dir, &["new", "basic", "apfs-cow"]);
+    let stderr = fails(
+        &dir,
+        &["new", "basic", "--checkout-extent", "full", "apfs-cow"],
+    );
     assert!(stderr.contains("ABSOLUTE_PATH"), "got: {stderr}");
 
     // ...and it must be absolute — a relative path is rejected before any forest work.
     let stderr = fails(
         &dir,
-        &["new", "basic", "apfs-cow", "relative/path", "--name", "x"],
+        &[
+            "new",
+            "basic",
+            "--checkout-extent",
+            "full",
+            "apfs-cow",
+            "relative/path",
+            "--name",
+            "x",
+        ],
     );
     assert!(stderr.contains("absolute"), "got: {stderr}");
 
     // The apfs-cow-direnv-unsafe leaf exists with the same seed: `<ABSOLUTE_PATH>`,
     // absolute-only (its extra `direnv allow` doesn't change the creation contract).
-    let stderr = fails(&dir, &["new", "basic", "apfs-cow-direnv-unsafe"]);
+    let stderr = fails(
+        &dir,
+        &[
+            "new",
+            "basic",
+            "--checkout-extent",
+            "full",
+            "apfs-cow-direnv-unsafe",
+        ],
+    );
     assert!(stderr.contains("ABSOLUTE_PATH"), "got: {stderr}");
     let stderr = fails(
         &dir,
         &[
             "new",
             "basic",
+            "--checkout-extent",
+            "full",
             "apfs-cow-direnv-unsafe",
             "relative/path",
             "--name",
@@ -154,6 +199,48 @@ fn new_subcommand_structure_mirrors_the_data_model() {
 
     // None of the above created anything.
     assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
+}
+
+#[test]
+fn new_skip_registers_without_provisioning() {
+    let dir = forest();
+
+    // `--checkout-extent skip` registers the workstream but does not clone, so this runs
+    // in the no-network sandbox: the checkout rests at `initialized-without-checkout` and
+    // nothing is materialized on disk.
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "basic",
+            "--checkout-extent",
+            "skip",
+            "jj-colocated",
+            "https://github.com/octocat/Hello-World.git",
+            "--name",
+            "deferred",
+        ],
+    );
+    assert_eq!(
+        ws["overall_state"],
+        "active - basic.initialized-without-checkout"
+    );
+    assert_eq!(ws["mode"]["state"], "initialized-without-checkout");
+
+    // No working copy was provisioned.
+    let location = ws["location"]["within"]["path"].as_str().unwrap();
+    assert!(
+        !Path::new(location).exists(),
+        "skip must not materialize a checkout: {location}"
+    );
+
+    // `show` reflects the same deferred state.
+    let id = ws["id"].as_str().unwrap();
+    assert_eq!(
+        json(&dir, &["--json", "show", id])["overall_state"],
+        "active - basic.initialized-without-checkout"
+    );
 }
 
 #[test]

@@ -38,7 +38,7 @@ pub use provider::{CheckoutProvider, JjColocated};
 pub use source::{AbsolutePath, HttpsGitUrl};
 pub use spawn::{agent_shell_plan, base_shell_plan, ShellPlan, SpawnSeed};
 pub use workstream::{
-    AgentKind, AgentSession, CheckoutMode, CheckoutState, DoctorReport, Location,
+    AgentKind, AgentSession, CheckoutExtent, CheckoutMode, CheckoutState, DoctorReport, Location,
     LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream,
     WorkstreamBody, WorkstreamKind,
 };
