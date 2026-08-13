@@ -57,38 +57,9 @@ enum Command {
         all: bool,
     },
 
-    /// Show a workstream by id.
-    Show {
-        /// The workstream id (from `silverwood ls`).
-        id: String,
-    },
-
-    /// Archive a workstream (tombstone).
-    Archive {
-        /// The workstream id (from `silverwood ls`).
-        id: String,
-    },
-
-    /// Remove a workstream: mark it deleted and delete its checked-out code. Refuses
-    /// unless the workstream is safe to remove (currently: never) — pass `--force`.
-    Remove {
-        /// The workstream id (from `silverwood ls`).
-        id: String,
-        /// Remove even if the workstream is not deemed safe to remove.
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Rename a workstream.
-    Rename {
-        /// The workstream id (from `silverwood ls`).
-        id: String,
-        /// The new display name.
-        name: String,
-    },
-
-    /// Per-kind workstream management operations. The `<KIND>` subcommand (e.g.
-    /// `basic`) is validated against the workstream's actual kind.
+    /// Operate on one workstream by id: the kind-agnostic verbs (show, archive, remove,
+    /// rename) plus the per-kind `<KIND>` namespace (e.g. `basic`), which is validated
+    /// against the workstream's actual kind.
     Workstream {
         /// The workstream id (from `silverwood ls`).
         id: String,
@@ -302,13 +273,33 @@ impl From<CheckoutExtentArg> for CheckoutExtent {
     }
 }
 
-/// Per-kind management operations for `silverwood workstream <ID> <KIND> …`. The kind
-/// subcommand is validated against the workstream's actual kind at dispatch. Only
-/// `basic` today (`WorkstreamKind` is `#[non_exhaustive]`); the kebab name matches the
-/// stored `kind` tag.
+/// Operations on `silverwood workstream <ID> <OP>`. Kind-agnostic verbs (show/archive/
+/// remove/rename) run on any workstream; the per-kind `<KIND>` namespace (only `basic`
+/// today, since `WorkstreamKind` is `#[non_exhaustive]`) is validated against the
+/// workstream's actual kind at dispatch — its kebab name matches the stored `kind` tag.
 #[derive(Subcommand)]
 enum WorkstreamCommand {
-    /// Operations on a basic workstream.
+    /// Show the workstream.
+    Show,
+
+    /// Archive the workstream (tombstone).
+    Archive,
+
+    /// Remove the workstream: mark it deleted and delete its checked-out code. Refuses
+    /// unless the workstream is safe to remove (currently: never) — pass `--force`.
+    Remove {
+        /// Remove even if the workstream is not deemed safe to remove.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Rename the workstream.
+    Rename {
+        /// The new display name.
+        name: String,
+    },
+
+    /// Per-kind operations on a basic workstream.
     Basic {
         #[command(subcommand)]
         op: BasicOp,
@@ -519,40 +510,6 @@ fn run(cli: Cli) -> CliResult {
             Ok(())
         }
 
-        Command::Show { id } => {
-            let ws = forest.get(parse_id(&id)?)?;
-            emit(json, &workstream_json(&ws), || print_workstream(&ws));
-            Ok(())
-        }
-
-        Command::Archive { id } => {
-            let id = parse_id(&id)?;
-            forest.archive(id)?;
-            let ws = forest.get(id)?;
-            emit(json, &workstream_json(&ws), || {
-                println!("archived {}", ws.id)
-            });
-            Ok(())
-        }
-
-        Command::Remove { id, force } => {
-            let id = parse_id(&id)?;
-            forest.remove(id, force)?;
-            let ws = forest.get(id)?;
-            emit(json, &workstream_json(&ws), || {
-                println!("deleted {}", ws.id)
-            });
-            Ok(())
-        }
-
-        Command::Rename { id, name } => {
-            let id = parse_id(&id)?;
-            forest.rename(id, &name)?;
-            let ws = forest.get(id)?;
-            emit(json, &workstream_json(&ws), || print_workstream(&ws));
-            Ok(())
-        }
-
         Command::Workstream { id, kind } => run_workstream(&forest, json, &id, kind),
 
         Command::Kv(cmd) => run_kv(&forest, json, cmd),
@@ -594,20 +551,50 @@ fn run_new(forest: &Forest, json: bool, name: Option<String>, variant: NewVarian
 
 fn run_workstream(forest: &Forest, json: bool, id: &str, kind: WorkstreamCommand) -> CliResult {
     let id = parse_id(id)?;
-    let WorkstreamCommand::Basic { op } = kind;
-
-    // The `basic` subcommand asserts the workstream's kind; reject a mismatch so the
-    // per-kind operation only runs on the kind it was written for.
-    let actual = forest.get(id)?.body.kind.tag();
-    if actual != "basic" {
-        return Err(format!("workstream {id} is not a basic workstream (it is {actual})").into());
-    }
-
-    match op {
-        BasicOp::Checkout => {
-            let ws = forest.checkout_workstream(id)?;
+    match kind {
+        WorkstreamCommand::Show => {
+            let ws = forest.get(id)?;
             emit(json, &workstream_json(&ws), || print_workstream(&ws));
             Ok(())
+        }
+        WorkstreamCommand::Archive => {
+            forest.archive(id)?;
+            let ws = forest.get(id)?;
+            emit(json, &workstream_json(&ws), || {
+                println!("archived {}", ws.id)
+            });
+            Ok(())
+        }
+        WorkstreamCommand::Remove { force } => {
+            forest.remove(id, force)?;
+            let ws = forest.get(id)?;
+            emit(json, &workstream_json(&ws), || {
+                println!("deleted {}", ws.id)
+            });
+            Ok(())
+        }
+        WorkstreamCommand::Rename { name } => {
+            forest.rename(id, &name)?;
+            let ws = forest.get(id)?;
+            emit(json, &workstream_json(&ws), || print_workstream(&ws));
+            Ok(())
+        }
+        WorkstreamCommand::Basic { op } => {
+            // The `basic` subcommand asserts the workstream's kind; reject a mismatch so the
+            // per-kind operation only runs on the kind it was written for.
+            let actual = forest.get(id)?.body.kind.tag();
+            if actual != "basic" {
+                return Err(
+                    format!("workstream {id} is not a basic workstream (it is {actual})").into(),
+                );
+            }
+            match op {
+                BasicOp::Checkout => {
+                    let ws = forest.checkout_workstream(id)?;
+                    emit(json, &workstream_json(&ws), || print_workstream(&ws));
+                    Ok(())
+                }
+            }
         }
     }
 }

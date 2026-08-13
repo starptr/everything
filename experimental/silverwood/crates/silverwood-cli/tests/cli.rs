@@ -238,7 +238,7 @@ fn new_skip_registers_without_provisioning() {
     // `show` reflects the same deferred state.
     let id = ws["id"].as_str().unwrap();
     assert_eq!(
-        json(&dir, &["--json", "show", id])["overall_state"],
+        json(&dir, &["--json", "workstream", id, "show"])["overall_state"],
         "active - basic.initialized-without-checkout"
     );
 }
@@ -247,11 +247,14 @@ fn new_skip_registers_without_provisioning() {
 fn show_rejects_bad_and_absent_ids() {
     let dir = forest();
 
-    let stderr = fails(&dir, &["show", "not-a-uuid"]);
+    let stderr = fails(&dir, &["workstream", "not-a-uuid", "show"]);
     assert!(stderr.contains("invalid workstream id"), "got: {stderr}");
 
     // Well-formed but absent id → not-found failure.
-    fails(&dir, &["show", "01999999-0000-7000-8000-000000000000"]);
+    fails(
+        &dir,
+        &["workstream", "01999999-0000-7000-8000-000000000000", "show"],
+    );
 }
 
 #[test]
@@ -259,15 +262,27 @@ fn remove_rejects_bad_and_absent_ids() {
     let dir = forest();
 
     // Bad id → parse error, before any forest work.
-    let stderr = fails(&dir, &["remove", "not-a-uuid"]);
+    let stderr = fails(&dir, &["workstream", "not-a-uuid", "remove"]);
     assert!(stderr.contains("invalid workstream id"), "got: {stderr}");
 
     // Well-formed but absent id → not-found, both with and without `--force` (the
     // workstream is loaded before the safety check / force is consulted).
-    fails(&dir, &["remove", "01999999-0000-7000-8000-000000000000"]);
     fails(
         &dir,
-        &["remove", "01999999-0000-7000-8000-000000000000", "--force"],
+        &[
+            "workstream",
+            "01999999-0000-7000-8000-000000000000",
+            "remove",
+        ],
+    );
+    fails(
+        &dir,
+        &[
+            "workstream",
+            "01999999-0000-7000-8000-000000000000",
+            "remove",
+            "--force",
+        ],
     );
 }
 

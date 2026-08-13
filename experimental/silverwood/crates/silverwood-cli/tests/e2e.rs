@@ -112,7 +112,7 @@ fn new_creates_a_ready_colocated_checkout() {
     let id = ws["id"].as_str().unwrap();
     let listed = json(&dir, &["--json", "ls"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
-    assert_eq!(json(&dir, &["--json", "show", id]), listed[0]);
+    assert_eq!(json(&dir, &["--json", "workstream", id, "show"]), listed[0]);
 }
 
 /// `--checkout-extent skip` registers without cloning; `workstream <id> basic checkout`
@@ -466,7 +466,7 @@ fn kv_and_session_lifecycle() {
     // Sessions live in the reserved kv namespace, not a top-level `sessions` field;
     // and writing that namespace directly is rejected.
     ok(&dir, &["session", "create", "claude-code", &id, "sess-2"]);
-    let ws = json(&dir, &["--json", "show", &id]);
+    let ws = json(&dir, &["--json", "workstream", &id, "show"]);
     assert!(ws.get("sessions").is_none(), "no top-level sessions field");
     assert!(ws["kv"]["app.andref.silverwood.session"]["sess-2"].is_string());
     fails(
@@ -565,8 +565,11 @@ fn kv_and_session_lifecycle() {
         .is_none());
 
     // workstream rename.
-    ok(&dir, &["rename", &id, "renamed-work"]);
-    assert_eq!(json(&dir, &["--json", "show", &id])["name"], "renamed-work");
+    ok(&dir, &["workstream", &id, "rename", "renamed-work"]);
+    assert_eq!(
+        json(&dir, &["--json", "workstream", &id, "show"])["name"],
+        "renamed-work"
+    );
 }
 
 #[test]
@@ -594,14 +597,17 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
         .to_string();
     assert!(Path::new(&location).join("README.md").is_file());
 
-    ok(&dir, &["archive", &id]);
+    ok(&dir, &["workstream", &id, "archive"]);
 
     // Hidden from `ls`, present in `ls --all`, still shows as archived.
     assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
     let all = json(&dir, &["--json", "ls", "--all"]);
     assert_eq!(all.as_array().unwrap().len(), 1);
     assert_eq!(all[0]["status"], "archived");
-    assert_eq!(json(&dir, &["--json", "show", &id])["status"], "archived");
+    assert_eq!(
+        json(&dir, &["--json", "workstream", &id, "show"])["status"],
+        "archived"
+    );
 
     // Archive is a tombstone: the checkout working copy is NOT deleted.
     assert!(
@@ -610,7 +616,7 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
     );
 
     // Persistence across processes: re-read in yet another invocation.
-    assert_eq!(json(&dir, &["--json", "show", &id])["id"], id);
+    assert_eq!(json(&dir, &["--json", "workstream", &id, "show"])["id"], id);
 }
 
 /// `remove` is the delete-like tombstone: unlike archive it discards the checkout,
@@ -642,13 +648,19 @@ fn remove_deletes_checkout_but_keeps_deleted_tombstone() {
     assert!(Path::new(&location).join("README.md").is_file());
 
     // Without --force the safety check (stubbed false) refuses; nothing changes.
-    fails(&dir, &["remove", &id]);
-    assert_eq!(json(&dir, &["--json", "show", &id])["status"], "active");
+    fails(&dir, &["workstream", &id, "remove"]);
+    assert_eq!(
+        json(&dir, &["--json", "workstream", &id, "show"])["status"],
+        "active"
+    );
     assert!(Path::new(&location).join("README.md").is_file());
 
     // --force soft-deletes: the checkout is gone, but the document survives as deleted.
-    ok(&dir, &["remove", &id, "--force"]);
-    assert_eq!(json(&dir, &["--json", "show", &id])["status"], "deleted");
+    ok(&dir, &["workstream", &id, "remove", "--force"]);
+    assert_eq!(
+        json(&dir, &["--json", "workstream", &id, "show"])["status"],
+        "deleted"
+    );
 
     // Hidden from `ls`, present in `ls --all` as deleted.
     assert_eq!(json(&dir, &["--json", "ls"]), serde_json::json!([]));
