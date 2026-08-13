@@ -58,7 +58,7 @@ no private state of its own:
 - **Canvas coordinate / color / notes** → the workstream's KV under papyrus's namespace
   `app.andref.papyrus` (values are JSON strings). The coordinate is deliberately stored in
   silverwood too — that is the whole point.
-- **Display name** → the workstream `name` (edited via `silverwood rename`).
+- **Display name** → the workstream `name` (edited via `silverwood workstream <id> rename`).
 - **Working directory** → silverwood's per-forest checkout location.
 - **Session tabs** → silverwood sessions (themselves KV, under `app.andref.silverwood.session`).
   A tab is one session record: a `claude-code` agent session (papyrus mints its id and records

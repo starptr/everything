@@ -109,7 +109,7 @@ export function list(includeArchived = false): Promise<Workstream[]> {
 }
 
 export function get(id: string): Promise<Workstream> {
-  return run(["show", id]);
+  return run(["workstream", id, "show"]);
 }
 
 /// The `new` command tree the modal drives creation from (pure metadata, no forest).
@@ -168,11 +168,11 @@ export function checkout(id: string): Promise<Workstream> {
 }
 
 export function archive(id: string): Promise<void> {
-  return serialize(id, () => run(["archive", id]));
+  return serialize(id, () => run(["workstream", id, "archive"]));
 }
 
 export function rename(id: string, name: string): Promise<void> {
-  return serialize(id, () => run(["rename", id, name]));
+  return serialize(id, () => run(["workstream", id, "rename", name]));
 }
 
 /// Set a papyrus presentation key. `value` is a JS value; stored JSON-encoded

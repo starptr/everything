@@ -78,7 +78,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
 
   // Existing workstreams for the "APFS workstream" source picker. Presentation only —
   // the reconcile loop keeps this live; the authoritative checkout path is resolved
-  // server-side (`silverwood show`) at submit, so nothing here is trusted as the value.
+  // server-side (`silverwood workstream <id> show`) at submit, so nothing here is trusted.
   const sessions = useStore((s) => s.sessions);
   const workstreams = [...sessions.values()]
     .map((w) => ({ id: w.id, name: w.customName || w.id, cwd: w.cwd, state: w.checkoutState }))
@@ -141,7 +141,7 @@ export function NewSessionModal({ open, onClose }: NewSessionModalProps) {
       const position = viewportCenter();
       const args = inputs.map(({ key }) => (argValues[key] ?? "").trim());
       // For an "APFS workstream" source, send the picked workstream id + which arg slot it
-      // fills; the server resolves it to a checkout path via `silverwood show` and
+      // fills; the server resolves it to a checkout path via `silverwood workstream <id> show` and
       // substitutes it into `args`. The slot's text value (if any) is ignored.
       const idx = sourceArgIndex(inputs);
       const useWorkstream = source.kind === "workstream" && idx !== null && !!source.workstreamId;
