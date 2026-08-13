@@ -104,13 +104,12 @@ async function buildNode(ws: sw.Workstream) {
       doctorKind: info?.doctorKind,
     });
   }
-  // A live PTY with no durable session record: either an agent session in the tiny
-  // window between spawn and `session create` landing, or an ephemeral "shell"
-  // (which never gets a record) for as long as its PTY runs. Surface it as a
-  // transient tab, rendered from the registry entry's kind.
+  // A live PTY not yet in the durable list: an agent or shell session in the tiny
+  // window between spawn and its `session create` landing. Surface it as a transient
+  // tab (rendered from the registry entry's kind) until the record appears in loop 1.
   for (const [key, s] of runtimes) {
     if (durable[key]) continue;
-    const isShell = s.kind === "shell";
+    const isShell = s.kind === "plain-shell";
     tabs.push({
       sessionId: key,
       name: isShell ? "shell" : "claude",
@@ -186,9 +185,22 @@ async function recordFreshSession(
   session: Session,
 ): Promise<void> {
   try {
-    await sw.sessionCreate(wsId, sessionId, "claude");
+    await sw.sessionCreate("claude-code", wsId, sessionId, "claude");
     await sw.sessionLock(wsId, sessionId, HOLDER);
     session.holdsLock = true;
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[session-register]\x1b[0m ${sessionId}: ${e.message}`);
+  }
+}
+
+// Record a freshly-spawned plain shell durably (name "shell"), so its tab and any
+// rename persist in silverwood (workstream-scoped) like a claude session. A shell
+// carries no lock — every reopen is an independent fresh login shell. Best-effort:
+// a failure is logged, not fatal (buildNode surfaces the live PTY as a transient
+// tab until the record lands).
+async function recordFreshShell(wsId: string, sessionId: string): Promise<void> {
+  try {
+    await sw.sessionCreate("plain-shell", wsId, sessionId, "shell");
   } catch (e: any) {
     logError(`\x1b[38;5;141m[session-register]\x1b[0m ${sessionId}: ${e.message}`);
   }
@@ -265,8 +277,10 @@ apiRoutes.post("/sessions", async (c) => {
   });
 });
 
-// Connect (resume) an existing session: acquire its advisory lock, then spawn a
-// `claude --resume <id>` PTY in the checkout. `force` steals a lock held elsewhere.
+// Connect an existing session. For a claude-code session this acquires its advisory
+// lock and spawns a `claude --resume <id>` PTY; for a plain shell (no lock, no
+// process to resume) it just spawns a fresh login shell keyed by the durable id.
+// `force` steals a claude lock held elsewhere.
 apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
   const wsId = c.req.param("wsId");
   const { sessionId, force } = await c.req.json();
@@ -287,6 +301,23 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
   const cwd = sw.checkoutLocation(ws) || "";
   if (!cwd || sw.checkoutState(ws) !== "ready") {
     return c.json({ error: "checkout not ready" }, 400);
+  }
+
+  // silverwood is authoritative for the session's kind (the tab may be stale). A
+  // plain shell reopens as a fresh login shell — no lock, no `--resume`.
+  const durable = await sw
+    .sessionLs(wsId)
+    .catch(() => ({}) as Record<string, sw.AgentSession>);
+  if (durable[sessionId]?.kind === "plain-shell") {
+    spawnTerminal({
+      sessionKey: sessionId,
+      workstreamId: wsId,
+      cwd,
+      resume: false,
+      kind: "plain-shell",
+    });
+    log(`\x1b[38;5;141m[session]\x1b[0m reopened shell ${sessionId}`);
+    return c.json({ sessionId, connected: true });
   }
 
   // Acquire the advisory lock. A contention failure → 409 so the UI can offer
@@ -315,15 +346,16 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
 
 // Add a fresh session tab of the requested `variant` (body `{ variant }`, default
 // "claude-code" — an empty/absent body keeps the old behavior). papyrus mints the id.
-//  - "claude-code": spawn `claude --session-id <id>` and record the durable
-//    silverwood session + advisory lock immediately (no hook).
-//  - "shell": spawn an ephemeral `silverwood spawn <ws>` login shell — no durable
-//    record, no lock. It lives only while its PTY runs (buildNode surfaces it as a
-//    transient tab); it vanishes on exit/disconnect.
+// Both variants get a durable silverwood record immediately, so the tab (and any
+// rename) persists workstream-scoped:
+//  - "claude-code": spawn `claude --session-id <id>`, record the session + acquire
+//    its advisory lock (no hook).
+//  - "plain-shell": spawn `silverwood spawn <ws>` (a login shell), record the
+//    session with no lock. Reopening later spawns a fresh login shell.
 apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
   const wsId = c.req.param("wsId");
   const body = await c.req.json().catch(() => ({}));
-  const variant = body.variant === "shell" ? "shell" : "claude-code";
+  const variant = body.variant === "plain-shell" ? "plain-shell" : "claude-code";
   let ws: sw.Workstream;
   try {
     ws = await sw.get(wsId);
@@ -343,6 +375,7 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
     kind: variant,
   });
   if (variant === "claude-code") await recordFreshSession(wsId, sessionId, session);
+  else await recordFreshShell(wsId, sessionId);
   log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${variant} ${sessionId}`);
   return c.json({ sessionId, connected: true, variant });
 });
@@ -352,6 +385,23 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
 apiRoutes.post("/sessions/:wsId/sessions/:sessionId/disconnect", (c) => {
   const r = resolveRuntime(c.req.param("sessionId"));
   if (r) killTerminal(r[0]);
+  return c.json({ success: true });
+});
+
+// Remove a session entirely: kill its live PTY (if any) and delete the durable
+// silverwood record, so the tab is gone for good. This is how a plain shell is
+// closed — `doctor` can't retire a conversation-less shell, so removal is explicit.
+apiRoutes.delete("/sessions/:wsId/sessions/:sessionId", async (c) => {
+  const wsId = c.req.param("wsId");
+  const sessionId = c.req.param("sessionId");
+  const r = resolveRuntime(sessionId);
+  if (r) killTerminal(r[0]);
+  try {
+    await sw.sessionRemove(wsId, sessionId);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 400);
+  }
+  disconnectInfo.delete(sessionId);
   return c.json({ success: true });
 });
 

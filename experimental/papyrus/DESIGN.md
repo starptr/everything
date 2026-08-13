@@ -60,8 +60,12 @@ no private state of its own:
   silverwood too — that is the whole point.
 - **Display name** → the workstream `name` (edited via `silverwood rename`).
 - **Working directory** → silverwood's per-forest checkout location.
-- **Agent runs** → silverwood sessions (themselves KV, under `app.andref.silverwood.session`),
-  recorded when Claude Code first reports its session id.
+- **Session tabs** → silverwood sessions (themselves KV, under `app.andref.silverwood.session`).
+  A tab is one session record: a `claude-code` agent session (papyrus mints its id and records
+  it on spawn) or a `plain-shell` login shell (also durable, so its name persists and is
+  workstream-scoped; it carries no lock and reopening spawns a fresh shell — there is no process
+  to resume). Storing shell tabs here — not in papyrus-local client state — is what keeps a
+  renamed shell from leaking across workstreams.
 
 `server/services/silverwood.ts` is the single persistence boundary; it serializes writes
 per workstream (silverwood does read-modify-overwrite with no locking). Dropped from the

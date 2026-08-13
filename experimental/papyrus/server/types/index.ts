@@ -16,11 +16,11 @@ export interface Session {
   outputBuffer: string[];
   // Whether this instance currently holds the session's advisory lock.
   holdsLock?: boolean;
-  // The session variant this PTY runs. "claude-code" (default) is a durable agent
-  // session; "shell" is an ephemeral `silverwood spawn` login shell with no
-  // silverwood record — it only ever exists here, so buildNode surfaces it as a
-  // transient tab for the PTY's lifetime.
-  kind?: "claude-code" | "shell";
+  // The session variant this PTY runs. Both are durable silverwood session records;
+  // "claude-code" (default) is a resumable agent session with an advisory lock,
+  // "plain-shell" is a `silverwood spawn <ws>` login shell that carries no lock and
+  // reopens as a fresh shell (there is no process to resume).
+  kind?: "claude-code" | "plain-shell";
 }
 
 export interface LinearTicket {

@@ -187,13 +187,17 @@ export function unsetKv(id: string, key: string): Promise<void> {
   return serialize(id, () => run(["kv", "unset", id, PAPYRUS_NS, key]));
 }
 
+/// Record a durable session of `kind` under a caller-minted id. `session create`
+/// is a per-kind subcommand (`claude-code` | `plain-shell`); the kind flows through
+/// as that subcommand name.
 export function sessionCreate(
+  kind: "claude-code" | "plain-shell",
   id: string,
   sessionId: string,
   name: string,
 ): Promise<void> {
   return serialize(id, () =>
-    run(["session", "create", "claude-code", id, sessionId, "--name", name]),
+    run(["session", "create", kind, id, sessionId, "--name", name]),
   );
 }
 

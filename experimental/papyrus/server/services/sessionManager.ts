@@ -83,15 +83,16 @@ function seedEnv(): Record<string, string> {
 ///  - "claude-code" (default): `silverwood spawn <ws> <sid> [--resume]` — the agent
 ///    shell (`claude --session-id`/`--resume <id>`). `sessionKey` IS the claude
 ///    session id, so the registry key === claude id === silverwood key.
-///  - "shell": `silverwood spawn <ws>` (no session id) — an ephemeral login shell.
-///    `sessionKey` is a papyrus-local key used only for the registry/WebSocket; it
-///    is never passed to silverwood, and `resume` is ignored.
+///  - "plain-shell": `silverwood spawn <ws>` (no session id) — a login shell.
+///    `sessionKey` is a papyrus-local key used only for the registry/WebSocket and to
+///    key the durable record; it is never passed to silverwood, and `resume` is
+///    ignored (a shell has no process to resume — reopening spawns a fresh one).
 export function spawnTerminal(params: {
   sessionKey: string;
   workstreamId: string;
   cwd: string;
   resume: boolean;
-  kind?: "claude-code" | "shell";
+  kind?: "claude-code" | "plain-shell";
 }): Session {
   const { sessionKey, workstreamId, cwd, resume, kind = "claude-code" } = params;
 
@@ -99,7 +100,7 @@ export function spawnTerminal(params: {
   disconnectInfo.delete(sessionKey);
 
   const args =
-    kind === "shell"
+    kind === "plain-shell"
       ? ["spawn", workstreamId]
       : ["spawn", workstreamId, sessionKey, ...(resume ? ["--resume"] : [])];
 
