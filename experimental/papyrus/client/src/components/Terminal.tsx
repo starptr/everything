@@ -221,6 +221,30 @@ export function Terminal({ sessionId, color }: TerminalProps) {
     }
   }, [activeFontSize]);
 
+  // Image paste: papyrus is 100% local, so Claude Code reads the OS clipboard itself on Ctrl+V.
+  // Neither emulator's paste handler inspects images (both read only text/plain), so intercept
+  // the paste in the capture phase — before the emulator's own listener on its inner textarea —
+  // and for an image forward Ctrl+V (\x16) to the PTY, letting Claude read the same clipboard.
+  // Text pastes are untouched (we don't preventDefault), so the emulator handles them normally.
+  useEffect(() => {
+    const el = terminalRef.current;
+    if (!el) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      const hasImage =
+        !!items && [...items].some((it) => it.kind === "file" && it.type.startsWith("image/"));
+      if (!hasImage) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const ws = wsRef.current;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "input", data: "\x16" }));
+      }
+    };
+    el.addEventListener("paste", onPaste, { capture: true });
+    return () => el.removeEventListener("paste", onPaste, { capture: true });
+  }, []);
+
   return (
     <div
       ref={terminalRef}

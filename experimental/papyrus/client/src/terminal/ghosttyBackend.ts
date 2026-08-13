@@ -8,15 +8,18 @@
 // repaints every frame), so a cursor recolor needs no rebuild; setLineHeight/setFont return
 // false, and Terminal.tsx remounts the pane for those via its remount token.
 //
-// Three shims paper over ghostty-web quirks that xterm handles natively: we answer the DA1
-// query (see below), hide the input textarea's caret (see open()), and correct cell sizing —
-// `createGhosttyBackend` waits for the webfont before the renderer first measures, and open()
-// rounds the cell width to the nearest pixel instead of ghostty's ceil (which ran cells ~10%
-// too wide). ghostty-web exposes no width knob, so both live here in the adapter.
+// Five shims paper over ghostty-web quirks that xterm handles natively: we answer the DA1
+// query (see below), re-encode Shift-modified special keys (see SHIFT_SPECIALS / open()),
+// keep the scroll position across writes (see write()), hide the input textarea's caret (see
+// open()), and correct cell sizing — `createGhosttyBackend` waits for the webfont before the
+// renderer first measures, and open() rounds the cell width to the nearest pixel instead of
+// ghostty's ceil (which ran cells ~10% too wide). ghostty-web exposes no width knob, so both
+// live here in the adapter.
 
 import { init, Terminal as GhosttyTerm, FitAddon, type ITheme } from "ghostty-web";
 import type { BackendOptions, TerminalBackend, TerminalSize } from "./backend";
 import { terminalTheme } from "./palette";
+import { SHIFT_SPECIALS } from "./ghosttyKeys";
 import type { ThemeName } from "../theme";
 
 // ghostty-web's readResponse() answers only DSR, not the Primary Device Attributes query
@@ -51,6 +54,20 @@ class GhosttyBackend implements TerminalBackend {
     const input = container.querySelector("textarea");
     if (input) input.style.caretColor = "transparent";
     this.roundCellWidth();
+    // Correct ghostty's mis-encoded Shift-only special keys. Returning true makes ghostty
+    // preventDefault + stop WITHOUT sending data, so we emit the right bytes ourselves; false
+    // defers to ghostty's normal handling (printables, plain specials, arrows, modifier combos).
+    this.term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return false;
+      if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const seq = SHIFT_SPECIALS[e.key];
+        if (seq) {
+          this.emitData?.(seq);
+          return true;
+        }
+      }
+      return false;
+    });
   }
 
   // ghostty-web sizes a cell at ceil(measureText("M").width) — always the next whole pixel up,
@@ -74,9 +91,20 @@ class GhosttyBackend implements TerminalBackend {
   }
 
   write(data: string) {
+    // ghostty-web snaps the viewport to the bottom on every write, so any output while the
+    // user is scrolled up yanks them back down (xterm keeps the position). Capture the
+    // pre-write position and restore it after — ghostty's write + snap are synchronous, so the
+    // restore lands before the next render-loop frame (no flicker). viewportY is lines-from-
+    // bottom (0 = bottom); add the newly-appended lines so the same content stays in view.
+    const prevY = this.term.getViewportY();
+    const prevLen = this.term.getScrollbackLength();
     this.term.write(data);
     // Answer DA1 on ghostty's behalf (xterm replies natively; this path is ghostty-only).
     if (this.emitData && DA1_QUERY.test(data)) this.emitData(DA1_RESPONSE);
+    if (prevY > 0) {
+      const added = this.term.getScrollbackLength() - prevLen;
+      this.term.scrollToLine(prevY + Math.max(0, added));
+    }
   }
 
   onData(cb: (data: string) => void) {

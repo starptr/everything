@@ -4,6 +4,7 @@ import { serveStatic } from "hono/bun";
 import type { ServerWebSocket } from "bun";
 import { apiRoutes } from "./routes/api";
 import { sessions, resolveRuntime, HOLDER } from "./services/sessionManager";
+import { stripQueries } from "./services/ansiQueries";
 import * as sw from "./services/silverwood";
 import { PORT } from "./config";
 import type { WebSocketData } from "./types";
@@ -57,9 +58,16 @@ Bun.serve<WebSocketData>({
       log(`\x1b[38;5;245m[ws]\x1b[0m Connected to ${sessionId}`);
       session.clients.add(ws);
 
-      // Replay scrollback so a (re)connecting client sees the live terminal.
+      // Replay scrollback so a (re)connecting client sees the live terminal. The first-ever
+      // attach replays verbatim (a program may still be blocking on a query answer, e.g. fish
+      // on DA1); a reconnect strips the stale queries so the fresh emulator doesn't re-answer
+      // them into an idle prompt (the `^[]11;rgb:…` echo on workstream switch-back).
+      const firstAttach = !session.everConnected;
+      session.everConnected = true;
       if (session.outputBuffer.length > 0) {
-        ws.send(JSON.stringify({ type: "output", data: session.outputBuffer.join("") }));
+        const history = session.outputBuffer.join("");
+        const data = firstAttach ? history : stripQueries(history);
+        ws.send(JSON.stringify({ type: "output", data }));
       }
     },
     message(ws, message) {

@@ -14,6 +14,11 @@ export interface Session {
   cwd: string;
   clients: Set<ServerWebSocket<WebSocketData>>;
   outputBuffer: string[];
+  // Whether any client has ever attached. The first attach replays scrollback verbatim (a
+  // program may still be blocking on a query answer, e.g. fish waiting ~10s for DA1); later
+  // attaches (reconnects, e.g. workstream switch-back) strip stale queries from the replay so
+  // the fresh emulator does not re-answer them into an idle shell prompt.
+  everConnected?: boolean;
   // Whether this instance currently holds the session's advisory lock.
   holdsLock?: boolean;
   // The session variant this PTY runs. Both are durable silverwood session records;
