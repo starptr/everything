@@ -73,6 +73,11 @@ pub enum Error {
     #[error("session {session_id} is locked by {holder}")]
     SessionLocked { session_id: String, holder: String },
 
+    /// A lock operation was attempted on a session whose kind carries no lock
+    /// (e.g. a `plain-shell`, which has no shared resumable state to guard).
+    #[error("session {session_id} is a {kind} session, which has no lock")]
+    SessionNotLockable { session_id: String, kind: String },
+
     /// A frontend tried to write a core-reserved kv namespace directly.
     #[error("namespace {0:?} is reserved for silverwood core; use `silverwood session`")]
     ReservedNamespace(String),

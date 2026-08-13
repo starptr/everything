@@ -56,7 +56,7 @@ layer underneath them that lets you swap the frontend without migrating data.
 | **Workstream** | The unit a developer works on. Has a human name, common properties, exactly one **kind**, and open namespaced KV. One Loro document per workstream. |
 | **Kind** | What a workstream *is*. Today the only kind is **basic** (§3): a materialized code-change (a checkout mode carrying its seed + provisioning state, and a single-forest location). Future kinds may hold different data (§8). |
 | **Code-change** | What a basic workstream is built around: a working copy provisioned by silverwood by cloning an HTTPS git endpoint in a specified **mode** (§3). |
-| **Agent session** | An **agent kind** (today only `claude-code`) + a session id + a human-friendly name. Stored as a special case of namespaced KV under the core-reserved `app.andref.silverwood.session` namespace, so sessions are kind-agnostic (§5). |
+| **Session** | A **session kind** + a session id + a human-friendly name. The kind is an agent (today `claude-code`, carrying a best-effort resumption lock) or `plain-shell` (a recorded login shell — no lock, no conversation for `doctor` to check; a frontend reopens it as a fresh shell). Stored as a special case of namespaced KV under the core-reserved `app.andref.silverwood.session` namespace, so sessions are kind-agnostic (§5). |
 | **Forest id / peer id** | The forest's stable identity, used as the Loro peer/actor id so edits are attributable. Local, never synced. |
 | **DocStore** | The trait abstracting where workstream documents are persisted (files by default). |
 | **CheckoutProvider** | The trait abstracting how a code-change is materialized on disk (jj-colocated clone today). |
@@ -148,9 +148,9 @@ nothing user-facing.
 - Core **does** mint what a caller cannot meaningfully supply: the workstream
   UUID, `created_at`, and the initial `active` status (a lifecycle invariant).
 - Core **does not** invent policy: `name`, the checkout mode and its
-  `initial_source`, and a session's **agent kind** are always caller-specified.
+  `initial_source`, and a session's **kind** are always caller-specified.
   There is no default
-  mode, no default agent kind, no auto-created working branch, no ambient repo
+  mode, no default session kind, no auto-created working branch, no ambient repo
   inference.
 - Defaults, inference, and UX belong in a frontend (the CLI is itself a frontend
   and, for now, also requires explicit inputs).

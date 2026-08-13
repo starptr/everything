@@ -388,6 +388,9 @@ impl Forest {
             AgentKind::ClaudeCode { .. } => Some(crate::claude::claude_conversation_exists(
                 config_dir, session_id,
             )),
+            // A plain shell has no persisted conversation to check; doctor can't
+            // judge whether it's safe to remove, so report `None`.
+            AgentKind::PlainShell {} => None,
         };
         Ok(DoctorReport {
             workstream_id: id.to_string(),

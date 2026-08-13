@@ -110,11 +110,11 @@ pub struct SessionLock {
     pub acquired_at: String,
 }
 
-/// Which agent an [`AgentSession`] belongs to, carrying that kind's own state.
-/// Open, internally-tagged enum: one kind today. The claude-code kind carries an
-/// optional [`SessionLock`] (a Claude Code session can be resumed by only one
-/// client at a time); a future kind that already guarantees single-user access
-/// would carry no lock.
+/// Which agent (or shell) an [`AgentSession`] belongs to, carrying that kind's own
+/// state. Open, internally-tagged enum. The claude-code kind carries an optional
+/// [`SessionLock`] (a Claude Code session can be resumed by only one client at a
+/// time); a kind that already guarantees single-user access — such as `plain-shell`,
+/// whose every reopen is an independent fresh login shell — carries no lock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[non_exhaustive]
@@ -125,6 +125,11 @@ pub enum AgentKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lock: Option<SessionLock>,
     },
+    /// A plain login shell recorded so its tab (name) persists. It has no durable
+    /// process to resume — reopening spawns a fresh login shell — so it carries no
+    /// lock and no conversation for doctor to check. Named to leave room for other
+    /// shell kinds later.
+    PlainShell {},
 }
 
 impl AgentKind {
@@ -132,6 +137,7 @@ impl AgentKind {
     pub fn tag(&self) -> &'static str {
         match self {
             AgentKind::ClaudeCode { .. } => "claude-code",
+            AgentKind::PlainShell {} => "plain-shell",
         }
     }
 }
@@ -276,6 +282,7 @@ impl AgentSession {
     pub fn lock(&self) -> Option<&SessionLock> {
         match &self.kind {
             AgentKind::ClaudeCode { lock } => lock.as_ref(),
+            AgentKind::PlainShell {} => None,
         }
     }
 }

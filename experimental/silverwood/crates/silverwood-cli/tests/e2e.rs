@@ -523,6 +523,47 @@ fn kv_and_session_lifecycle() {
         "unlock must clear the lock"
     );
 
+    // plain-shell sessions: recorded like any session (caller-minted id); rename
+    // persists + preserves the kind; doctor reports the kind but has no conversation
+    // to check (null); and locking one is refused (it has no lock slot).
+    ok(
+        &dir,
+        &[
+            "session",
+            "create",
+            "plain-shell",
+            &id,
+            "sh-1",
+            "--name",
+            "scratch",
+        ],
+    );
+    let sh = json(&dir, &["--json", "session", "ls", &id]);
+    assert_eq!(sh["sh-1"]["kind"], "plain-shell");
+    assert!(
+        sh["sh-1"].get("lock").is_none(),
+        "a plain shell has no lock"
+    );
+    ok(&dir, &["session", "rename", &id, "sh-1", "scratch v2"]);
+    let sh = json(&dir, &["--json", "session", "ls", &id]);
+    assert_eq!(sh["sh-1"]["name"], "scratch v2");
+    assert_eq!(
+        sh["sh-1"]["kind"], "plain-shell",
+        "rename must preserve kind"
+    );
+    let report = json_env(
+        &dir,
+        &[("CLAUDE_CONFIG_DIR", claude_dir)],
+        &["--json", "session", "doctor", &id, "sh-1"],
+    );
+    assert_eq!(report["kind"], "plain-shell");
+    assert_eq!(report["conversation_exists"], serde_json::Value::Null);
+    fails(&dir, &["session", "lock", &id, "sh-1", "--holder", "A"]);
+    ok(&dir, &["session", "rm", &id, "sh-1"]);
+    assert!(json(&dir, &["--json", "session", "ls", &id])
+        .get("sh-1")
+        .is_none());
+
     // workstream rename.
     ok(&dir, &["rename", &id, "renamed-work"]);
     assert_eq!(json(&dir, &["--json", "show", &id])["name"], "renamed-work");

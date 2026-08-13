@@ -292,6 +292,13 @@ pub(crate) fn set_session_lock(
         .map_err(|e| Error::Corrupt(format!("session {session_id}: {e}")))?;
     match &mut session.kind {
         AgentKind::ClaudeCode { lock: slot } => *slot = lock,
+        // A plain shell has no lock slot; refuse rather than silently drop the request.
+        AgentKind::PlainShell {} => {
+            return Err(Error::SessionNotLockable {
+                session_id: session_id.to_string(),
+                kind: session.kind.tag().to_string(),
+            });
+        }
     }
     kv.insert(composite.as_str(), agent_session_json(&session))
         .map_err(loro_err)?;
@@ -596,5 +603,45 @@ mod tests {
         let session: AgentSession = serde_json::from_str(encoded).unwrap();
         assert_eq!(session.kind, AgentKind::ClaudeCode { lock: None });
         assert_eq!(session.name, "planning");
+    }
+
+    /// A `plain-shell` session round-trips like any other: it serializes to the flat
+    /// `{"kind":"plain-shell",…}` wire shape, carries no lock, rename preserves its
+    /// kind, and locking it is refused (it has no lock slot).
+    #[test]
+    fn plain_shell_session_roundtrip() {
+        let doc = build(1, &sample_body()).unwrap();
+        create_session(&doc, "sh-1", AgentKind::PlainShell {}, "shell", "t0").unwrap();
+
+        let session = get_session(&doc, "sh-1").unwrap().unwrap();
+        assert_eq!(session.kind, AgentKind::PlainShell {});
+        assert_eq!(session.kind.tag(), "plain-shell");
+        assert_eq!(session.lock(), None);
+
+        // Flat wire shape (no `lock` field), and it decodes back.
+        let encoded = agent_session_json(&session);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+            serde_json::json!({"kind": "plain-shell", "name": "shell", "created_at": "t0"}),
+        );
+
+        // Rename preserves the kind + created_at.
+        rename_session(&doc, "sh-1", "my shell").unwrap();
+        let renamed = get_session(&doc, "sh-1").unwrap().unwrap();
+        assert_eq!(renamed.name, "my shell");
+        assert_eq!(renamed.kind, AgentKind::PlainShell {});
+        assert_eq!(renamed.created_at, "t0");
+
+        // A plain shell has no lock slot: locking is refused.
+        let err = set_session_lock(
+            &doc,
+            "sh-1",
+            Some(crate::workstream::SessionLock {
+                holder: "A".into(),
+                acquired_at: "t1".into(),
+            }),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::SessionNotLockable { .. }));
     }
 }

@@ -240,8 +240,8 @@ enum SessionCommand {
     },
 }
 
-/// Per-kind session creation: each agent kind takes the parameters it needs, so
-/// the argument shape is not forced to be identical across kinds (today: one).
+/// Per-kind session creation: each session kind takes the parameters it needs, so
+/// the argument shape is not forced to be identical across kinds.
 #[derive(Subcommand)]
 enum SessionCreate {
     /// A Claude Code session. `session_id` is the Claude session id; `name`
@@ -250,6 +250,17 @@ enum SessionCreate {
         /// The workstream id to attach the session to (from `silverwood ls`).
         id: String,
         /// The Claude Code session id to record.
+        session_id: String,
+        /// Display name for the session (defaults to the session id).
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// A plain login shell, recorded so its tab (name) persists. `session_id` is a
+    /// caller-minted id (a shell has no agent-provided id); `name` defaults to it.
+    PlainShell {
+        /// The workstream id to attach the session to (from `silverwood ls`).
+        id: String,
+        /// The caller-minted session id to record the shell under.
         session_id: String,
         /// Display name for the session (defaults to the session id).
         #[arg(long)]
@@ -639,6 +650,7 @@ fn run_kv(forest: &Forest, json: bool, cmd: KvCommand) -> CliResult {
 fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
     let id = match &cmd {
         SessionCommand::Create(SessionCreate::ClaudeCode { id, .. })
+        | SessionCommand::Create(SessionCreate::PlainShell { id, .. })
         | SessionCommand::Ls { id }
         | SessionCommand::Rename { id, .. }
         | SessionCommand::Rm { id, .. }
@@ -653,6 +665,12 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
         }) => {
             let name = name.unwrap_or_else(|| session_id.clone());
             forest.create_session(id, &session_id, AgentKind::ClaudeCode { lock: None }, &name)?;
+        }
+        SessionCommand::Create(SessionCreate::PlainShell {
+            session_id, name, ..
+        }) => {
+            let name = name.unwrap_or_else(|| session_id.clone());
+            forest.create_session(id, &session_id, AgentKind::PlainShell {}, &name)?;
         }
         SessionCommand::Rename {
             session_id, name, ..
