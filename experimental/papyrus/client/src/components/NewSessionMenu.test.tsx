@@ -53,10 +53,10 @@ describe("NewSessionMenu", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  test("picking Plain shell fires onPick('shell') then onClose", () => {
+  test("picking Plain shell fires onPick('plain-shell') then onClose", () => {
     const { onPick, onClose } = renderMenu();
     fireEvent.click(screen.getByText("Plain shell"));
-    expect(onPick).toHaveBeenCalledWith("shell");
+    expect(onPick).toHaveBeenCalledWith("plain-shell");
     expect(onClose).toHaveBeenCalled();
   });
 });

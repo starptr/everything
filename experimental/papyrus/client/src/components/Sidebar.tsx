@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { useStore, SessionTab } from "../stores/useStore";
 import { AgentIcon } from "./AgentIcon";
-import { type PendingOptimism, shouldDropOptimism } from "./sessionOptimism";
+import { type PendingOptimism, shouldDropOptimism, mergePendingTabs } from "./sessionOptimism";
 import { Terminal } from "./Terminal";
 import { NewSessionMenu } from "./NewSessionMenu";
 import { useResizablePane } from "./useResizablePane";
@@ -86,10 +86,31 @@ export function Sidebar() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionName, setEditSessionName] = useState("");
   // Optimism: an action's server-confirmed result, shown until the ~1s reconcile
-  // reflects it (mount-from-response). { sessionId -> partial tab override }.
-  // Optimistic tab overrides, each stamped with the reconcile generation it was set at (so a
-  // `connected` optimism can be retired even if the server never echoes it — the fast-fail race).
-  const [pending, setPending] = useState<Record<string, PendingOptimism>>({});
+  // reflects it (mount-from-response). Each override is stamped with the reconcile
+  // generation it was set at (so a `connected` optimism can be retired even if the
+  // server never echoes it — the fast-fail race). **Scoped per workstream** (node id
+  // → sessionId → override): an override only applies to the workstream it was made
+  // in, so switching workstreams can never surface a phantom tab in another one.
+  const [pendingByNode, setPendingByNode] = useState<
+    Record<string, Record<string, PendingOptimism>>
+  >({});
+  const pending = selectedNodeId ? (pendingByNode[selectedNodeId] ?? {}) : {};
+  // Update the selected workstream's optimism bucket (no-op with nothing selected).
+  // Keeps the historic `setPending((prev) => next)` shape at every call site.
+  const setPending = useCallback(
+    (
+      updater: (
+        prev: Record<string, PendingOptimism>,
+      ) => Record<string, PendingOptimism>,
+    ) => {
+      if (!selectedNodeId) return;
+      setPendingByNode((byNode) => ({
+        ...byNode,
+        [selectedNodeId]: updater(byNode[selectedNodeId] ?? {}),
+      }));
+    },
+    [selectedNodeId],
+  );
   const reconcileSeqRef = useRef(0);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,25 +119,9 @@ export function Sidebar() {
 
   const storeTabs: SessionTab[] = session?.tabs ?? [];
 
-  // The tab list: the server projection, with local optimism merged over it.
-  const tabs: SessionTab[] = (() => {
-    const byId = new Map<string, SessionTab>(storeTabs.map((t) => [t.sessionId, { ...t }]));
-    for (const [sid, { ov }] of Object.entries(pending)) {
-      const ex = byId.get(sid);
-      if (ex) byId.set(sid, { ...ex, ...ov });
-      else
-        byId.set(sid, {
-          sessionId: sid,
-          name: "claude",
-          createdAt: new Date().toISOString(),
-          kind: "claude-code",
-          connected: true,
-          lock: null,
-          ...ov,
-        });
-    }
-    return [...byId.values()];
-  })();
+  // The tab list: the server projection, with THIS workstream's optimism merged over
+  // it (`pending` is already scoped to the selected node — see `pendingByNode`).
+  const tabs: SessionTab[] = mergePendingTabs(storeTabs, pending);
 
   // Reset node-level edit buffers when the selected workstream changes.
   useEffect(() => {
@@ -210,7 +215,7 @@ export function Sidebar() {
     }
   };
 
-  // Start a fresh session of `variant` ("claude-code" | "shell") in this workstream.
+  // Start a fresh session of `variant` ("claude-code" | "plain-shell") in this workstream.
   const startSession = async (variant: string) => {
     setMenuAnchor(null);
     if (!selectedNodeId) return;
@@ -227,11 +232,11 @@ export function Sidebar() {
         setConnectError(data.error || "Failed to start session");
         return;
       }
-      const shell = variant === "shell";
+      const shell = variant === "plain-shell";
       setPending((p) => ({
         ...p,
         [data.sessionId]: {
-          ov: { connected: true, ...(shell ? { name: "shell", kind: "shell" } : {}) },
+          ov: { connected: true, ...(shell ? { name: "shell", kind: "plain-shell" } : {}) },
           seq: reconcileSeqRef.current,
         },
       }));
@@ -253,6 +258,26 @@ export function Sidebar() {
     try {
       await fetch(`/api/sessions/${selectedNodeId}/sessions/${tab.sessionId}/disconnect`, {
         method: "POST",
+      });
+    } catch {
+      // The reconcile loop will reflect the real state.
+    }
+  };
+
+  // Remove a session for good: kill any live PTY and delete its silverwood record.
+  // This is how a plain shell is closed (doctor can't retire a conversation-less
+  // shell). The tab vanishes on the next reconcile; drop its optimism now.
+  const removeSession = async (tab: SessionTab) => {
+    if (!selectedNodeId) return;
+    setPending((p) => {
+      const n = { ...p };
+      delete n[tab.sessionId];
+      return n;
+    });
+    if (editingSessionId === tab.sessionId) setEditingSessionId(null);
+    try {
+      await fetch(`/api/sessions/${selectedNodeId}/sessions/${tab.sessionId}`, {
+        method: "DELETE",
       });
     } catch {
       // The reconcile loop will reflect the real state.
@@ -541,6 +566,19 @@ export function Sidebar() {
                   >
                     <Edit3 className="w-3 h-3" />
                   </button>
+                  {/* Close: only plain shells (a shell has no doctor-based removal). */}
+                  {t.kind === "plain-shell" && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSession(t);
+                      }}
+                      title="Close shell"
+                      className="flex-shrink-0 rounded p-0.5 text-content-faint hover:text-content transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -645,7 +683,9 @@ export function Sidebar() {
                   <div>
                     <p className="text-sm text-content font-medium">{tabLabel(activeTab)}</p>
                     <p className="text-xs text-content-subtle mt-0.5">
-                      Disconnected — connecting resumes this Claude Code conversation.
+                      {activeTab.kind === "plain-shell"
+                        ? "Disconnected — connecting opens a new shell in the checkout."
+                        : "Disconnected — connecting resumes this Claude Code conversation."}
                     </p>
                   </div>
                   {activeTab.lock && !activeTab.lock.mine ? (
@@ -690,6 +730,17 @@ export function Sidebar() {
                         </button>
                       </div>
                     )}
+                  {activeTab.kind === "plain-shell" && (
+                    <button
+                      onClick={() => removeSession(activeTab)}
+                      disabled={busy}
+                      title="Remove this shell (deletes its silverwood record)"
+                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md border border-border text-content-muted text-sm font-medium hover:text-content hover:bg-surface-active disabled:opacity-50 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Close shell
+                    </button>
+                  )}
                   {connectError && <p className="text-xs text-red-400">{connectError}</p>}
                 </div>
               </div>

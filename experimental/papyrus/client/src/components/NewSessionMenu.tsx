@@ -27,7 +27,7 @@ const iconMap: Record<string, any> = {
 };
 
 // One row in the picker. `variant` is the string POSTed to the server; the agent
-// variant(s) map to the durable "claude-code" session, "shell" to the ephemeral
+// variant(s) map to the durable "claude-code" session, "plain-shell" to a durable
 // `silverwood spawn` login shell.
 interface VariantItem {
   variant: string;
@@ -83,9 +83,9 @@ export function NewSessionMenu({ open, anchor, agents, onClose, onPick }: NewSes
       color: a.color,
     })),
     {
-      variant: "shell",
+      variant: "plain-shell",
       label: "Plain shell",
-      description: "Ephemeral login shell (silverwood spawn)",
+      description: "Login shell (silverwood spawn)",
       icon: "terminal",
     },
   ];

@@ -30,3 +30,31 @@ export function shouldDropOptimism(
   const backstop = ov.connected !== undefined && seqNow - seq >= 2;
   return confirmed || backstop;
 }
+
+// The tab list a workstream shows: its server projection (`storeTabs`) with local
+// optimism merged over it. `pending` must be ONLY the selected workstream's overrides
+// (sessionId → override) — callers scope it per node id — because the `else` branch
+// fabricates a tab for an override whose id isn't in `storeTabs` (so a just-started
+// session shows immediately). A cross-workstream override would otherwise materialize
+// as a phantom tab here; scoping `pending` per workstream prevents that.
+export function mergePendingTabs(
+  storeTabs: SessionTab[],
+  pending: Record<string, PendingOptimism>,
+): SessionTab[] {
+  const byId = new Map<string, SessionTab>(storeTabs.map((t) => [t.sessionId, { ...t }]));
+  for (const [sid, { ov }] of Object.entries(pending)) {
+    const ex = byId.get(sid);
+    if (ex) byId.set(sid, { ...ex, ...ov });
+    else
+      byId.set(sid, {
+        sessionId: sid,
+        name: "claude",
+        createdAt: new Date().toISOString(),
+        kind: "claude-code",
+        connected: true,
+        lock: null,
+        ...ov,
+      });
+  }
+  return [...byId.values()];
+}
