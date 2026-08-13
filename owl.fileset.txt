@@ -5,6 +5,9 @@
 # git tracking is untouched. Everything owl encounters is rendered by default;
 # the rules below subtract from that set (and `!` can add back).
 #
+# This manifest is applied by the general-purpose `fileset` tool
+# (experimental/fileset); see its README for the canonical format reference.
+#
 # FORMAT (gitignore-like)
 #   #                Line comment. Blank lines are ignored.
 #   <glob>           Exclude paths matching this glob.

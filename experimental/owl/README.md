@@ -15,15 +15,17 @@ Netlify, GitHub Pages, S3, …).
 Two decoupled components, composed by the flake:
 
 ```
-checkout ─▶ owl-filter (Rust/globset) ─▶ pruned tree ─▶ owl-render (Astro/Shiki) ─▶ dist/
-            applies owl.fileset.txt                      one page per file, two views
+checkout ─▶ fileset (Rust/globset) ─▶ pruned tree ─▶ owl-render (Astro/Shiki) ─▶ dist/
+            applies owl.fileset.txt                  one page per file, two views
 ```
 
-- **`filter/`** — `owl-filter`, a Rust CLI that applies an `owl.fileset.txt`
-  manifest and copies the *included* files into an output directory. This is a
-  Nix-level **pre-filter**: excluded paths (notably `secrets/`) never reach the
-  renderer. See the top of `owl.fileset.txt` (at the checkout root) for the
-  manifest format — globs parsed by the `globset` crate, `!` negation, `@import`.
+- **`fileset`** — a general-purpose Rust CLI + library (its own flake at
+  `../fileset`) that applies an `owl.fileset.txt` manifest and copies the *included*
+  files into an output directory. This is owl's Nix-level **pre-filter**: excluded
+  paths (notably `secrets/`) never reach the renderer. owl keeps no Rust of its own —
+  it consumes `fileset` as a `path:../fileset` flake input and uses only its binary.
+  See `../fileset/README.md` for the manifest format — globs parsed by the `globset`
+  crate, `!` negation, `@import`.
 - **`web/`** — `owl-render`, a standalone binary wrapping the Astro renderer. It
   takes the pruned tree as a **runtime argument** (`owl-render <tree> <dist>`) and
   drives Astro's programmatic `build()` — so one build artifact renders any tree,
@@ -37,7 +39,7 @@ checkout ─▶ owl-filter (Rust/globset) ─▶ pruned tree ─▶ owl-render (
 
 ## Build / run
 
-Commands run from `experimental/owl/`. `owl-filter` always walks the on-disk
+Commands run from `experimental/owl/`. `fileset` always walks the on-disk
 checkout and applies `owl.fileset.txt`; the renderer renders whatever pruned tree it
 is handed. Two ways to render, sharing one Astro codebase:
 
@@ -49,14 +51,14 @@ is handed. Two ways to render, sharing one Astro codebase:
   (with `$OWL_TITLE`), for hot-reloading owl's *own* renderer. `gen-manifest.mjs`
   reads those two env vars; `owl-render` takes them as `<tree>` and `--title`.
 
-### 1. Development — `owl-filter` + `npm run dev`
+### 1. Development — `fileset` + `npm run dev`
 
 The fast inner loop: a hermetic pre-filter feeding Astro's live dev server (HMR).
 `npm` needs `node` (e.g. `nix develop`, or `nix shell nixpkgs#nodejs`).
 
 ```bash
-# pre-filter a checkout (or any tree) into a pruned dir
-nix run .#owl-filter -- --fileset ../../owl.fileset.txt ../.. /tmp/owl-out
+# pre-filter a checkout (or any tree) into a pruned dir (fileset is its own flake)
+nix run ../fileset -- --fileset ../../owl.fileset.txt ../.. /tmp/owl-out
 # live server with hot reload — re-run the filter when browsed files change
 cd web && OWL_INPUT_DIR=/tmp/owl-out OWL_TITLE=everything npm run dev   # http://localhost:4321
 ```
@@ -67,8 +69,8 @@ dev` above — renderer hot-reloads, content frozen — the everyday choice for 
 on owl; `run-owl-for-owl-development-with-dynamic-fileset.sh` adds a watcher that
 re-filters on every repo change, so new/changed/deleted files show up live.
 
-Iterating on the filter itself? `cargo run --manifest-path filter/Cargo.toml --`
-rebuilds faster than `nix run`.
+Iterating on the filter itself? It lives in the `fileset` crate now:
+`cargo run --manifest-path ../fileset/Cargo.toml --` rebuilds faster than `nix run`.
 
 > **Do not use `npm run build`.** It is a non-hermetic, non-development static
 > build (local `node`/npm, no fileset pre-filter, no reproducibility) with no use
@@ -109,19 +111,21 @@ after the first re-renders only changed pages), re-runs both on any repo change 
 `watchexec` watcher, and serves the result. Use it to browse a feature in progress;
 see the script header for details.
 
-### 3. Standalone binaries — `owl-filter` and `owl-render`
+### 3. Standalone binaries — `fileset` and `owl-render`
 
 ```bash
-nix run .#owl-filter -- --fileset <fileset> <src> <out>          # prune a checkout
+nix run ../fileset -- --fileset <fileset> <src> <out>            # prune a checkout
 nix run .#owl-render -- <tree> <dist> [--incremental] [--title T] # render a pruned tree
-nix build .#owl-filter   # -> result/bin/owl-filter
+nix build ../fileset     # -> result/bin/fileset
 nix build .#owl-render   # -> result/bin/owl-render
 ```
 
-`owl-render` renders a **pre-filtered** tree (it does no filtering) — a full build by
-default; `--incremental` + `--work-dir D` reuse a persistent cache to re-render only
-changed pages. The three scripts call `owl-filter` internally to prune the tree they
-render; `run-owl-for-general-development.sh` also drives `owl-render`.
+The pre-filter (`fileset`) is a **separate, general-purpose flake** at `../fileset`;
+owl ships only `owl-render`. `owl-render` renders a **pre-filtered** tree (it does no
+filtering) — a full build by default; `--incremental` + `--work-dir D` reuse a
+persistent cache to re-render only changed pages. The three scripts call `fileset`
+internally to prune the tree they render; `run-owl-for-general-development.sh` also
+drives `owl-render`.
 
 ### 4. As a library in another flake
 
@@ -132,18 +136,19 @@ site, bypassing owl's own `everything` input:
 # `title` is optional (default "owl") — the site name shown in owl's UI.
 owl.lib.${system}.renderCheckout { src = ./some-checkout; title = "my-repo"; } # filter + render
 owl.lib.${system}.renderTree { tree = pruned-store-path; title = "my-repo"; }  # render a pre-filtered tree (runs owl-render)
-owl.lib.${system}.filterTree { src = ...; fileset = ...; }                     # just the pre-filter
-owl.packages.${system}.owl-filter                                             # the filter binary
+owl.lib.${system}.filterTree { src = ...; fileset = ...; }                     # just the pre-filter (runs the fileset binary)
 owl.packages.${system}.owl-render                                             # the renderer binary
+fileset.packages.${system}.default                                           # the pre-filter binary (its own flake)
 ```
 
 **Scripts:** none — this path is for other flakes consuming owl, not local dev.
 
 Regenerate `npmDepsHash` on `web/package-lock.json` changes:
-`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`. `Cargo.lock` and
-`flake.lock` must stay committed (crane needs the lock for reproducible builds).
-The renderer needs **Astro 7+** (for `experimental.incrementalBuild` + `getStaticPaths`
-`cacheKey`); `renderTree`/`.#site` disable incremental so the build is always complete.
+`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`. owl's `flake.lock` must
+stay committed; the `fileset` crate keeps its own `Cargo.lock` + `flake.lock` (crane
+needs the lock for reproducible builds). The renderer needs **Astro 7+** (for
+`experimental.incrementalBuild` + `getStaticPaths` `cacheKey`); `renderTree`/`.#site`
+disable incremental so the build is always complete.
 
 ## Notes & limitations (v1)
 
@@ -156,5 +161,5 @@ The renderer needs **Astro 7+** (for `experimental.incrementalBuild` + `getStati
   only a pure content edit gets the single-page fast path.
 - Deferred to later: tree-sitter + symbol cross-refs / jump-to-definition, Pagefind
   search, git blame/history, request-sending functions.
-- `Cargo.lock` and `flake.lock` must be committed (crane needs the lock for
-  reproducible builds).
+- owl's `flake.lock` (and the `fileset` crate's `Cargo.lock` + `flake.lock`) must be
+  committed for reproducible builds (crane needs the lock).

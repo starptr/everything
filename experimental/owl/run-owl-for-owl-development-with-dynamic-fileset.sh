@@ -20,15 +20,15 @@ input=$(mktemp -d "${TMPDIR:-/tmp}/owl-input.XXXXXX")
 refilter=$(mktemp "${TMPDIR:-/tmp}/owl-refilter.XXXXXX")
 cat > "$refilter" <<EOF
 set -e
-nix run "$here#owl-filter" -- --fileset "$fileset" "$repo_root" "$input"
+nix run "$here/../fileset" -- --fileset "$fileset" "$repo_root" "$input"
 cd "$here/web" && OWL_INPUT_DIR="$input" OWL_TITLE=everything nix shell nixpkgs#nodejs --command npm run gen:manifest
 EOF
 
 watcher=""
 trap '[ -n "$watcher" ] && kill "$watcher" 2>/dev/null; rm -rf "$input" "$refilter"' EXIT
 
-echo "==> owl-filter: initial snapshot -> $input"
-nix run "$here#owl-filter" -- --fileset "$fileset" "$repo_root" "$input"
+echo "==> fileset: initial snapshot -> $input"
+nix run "$here/../fileset" -- --fileset "$fileset" "$repo_root" "$input"
 
 # Watch the repo; re-filter on change. owl's own outputs (.owl-tree/, the generated
 # manifest, .jj/) are ignored so our writes can't retrigger the loop; .git and

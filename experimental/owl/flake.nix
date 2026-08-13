@@ -4,13 +4,14 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
-    crane.url = "github:ipetkov/crane";
-
     flake-utils.url = "github:numtide/flake-utils";
 
-    advisory-db = {
-      url = "github:rustsec/advisory-db";
-      flake = false;
+    # The Rust fileset pre-filter, now its own general-purpose flake next door. owl
+    # consumes only its compiled binary (in filterTree + the run scripts), so a path
+    # input beats a Cargo dependency — owl keeps no Rust of its own.
+    fileset = {
+      url = "path:../fileset";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # The monorepo itself, as a plain source tree (the repo root has no flake.nix),
@@ -27,9 +28,8 @@
     {
       self,
       nixpkgs,
-      crane,
       flake-utils,
-      advisory-db,
+      fileset,
       everything,
       ...
     }:
@@ -39,19 +39,8 @@
         pkgs = nixpkgs.legacyPackages.${system};
         inherit (pkgs) lib;
 
-        craneLib = crane.mkLib pkgs;
-
-        # --- owl-filter: the Rust fileset pre-filter (crate in ./filter) ---------
-        # Pure-Rust deps (globset/walkdir/clap/anyhow), so no cmake/perl; libiconv
-        # only for the darwin linker.
-        filterSrc = craneLib.cleanCargoSource ./filter;
-        filterArgs = {
-          src = filterSrc;
-          strictDeps = true;
-          buildInputs = lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ];
-        };
-        filterDeps = craneLib.buildDepsOnly filterArgs;
-        owl-filter = craneLib.buildPackage (filterArgs // { cargoArtifacts = filterDeps; });
+        # The fileset pre-filter binary, built by the sibling `fileset` flake.
+        filterBin = fileset.packages.${system}.default;
 
         # --- owl-render: the Astro renderer as a runtime binary ------------------
         # buildNpmPackage materializes node_modules from the lock but does NOT run
@@ -103,16 +92,16 @@
           '';
 
         # --- compose: filter a checkout, then render the pruned tree -------------
-        # filterTree runs owl-filter over `src` using `fileset`, producing a tree
-        # with excluded paths (e.g. secrets/) removed — that tree is the ONLY thing
-        # the render sandbox sees.
+        # filterTree runs the fileset binary over `src` using `fileset` (the manifest,
+        # which shadows the flake input of the same name here), producing a tree with
+        # excluded paths (e.g. secrets/) removed — the ONLY thing the render sandbox sees.
         filterTree =
           {
             src,
             fileset,
           }:
           pkgs.runCommand "owl-filtered" { } ''
-            ${owl-filter}/bin/owl-filter --fileset ${fileset} ${src} "$out"
+            ${filterBin}/bin/fileset --fileset ${fileset} ${src} "$out"
           '';
 
         renderCheckout =
@@ -128,8 +117,8 @@
       in
       {
         packages = {
-          default = owl-filter;
-          inherit owl-filter owl-render;
+          default = owl-render;
+          inherit owl-render;
 
           # The whole monorepo rendered to a static site (result/ is the deployable
           # dir). Renders the COMMITTED tree of the `everything` input, so commit
@@ -142,7 +131,7 @@
         };
 
         apps.default = flake-utils.lib.mkApp {
-          drv = owl-filter;
+          drv = owl-render;
         };
 
         # Composition helpers for consumers (e.g. a top-level flake) that have a
@@ -151,34 +140,9 @@
           inherit filterTree renderTree renderCheckout;
         };
 
-        checks = {
-          inherit owl-filter;
-
-          owl-filter-clippy = craneLib.cargoClippy (
-            filterArgs
-            // {
-              cargoArtifacts = filterDeps;
-              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            }
-          );
-
-          owl-filter-fmt = craneLib.cargoFmt { src = filterSrc; };
-
-          owl-filter-audit = craneLib.cargoAudit { src = filterSrc; inherit advisory-db; };
-
-          owl-filter-nextest = craneLib.cargoNextest (
-            filterArgs
-            // {
-              cargoArtifacts = filterDeps;
-              partitions = 1;
-              partitionType = "count";
-              cargoNextestPartitionsExtraArgs = "--no-tests=pass";
-            }
-          );
-        };
-
-        devShells.default = craneLib.devShell {
-          # cargo + rustc come from craneLib; add Node for the owl-web dev loop.
+        devShells.default = pkgs.mkShell {
+          # owl has no Rust of its own now (the filter moved to the `fileset` flake);
+          # just Node for the owl-web dev loop.
           packages = [ pkgs.nodejs ];
         };
       }

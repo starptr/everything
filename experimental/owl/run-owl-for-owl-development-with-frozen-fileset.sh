@@ -17,8 +17,8 @@ fileset="$repo_root/owl.fileset.txt"
 input=$(mktemp -d "${TMPDIR:-/tmp}/owl-input.XXXXXX")
 trap 'rm -rf "$input"' EXIT
 
-echo "==> owl-filter: one-time snapshot of the repo -> $input"
-nix run "$here#owl-filter" -- --fileset "$fileset" "$repo_root" "$input"
+echo "==> fileset: one-time snapshot of the repo -> $input"
+nix run "$here/../fileset" -- --fileset "$fileset" "$repo_root" "$input"
 
 echo "==> npm run dev: http://localhost:4321  (renderer HMR; content frozen; Ctrl-C to stop)"
 cd "$here/web"

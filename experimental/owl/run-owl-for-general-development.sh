@@ -4,7 +4,7 @@
 # For developing a feature OTHER than owl: a stable, correct owl over your current files
 # that tracks the working tree without restarts.
 #
-#   1. owl-filter (hermetic `nix run`) prunes the live checkout with owl.fileset.txt into a
+#   1. fileset (hermetic `nix run`) prunes the live checkout with owl.fileset.txt into a
 #      fresh staging tree — new/untracked files appear, excluded (secrets/) + build junk
 #      never leave, and a fresh tree each pass means deletions propagate.
 #   2. owl-render (built once, then reused) renders that tree to a static $dist. It reuses a
@@ -34,14 +34,14 @@ owl_render=$(readlink -f "$render_link")/bin/owl-render
 
 # One pass: filter the live repo into a fresh staging tree, then render it incrementally
 # into $dist reusing $work's cache. A fresh staging tree each pass makes deletions
-# propagate (owl-filter only ever adds/overwrites). Baked into a temp script with concrete
+# propagate (fileset only ever adds/overwrites). Baked into a temp script with concrete
 # paths so the watcher can invoke it without quoting gymnastics.
 refilter=$(mktemp "${TMPDIR:-/tmp}/owl-refilter.XXXXXX")
 cat > "$refilter" <<EOF
 set -e
 staging=\$(mktemp -d "\${TMPDIR:-/tmp}/owl-stage.XXXXXX")
 trap 'rm -rf "\$staging"' EXIT
-nix run "$here#owl-filter" -- --fileset "$fileset" "$repo_root" "\$staging"
+nix run "$here/../fileset" -- --fileset "$fileset" "$repo_root" "\$staging"
 "$owl_render" "\$staging" "$dist" --incremental --work-dir "$work" --title everything
 EOF
 
