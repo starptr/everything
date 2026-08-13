@@ -51,3 +51,45 @@ files — `tsconfig.json` excludes `src/**/*.test.*` and `tests/` is outside its
   The store is a singleton — re-seed at the start of each test.
 
 See `client/tests/behavior/session-rename-pane.test.tsx` for a worked example.
+
+## Server tests (`server-tests/`)
+
+A separate **server-side e2e** suite lives in `server-tests/` at the package root. It drives
+papyrus's real HTTP routes **in-process** (imports the exported `apiRoutes` and calls
+`apiRoutes.request(...)`, Hono's test client — no port bound) against a **real `silverwood`
+binary** and a per-test **temp forest**. Because papyrus is stateless and delegates all
+durable state to silverwood, each test asserts ground truth by re-reading silverwood (via the
+wrapper or a raw `cli()` helper), never server memory. This is the regression guard for the
+server↔silverwood boundary: a silverwood CLI-contract change (e.g. moving a subcommand) turns
+these red, where the client suite stays green.
+
+- `server-tests/silverwood-contract.test.ts` — the wrapper (`services/silverwood.ts`) argv
+  contract: create/get/list/rename/archive, kv, and the full session lifecycle. Native-free.
+- `server-tests/api.e2e.test.ts` — the canvas CUJs through the routes: create / edit /
+  delete a node, session-tab metadata, and error propagation.
+- `server-tests/helpers/` — `forest.ts` (temp forest + `cli()` runner, the TS analog of
+  silverwood's `tests/common/mod.rs`) and `app.ts` (stubs the native `bun-pty` — pulled in
+  transitively via `sessionManager` — before loading the routes, the same trick the client
+  behavioral test uses for `Terminal`; no CUJ here spawns a PTY).
+
+**Running** (needs `bun` and a silverwood binary):
+
+```sh
+# from experimental/papyrus; SILVERWOOD_BIN points at a built silverwood
+SILVERWOOD_BIN=../silverwood/target/debug/silverwood OPENUI_QUIET=1 bun test server-tests
+# or: bun run test:server   (with SILVERWOOD_BIN set / silverwood on PATH)
+```
+
+`bun test server-tests` scopes to the `server-tests/` dir; do **not** run bare `bun test` at
+the package root (the "tests" substring would also match `client/tests/`, whose happy-dom
+preload only loads under `client/`).
+
+**Scope / constraints.** Every journey uses silverwood `--checkout-extent skip`, so nothing
+clones — the suite is network-free and runs in the `nix flake check` sandbox via the
+`server-tests` derivation (`flake.nix`), which sets `SILVERWOOD_BIN` to the flake's wrapped
+silverwood. The full create→checkout→live-terminal journey needs network + jj and is **out of
+scope** here, matching silverwood's own `#[ignore]`d e2e split.
+
+**Ownership.** These are developer-owned CUJ invariants (like behavioral tests): the coding
+agent may add/update them when it changes the server↔silverwood contract, but the developer
+owns the set and reviews changes.

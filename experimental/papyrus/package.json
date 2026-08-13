@@ -28,7 +28,8 @@
     "dev": "concurrently \"bun run --watch server/index.ts\" \"bun run --cwd client dev\"",
     "build": "bun run --cwd client build",
     "prepublishOnly": "bun run build",
-    "install:client": "cd client && bun install"
+    "install:client": "cd client && bun install",
+    "test:server": "bun test server-tests"
   },
   "dependencies": {
     "bun-pty": "^0.4.8",

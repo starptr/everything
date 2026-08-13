@@ -90,6 +90,26 @@
           installPhase = "touch $out";
         };
 
+        # Server-side e2e: drive the real Hono routes in-process (`apiRoutes.request`)
+        # against a REAL silverwood binary + a per-test temp forest, asserting canvas
+        # CUJs round-trip through silverwood (the delegation the server exists to do).
+        # `bun-pty` is stubbed and every journey is `--checkout-extent skip`, so nothing
+        # clones — it runs in the network-isolated sandbox and a red test fails
+        # `nix flake check`. `bun test server-tests` scopes to the server-tests/ dir (the
+        # substring never matches client/tests/). See server-tests/ and TESTING.md.
+        server-tests = b2n.mkDerivation {
+          pname = "papyrus-server-tests";
+          version = "1.2.1";
+          src = ./.;
+          bunDeps = b2n.fetchBunDeps { bunNix = ./bun.nix; };
+          buildPhase = ''
+            export SILVERWOOD_BIN=${silverwood-bin}/bin/silverwood
+            export OPENUI_QUIET=1
+            bun test server-tests
+          '';
+          installPhase = "touch $out";
+        };
+
         # The Bun server, packaged as a runnable app that keeps its real
         # node_modules (bun-pty's native .dylib must dlopen at runtime). There is
         # no bundle/compile step — Bun executes the TypeScript directly.
@@ -137,7 +157,7 @@
         };
 
         checks = {
-          inherit client client-tests;
+          inherit client client-tests server-tests;
           papyrus = papyrus;
         };
 
