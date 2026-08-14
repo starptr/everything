@@ -253,7 +253,28 @@ fn show_rejects_bad_and_absent_ids() {
     // Well-formed but absent id → not-found failure.
     fails(
         &dir,
+        &[
+            "workstream",
+            "uuidv7_01999999-0000-7000-8000-000000000000",
+            "show",
+        ],
+    );
+}
+
+#[test]
+fn bare_uuid_is_rejected_as_deprecated_implicit() {
+    let dir = forest();
+
+    // A well-formed UUID with no scheme prefix is the deprecated implicit form and
+    // is rejected on input — the message must guide toward the explicit `uuidv7_`.
+    let stderr = fails(
+        &dir,
         &["workstream", "01999999-0000-7000-8000-000000000000", "show"],
+    );
+    assert!(stderr.contains("invalid workstream id"), "got: {stderr}");
+    assert!(
+        stderr.contains("uuidv7_"),
+        "expected explicit-form guidance: {stderr}"
     );
 }
 
@@ -271,7 +292,7 @@ fn remove_rejects_bad_and_absent_ids() {
         &dir,
         &[
             "workstream",
-            "01999999-0000-7000-8000-000000000000",
+            "uuidv7_01999999-0000-7000-8000-000000000000",
             "remove",
         ],
     );
@@ -279,7 +300,7 @@ fn remove_rejects_bad_and_absent_ids() {
         &dir,
         &[
             "workstream",
-            "01999999-0000-7000-8000-000000000000",
+            "uuidv7_01999999-0000-7000-8000-000000000000",
             "remove",
             "--force",
         ],
@@ -297,7 +318,11 @@ fn spawn_rejects_bad_and_absent_ids() {
     // Well-formed but absent id → not-found (there is no checkout to spawn in).
     fails(
         &dir,
-        &["spawn", "01999999-0000-7000-8000-000000000000", "sess-1"],
+        &[
+            "spawn",
+            "uuidv7_01999999-0000-7000-8000-000000000000",
+            "sess-1",
+        ],
     );
 }
 
@@ -312,7 +337,7 @@ fn kv_set_rejects_reserved_namespace() {
         &[
             "kv",
             "set",
-            "01999999-0000-7000-8000-000000000000",
+            "uuidv7_01999999-0000-7000-8000-000000000000",
             "app.andref.silverwood.session",
             "k",
             "v",

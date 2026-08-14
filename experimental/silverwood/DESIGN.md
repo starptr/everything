@@ -58,6 +58,7 @@ layer underneath them that lets you swap the frontend without migrating data.
 | **Code-change** | What a basic workstream is built around: a working copy provisioned by silverwood by cloning an HTTPS git endpoint in a specified **mode** (§3). |
 | **Session** | A **session kind** + a session id + a human-friendly name. The kind is an agent (today `claude-code`, carrying a best-effort resumption lock) or `plain-shell` (a recorded login shell — no lock, no conversation for `doctor` to check; a frontend reopens it as a fresh shell). Stored as a special case of namespaced KV under the core-reserved `app.andref.silverwood.session` namespace, so sessions are kind-agnostic (§5). |
 | **Forest id / peer id** | The forest's stable identity, used as the Loro peer/actor id so edits are attributable. Local, never synced. |
+| **Workstream id** | A workstream's stable identity and its document's on-disk name. Two-part: a UID **scheme** + that scheme's **value**, canonically `uuidv7_<uuid>` (UUIDv7 is the only scheme today). A bare, scheme-less value is a deprecated implicit uuidv7. |
 | **DocStore** | The trait abstracting where workstream documents are persisted (files by default). |
 | **CheckoutProvider** | The trait abstracting how a code-change is materialized on disk (jj-colocated clone today). |
 
@@ -146,7 +147,8 @@ Core is **mechanism, not policy**. It accepts fully-specified inputs and invents
 nothing user-facing.
 
 - Core **does** mint what a caller cannot meaningfully supply: the workstream
-  UUID, `created_at`, and the initial `active` status (a lifecycle invariant).
+  id (a scheme-explicit `uuidv7_<uuid>`), `created_at`, and the initial `active`
+  status (a lifecycle invariant).
 - Core **does not** invent policy: `name`, the checkout mode and its
   `initial_source`, and a session's **kind** are always caller-specified.
   There is no default
@@ -219,10 +221,16 @@ Default forest layout:
 
 ```
 ~/.silverwood/
-├─ config.toml                    # forest id (+ derived peer id), settings — NEVER synced
-├─ workstreams/<uuid>.loro        # ONE Loro document per workstream — the source of truth
-└─ working-copies/<uuid>/         # the provisioned checkout (jj-colocated clone)
+├─ config.toml                          # forest id (+ derived peer id), settings — NEVER synced
+├─ workstreams/uuidv7_<uuid>.loro       # ONE Loro document per workstream — the source of truth
+└─ working-copies/uuidv7_<uuid>/        # the provisioned checkout (jj-colocated clone)
 ```
+
+A workstream id is scheme-explicit (`<scheme>_<value>`, canonically
+`uuidv7_<uuid>`) so other UID schemes can coexist later; UUIDv7 is the only scheme
+today. A name **without** the `_` separator is a *deprecated implicit* uuidv7 —
+still read (pre-scheme forests are never renamed) but never freshly written, and
+rejected on user/API input.
 
 - **`DocStore` trait** abstracts persistence: load/save document bytes by
   workstream id, and enumerate ids. Default impl = one file per document (zero
@@ -450,3 +458,6 @@ catch, so it is tested hard (`src/tests/`):
 - **HTTPS-only vs SSH remotes** — start HTTPS-only (validated); reconsider later.
 - **Peer-id derivation** — hash the forest UUID to a stable u64, or store an
   independent u64 in `config.toml`.
+- **Non-uuidv7 workstream id schemes** — the id form is already scheme-explicit
+  (`uuidv7_<uuid>`); adding e.g. ULID/KSUID means a new `IdScheme` variant plus
+  generalizing the id's value carrier (a UUID today). Forest/peer ids stay UUIDv7.
