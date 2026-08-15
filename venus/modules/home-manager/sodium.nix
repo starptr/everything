@@ -140,35 +140,35 @@
         sopsFile = ./../../../secrets/personal/jupiter.env;
         path = "${config.magic.absolutePathStrings.sodium.secrets}/jupiter.env";
       };
+      # No per-secret `path` override: let sops-nix render each at its default
+      # <secrets>/<key-name>, i.e. ~/.config/sops-nix/secrets/k8s-config/<file>. milky-way's
+      # secrets.libsonnet imports them from exactly that k8s-config/ subdir, so DON'T re-add a
+      # `path = "${...}/<file>"` here to flatten them -- that would move the files out from under
+      # milky-way's imports and break `tk` eval on the next darwin-rebuild.
       secrets."k8s-config/k8s-secret-values.jsonnet" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/k8s-secret-values.jsonnet;
-        path = "${config.magic.absolutePathStrings.sodium.secrets}/k8s-secret-values.jsonnet";
       };
       secrets."k8s-config/qbt-gluetun.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/qbt-gluetun.conf;
-        path = "${config.magic.absolutePathStrings.sodium.secrets}/qbt-gluetun.conf";
       };
       secrets."k8s-config/gluetun-vpn-proxy.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/gluetun-vpn-proxy.conf;
-        path = "${config.magic.absolutePathStrings.sodium.secrets}/gluetun-vpn-proxy.conf";
       };
       secrets."k8s-config/thelounge-gluetun.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/thelounge-gluetun.conf;
-        path = "${config.magic.absolutePathStrings.sodium.secrets}/thelounge-gluetun.conf";
       };
       secrets."k8s-config/kubo-gluetun.conf" = {
         format = "binary";
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/kubo-gluetun.conf;
-        path = "${config.magic.absolutePathStrings.sodium.secrets}/kubo-gluetun.conf";
       };
       # Private key the grand-central reverse-tunnel LaunchAgent authenticates with (its public
       # half is grand-central's tunnelKeys in milky-way main.jsonnet). Binary so the PEM round-
