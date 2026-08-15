@@ -187,7 +187,10 @@ local pubkeys = import 'magic/common/public_keys.json';
     spec: {
       accessModes: ["ReadWriteMany"],
       storageClassName: "my-custom-zfs-generic-nfs-csi",
-      resources: { requests: { storage: "1Ti" } },
+      // Grown from 1Ti after the whole volume filled (ZFS refquota hit) and qbittorrent errored
+      // large SeaDexArr grabs with "Quota exceeded". The pool has tens of TB free, so the request
+      // is the only ceiling; expansion is online (allowVolumeExpansion + NFS refquota bump).
+      resources: { requests: { storage: "4Ti" } },
     },
   },
 
