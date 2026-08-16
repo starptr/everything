@@ -43,16 +43,19 @@ local images = import 'milky-way/lib/images.libsonnet';
     // A path scan parses each file instead, so it succeeds. See the hook script comment below.
     onTorrentFinished=null,
     // Optional "run on torrent finished" -> HARDLINK-into-a-directory hook. null disables it. When set,
-    // shape is { categories, destDir }: on each COMPLETED torrent whose category is in `categories`,
-    // qbittorrent hardlinks the content into `destDir` (a recursive same-fs `cp -al`, so no extra disk
-    // and the torrent keeps seeding). This exists for the Shoko workflow -- Shoko organizes anime but
-    // CANNOT hardlink itself, so qbittorrent drops a hardlink into Shoko's "drop source" folder and
-    // Shoko move-organizes it from there (a same-fs move preserves the inode). `destDir` must be on the
-    // SAME shared volume as the downloads (both under /data) for the links to work. See lib/shoko.libsonnet.
-    // The Shoko handler FALLS THROUGH (doesn't exit), so a category listed here that is ALSO
-    // onTorrentFinished's Sonarr-import category gets BOTH: hardlinked into Shoko AND imported by Sonarr.
-    // qbittorrent runs a single on-finished program, so this and onTorrentFinished share one dispatching
-    // script (below) that branches on the category; either or both may be set.
+    // shape is { tags?, categories?, destDir } (at least one selector): on each COMPLETED torrent whose
+    // category is in `categories` OR that carries any tag in `tags`, qbittorrent hardlinks the content
+    // into `destDir` (a recursive same-fs `cp -al`, so no extra disk and the torrent keeps seeding).
+    // This exists for the Shoko workflow -- Shoko organizes anime but CANNOT hardlink itself, so
+    // qbittorrent drops a hardlink into Shoko's "drop source" folder and Shoko move-organizes it from
+    // there (a same-fs move preserves the inode). `destDir` must be on the SAME shared volume as the
+    // downloads (both under /data) for the links to work. See lib/shoko.libsonnet. Prefer a TAG
+    // (`on-finish-hardlink-to-shoko-import`) so any producer can opt a torrent in per-item; a category
+    // is retained only where a producer can't set a tag -- e.g. sonarr-for-sdxarr, whose Sonarr download
+    // client sets no qBittorrent tags. The Shoko handler FALLS THROUGH (doesn't exit), so a torrent that
+    // is ALSO in onTorrentFinished's Sonarr-import category gets BOTH: hardlinked into Shoko AND imported
+    // by Sonarr. qbittorrent runs a single on-finished program, so this and onTorrentFinished share one
+    // dispatching script (below) that branches on category/tags; either or both may be set.
     hardlinkOnFinished=null,
     initImage=images.busybox.fullyQualifiedImageReferenceTaggedForQbittorrent,
   ):: {
@@ -143,45 +146,57 @@ local images = import 'milky-way/lib/images.libsonnet';
       else 'Copy',   // "Copy" = copy-or-HARDLINK (honors Sonarr's "use hardlinks"); never "Move" (breaks seeding)
 
     // The program qbittorrent runs on completion. It substitutes its own tokens into the argv:
-    // %F = content path, %L = category (quoted so paths with spaces survive). We keep the actual
-    // logic in a mounted script (below) rather than an inline command so quoting stays sane. The
-    // script dispatches on the category, so the two handlers (Sonarr import, Shoko hardlink) coexist.
-    local autorunProgram = '/bin/sh /scripts/on-complete.sh "%F" "%L"',
+    // %F = content path, %L = category, %G = tags (quoted so values with spaces survive). We keep the
+    // actual logic in a mounted script (below) rather than an inline command so quoting stays sane. The
+    // script dispatches on category and tags, so the two handlers (Sonarr import, Shoko hardlink) coexist.
+    local autorunProgram = '/bin/sh /scripts/on-complete.sh "%F" "%L" "%G"',
     // Common preamble: shebang + param parse. Each handler below is appended only when its feature is
     // configured, so a single-feature hook renders exactly that feature's logic (and nothing else).
     local autorunScriptPreamble = |||
       #!/bin/sh
       # qbittorrent "run on torrent finished" hook. qbittorrent substitutes its parameters into the
-      # argv: $1 = %F (content path), $2 = %L (category). It fires once per COMPLETED torrent, so $1
-      # is always fully-downloaded content -- no partial-file risk. The hook dispatches on the
-      # torrent's category ($2): each configured handler below owns one category, ignoring the rest.
+      # argv: $1 = %F (content path), $2 = %L (category), $3 = %G (comma-separated tags). It fires once
+      # per COMPLETED torrent, so $1 is always fully-downloaded content -- no partial-file risk. The
+      # handlers below dispatch on the torrent's category ($2) and/or its tags ($3), ignoring the rest.
       set -eu
       content_path=${1:-}
       category=${2:-}
+      tags=${3:-}
     |||,
     // Shoko hardlink handler (appended only when hardlinkOnFinished is set).
     local autorunScriptShoko = |||
-      # Shoko drop-source handler: for any category in $SHOKO_DROP_CATEGORIES, hardlink the finished
-      # content into Shoko's drop-source folder, then let Shoko rename-and-move-organize it into its
-      # library. The drop source and the library sit on one filesystem, so Shoko's move is an
-      # inode-preserving rename -- the torrent keeps seeding from downloads/qbittorrent/ while an
-      # organized hardlink lands in the library, one physical copy. (Shoko cannot create the link
-      # itself, so qbittorrent does it here.) cp -al = recursive same-fs hardlink. This branch FALLS
-      # THROUGH (no exit): a category that is ALSO the Sonarr-import category (sonarr-for-sdxarr) then
-      # reaches the Sonarr handler below and gets imported into the *arr library too. The `[ -e ]` guard
-      # keeps a re-fire idempotent while the link still sits in the drop source (a re-fire AFTER Shoko
-      # moves it out could re-introduce a copy, which Shoko's Release Management then flags -- acceptable
-      # here). The link is best-effort (`|| :`) so a hardlink failure can't abort before the Sonarr
-      # import under `set -e`.
-      case " $SHOKO_DROP_CATEGORIES " in
-        *" $category "*)
-          if [ -n "$content_path" ]; then
-            mkdir -p "$SHOKO_DROP_DIR"
-            dest="$SHOKO_DROP_DIR/$(basename "$content_path")"
-            [ -e "$dest" ] || cp -al "$content_path" "$SHOKO_DROP_DIR/" || :
-          fi
-          ;;
-      esac
+      # Shoko drop-source handler: hardlink the finished content into Shoko's drop-source folder when the
+      # torrent matches a configured drop selector -- its category is in $SHOKO_DROP_CATEGORIES OR one of
+      # its tags is in $SHOKO_DROP_TAGS -- then let Shoko rename-and-move-organize it into its library.
+      # The drop source and the library sit on one filesystem, so Shoko's move is an inode-preserving
+      # rename -- the torrent keeps seeding from downloads/qbittorrent/ while an organized hardlink lands
+      # in the library, one physical copy. (Shoko cannot create the link itself, so qbittorrent does it
+      # here.) cp -al = recursive same-fs hardlink. Prefer the TAG selector so any producer can opt a
+      # torrent in per-item; the category selector is retained only for producers that can't set a tag
+      # (sonarr-for-sdxarr's Sonarr download client). This branch FALLS THROUGH (no exit): a torrent that
+      # is ALSO in the Sonarr-import category (sonarr-for-sdxarr) then reaches the Sonarr handler below and
+      # gets imported into the *arr library too. The `[ -e ]` guard keeps a re-fire idempotent while the
+      # link still sits in the drop source (a re-fire AFTER Shoko moves it out could re-introduce a copy,
+      # which Shoko's Release Management then flags -- acceptable here). The link is best-effort (`|| :`)
+      # so a hardlink failure can't abort before the Sonarr import under `set -e`.
+      matched=0
+      if [ -n "${SHOKO_DROP_CATEGORIES:-}" ]; then
+        case " $SHOKO_DROP_CATEGORIES " in *" $category "*) matched=1 ;; esac
+      fi
+      if [ -n "${SHOKO_DROP_TAGS:-}" ]; then
+        # %G joins tags with "," or ", " depending on qbittorrent version; tag names contain no comma, so
+        # normalize ", "->"," and comma-wrap for an unambiguous membership test. $SHOKO_DROP_TAGS is
+        # space-split, so configured tag names must be space-free (on-finish-hardlink-to-shoko-import is).
+        tags_csv=$(printf '%s' "$tags" | sed 's/, /,/g')
+        for want in $SHOKO_DROP_TAGS; do
+          case ",$tags_csv," in *",$want,"*) matched=1 ;; esac
+        done
+      fi
+      if [ "$matched" = 1 ] && [ -n "$content_path" ]; then
+        mkdir -p "$SHOKO_DROP_DIR"
+        dest="$SHOKO_DROP_DIR/$(basename "$content_path")"
+        [ -e "$dest" ] || cp -al "$content_path" "$SHOKO_DROP_DIR/" || :
+      fi
     |||,
     // Sonarr import handler (appended only when onTorrentFinished is set). Guard-based: it exits 0
     // unless the torrent is in this Sonarr instance's category, so it is safe to run after the Shoko
@@ -264,10 +279,13 @@ local images = import 'milky-way/lib/images.libsonnet';
         // Keep the key out of the Deployment's plaintext env -- pull it from a Secret this lib renders.
         { name: 'SONARR_API_KEY', valueFrom: { secretKeyRef: { name: name + '-sonarr-import', key: 'sonarr-api-key' } } },
       ] else [])
-      + (if hardlinkOnFinished != null then [
-        { name: 'SHOKO_DROP_CATEGORIES', value: std.join(' ', hardlinkOnFinished.categories) },
-        { name: 'SHOKO_DROP_DIR', value: hardlinkOnFinished.destDir },
-      ] else []),
+      + (if hardlinkOnFinished != null then
+           (if std.objectHas(hardlinkOnFinished, 'categories')
+            then [{ name: 'SHOKO_DROP_CATEGORIES', value: std.join(' ', hardlinkOnFinished.categories) }] else [])
+           + (if std.objectHas(hardlinkOnFinished, 'tags')
+              then [{ name: 'SHOKO_DROP_TAGS', value: std.join(' ', hardlinkOnFinished.tags) }] else [])
+           + [{ name: 'SHOKO_DROP_DIR', value: hardlinkOnFinished.destDir }]
+         else []),
     local hookVolumeMounts = if hookEnabled then [{ name: 'autorun-scripts', mountPath: '/scripts', readOnly: true }] else [],
     local hookVolumes = if hookEnabled then [{ name: 'autorun-scripts', configMap: { name: name + '-autorun' } }] else [],
     local hookLifecycle = if hookEnabled then { lifecycle: { postStart: { exec: { command: ['/bin/sh', '-c', hookPostStartCommand] } } } } else {},
