@@ -90,6 +90,12 @@ local images = import 'milky-way/lib/images.libsonnet';
                 ports: [{ name: 'webui', containerPort: port }],
                 volumeMounts: [
                   { name: 'config', mountPath: '/config' },
+                  // Writable /tmp: for a direct-to-qBittorrent download action autobrr stages the
+                  // release's .torrent file in a temp dir (os.MkdirTemp -> /tmp) before pushing it to
+                  // qBittorrent. The scratch-based image ships no /tmp and we run as uid 1000 on a
+                  // root-owned /, so autobrr can't create it itself ("mkdir /tmp: permission denied").
+                  // The daily feed-cache-cleanup job needs it too. fsGroup 1000 makes this writable.
+                  { name: 'tmp', mountPath: '/tmp' },
                 ],
                 // autobrr's unauthenticated liveness endpoint (200 once the process is up) -- a safe
                 // readiness signal even before first-run account setup.
@@ -106,6 +112,9 @@ local images = import 'milky-way/lib/images.libsonnet';
             ],
             volumes: [
               { name: 'config', persistentVolumeClaim: { claimName: this.configPvc.metadata.name } },
+              // Ephemeral scratch for autobrr's torrent-file staging (see the /tmp mount above).
+              // .torrent files are a few KB, so node-disk-backed emptyDir is fine (no memory medium).
+              { name: 'tmp', emptyDir: {} },
             ],
           },
         },
