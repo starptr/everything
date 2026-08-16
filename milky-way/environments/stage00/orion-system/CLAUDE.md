@@ -197,9 +197,9 @@ show it read the config from the mounted path rather than erroring on parse/auth
 
 ## Runbook: back-fill already-downloaded SeaDexArr episodes into Shoko
 
-The qbittorrent on-complete hook hardlinks torrents in the `shoko-manual` **and**
-`sonarr-for-sdxarr` categories into Shoko's drop source (`hardlinkOnFinished` in `main.jsonnet`,
-handler in `lib/qbittorrent.libsonnet`). That only fires on *future* completions. To back-fill
+The qbittorrent on-complete hook hardlinks torrents carrying the `on-finish-hardlink-to-shoko-import`
+tag (or in the `sonarr-for-sdxarr` category) into Shoko's drop source (`hardlinkOnFinished` in
+`main.jsonnet`, handler in `lib/qbittorrent.libsonnet`). That only fires on *future* completions. To back-fill
 SeaDexArr episodes downloaded before the hook covered `sonarr-for-sdxarr`, run this one-shot — it
 enumerates completed torrents in that category via the local qBittorrent API (localhost needs no
 creds: `LocalHostAuth=false` + `127.0.0.0/8` in `AuthSubnetWhitelist`) and hardlinks each into the
@@ -233,4 +233,4 @@ mistaken root run leaves only the directory torrents broken; re-run as `abc` aft
 Shoko then drains the drop source into `/data/library/Anime (Shoko)` on its own schedule; a large
 batch is paced by AniDB UDP throttling, so let it run and watch Shoko's WebUI queue. (Precondition:
 Shoko must already have `/data/downloads/shoko-drop` set as a Drop Source import folder with a drop
-destination + renamer configured — the same setup the `shoko-manual` workflow needs.)
+destination + renamer configured — the same setup the tag-driven Shoko-import workflow needs.)

@@ -7,14 +7,15 @@ local images = import 'milky-way/lib/images.libsonnet';
 // shared `mdata` RWX-NFS PVC (the same PVC/`/data` mount qbittorrent/sonarr/jellyfin use, so it's
 // one filesystem). Shoko is NOT a grabber -- it complements, never replaces, the qbt/Sonarr layer.
 //
-// The manual workflow: add a torrent in qbittorrent under the `shoko-manual` category ->
-// qbittorrent's on-complete hook HARDLINKS the finished content into a Shoko "drop source" folder
-// (/data/downloads/shoko-drop) -> Shoko's rename-and-move organizes it into the drop DESTINATION
-// (`libraryDir` below). Shoko itself CANNOT hardlink (its docs say so); its move is an
-// inode-preserving rename *because* source + destination sit on one filesystem, so the torrent
-// keeps seeding from downloads/qbittorrent/ AND an organized hardlink lands in the library -- one
-// physical copy. The hardlink is made by qbittorrent (see qbittorrent.libsonnet `hardlinkOnFinished`);
-// Shoko only move-organizes. Drop folders + renamer (WebAOM) are set in the WebUI post-deploy.
+// The manual workflow: add a torrent in qbittorrent (typically under the `manual` category) and tag
+// it `on-finish-hardlink-to-shoko-import` -> qbittorrent's on-complete hook HARDLINKS the finished
+// content into a Shoko "drop source" folder (/data/downloads/shoko-drop) -> Shoko's rename-and-move
+// organizes it into the drop DESTINATION (`libraryDir` below). Shoko itself CANNOT hardlink (its docs
+// say so); its move is an inode-preserving rename *because* source + destination sit on one
+// filesystem, so the torrent keeps seeding from downloads/qbittorrent/ AND an organized hardlink lands
+// in the library -- one physical copy. The hardlink is made by qbittorrent (see qbittorrent.libsonnet
+// `hardlinkOnFinished`, which fires on that tag or the sonarr-for-sdxarr category); Shoko only
+// move-organizes. Drop folders + renamer (WebAOM) are set in the WebUI post-deploy.
 //
 // Like jellyfin, Shoko has no API-key-on-boot to pin -- its config (AniDB creds, import folders,
 // renamer, local users) is set during an interactive first-run wizard, so this lib carries NO

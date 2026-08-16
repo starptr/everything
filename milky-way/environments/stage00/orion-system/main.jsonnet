@@ -222,14 +222,22 @@ local pubkeys = import 'magic/common/public_keys.json';
       sonarrApiKey: secrets.sonarrForSdxarr.apiKey,
       category: 'sonarr-for-sdxarr',
     },
-    // On each COMPLETED torrent in these categories, hardlink the content into Shoko's drop-source
-    // folder (/data/downloads/shoko-drop, on the same mdata fs as the downloads, so the link costs no
-    // extra disk and the torrent keeps seeding). Shoko then rename-and-move-organizes it into its
-    // library -- see the `shoko` field + lib/shoko.libsonnet. `shoko-manual` is the manual-download
-    // path (Shoko can't hardlink itself, so qbittorrent does). `sonarr-for-sdxarr` is ALSO listed so
-    // SeaDexArr grabs land in Shoko too -- the handler falls through, so those torrents are hardlinked
-    // into Shoko AND still imported by Sonarr (onTorrentFinished above), appearing in both libraries.
-    hardlinkOnFinished = { categories: ['shoko-manual', 'sonarr-for-sdxarr'], destDir: '/data/downloads/shoko-drop' },
+    // On each COMPLETED torrent that carries the `on-finish-hardlink-to-shoko-import` TAG -- or is in
+    // the `sonarr-for-sdxarr` category -- hardlink the content into Shoko's drop-source folder
+    // (/data/downloads/shoko-drop, on the same mdata fs as the downloads, so the link costs no extra
+    // disk and the torrent keeps seeding). Shoko then rename-and-move-organizes it into its library --
+    // see the `shoko` field + lib/shoko.libsonnet. The TAG is the primary selector: any producer (a
+    // manual add under the `manual` category, an autobrr-direct grab, SeaDexArr) opts a torrent into
+    // Shoko by tagging it, so Shoko-import is decoupled from the download category. `sonarr-for-sdxarr`
+    // is ALSO kept as a category selector because one of its producers -- Sonarr's own qBittorrent
+    // download client, fed by autobrr->Sonarr push filters -- sets only the category and no qBittorrent
+    // tags, so a tag alone can't cover it. The handler falls through, so a sonarr-for-sdxarr torrent is
+    // hardlinked into Shoko AND still imported by Sonarr (onTorrentFinished above), in both libraries.
+    hardlinkOnFinished = {
+      tags: ['on-finish-hardlink-to-shoko-import'],
+      categories: ['sonarr-for-sdxarr'],
+      destDir: '/data/downloads/shoko-drop',
+    },
   ),
 
   // vpn-proxy: a VPN-egress HTTP forward proxy. gluetun's built-in HTTP proxy (:8888) forwards every
@@ -311,12 +319,14 @@ local pubkeys = import 'magic/common/public_keys.json';
   ),
 
   // Shoko: AniDB-hash-based anime organizer for anime downloaded MANUALLY (distinct from the
-  // automated SeaDex -> Sonarr path). Workflow: add a torrent in qbittorrent under the `shoko-manual`
-  // category -> qbittorrent's on-complete hook hardlinks it into /data/downloads/shoko-drop (Shoko's
-  // Drop Source) -> Shoko hashes/identifies it against AniDB and rename-and-move-organizes it into
-  // /data/library/Anime (Shoko) (its Drop Destination), all on the one shared mdata volume so the
-  // move preserves the inode (torrent keeps seeding, one physical copy). Shoko can't hardlink itself,
-  // so the hardlink is done by qbittorrent's `hardlinkOnFinished` hook above. Like jellyfin, its
+  // automated SeaDex -> Sonarr path). Workflow: add a torrent in qbittorrent (typically under the
+  // `manual` category) and give it the `on-finish-hardlink-to-shoko-import` tag -> qbittorrent's
+  // on-complete hook hardlinks it into /data/downloads/shoko-drop (Shoko's Drop Source) -> Shoko
+  // hashes/identifies it against AniDB and rename-and-move-organizes it into /data/library/Anime
+  // (Shoko) (its Drop Destination), all on the one shared mdata volume so the move preserves the inode
+  // (torrent keeps seeding, one physical copy). Shoko can't hardlink itself, so the hardlink is done by
+  // qbittorrent's `hardlinkOnFinished` hook above (tag-driven, plus the sonarr-for-sdxarr category).
+  // Like jellyfin, its
   // config (AniDB creds, import folders, WebAOM renamer, local users) is set in an interactive
   // first-run -- so no config-as-code / Secret / buildarr. WebUI via Tailscale L7 ingress; SQLite +
   // metadata cache on its own iSCSI RWO PVC. Jellyfin views this library via the Shokofin plugin
@@ -558,7 +568,9 @@ local pubkeys = import 'magic/common/public_keys.json';
         password: '',
       },
       sonarr_torrent_category: 'sonarr-for-sdxarr',   // matches Sonarr's qBittorrent download-client category (buildarr)
-      torrent_tags: 'from-seadexarr',         // qBittorrent tag on grabs, so SeaDexArr-added torrents are identifiable
+      // qBittorrent tags on grabs: `from-seadexarr` (provenance) + `on-finish-hardlink-to-shoko-import`
+      // (marks SeaDexArr grabs Shoko-bound). Comma-separated, no space -- qBittorrent splits on comma.
+      torrent_tags: 'from-seadexarr,on-finish-hardlink-to-shoko-import',
       discord_url: secrets.seadexarr.discordUrl,
     },
     // Poll every 10 minutes. SCHEDULE_TIME is float HOURS (app does time.sleep(SCHEDULE_TIME*3600)),
