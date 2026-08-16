@@ -209,8 +209,9 @@ async function recordFreshShell(wsId: string, sessionId: string): Promise<void> 
 // Create a node = register a silverwood workstream, then respond at the accept
 // boundary so the New Workstream modal closes immediately. The (possibly slow) checkout
 // is provisioned in the BACKGROUND; the node appears pending → ready/failed via the
-// reconcile loop, and the initial terminal spawns once the checkout is ready. Only a
-// synchronous validation error keeps the modal open (a 400 below).
+// reconcile loop. No agent session is attached — a fresh workstream starts bare; the
+// user adds one from the sidebar. Only a synchronous validation error keeps the modal
+// open (a 400 below).
 apiRoutes.post("/sessions", async (c) => {
   const body = await c.req.json();
   const { name, path, args, position, source } = body;
@@ -248,26 +249,14 @@ apiRoutes.post("/sessions", async (c) => {
   const cwd = sw.checkoutLocation(ws) || "";
 
   // Provision the checkout in the background — deliberately NOT awaited, so the response
-  // returns now (modal closes). On ready, spawn the workstream's initial terminal; a
-  // provisioning failure surfaces as `basic.failed` on the canvas via reconcile, not here.
+  // returns now (modal closes). The node appears pending → ready/failed on the canvas via
+  // reconcile. No session is attached on create: a fresh workstream starts with zero
+  // sessions; the user adds one from the sidebar ("+" / "Start a session"). A provisioning
+  // failure surfaces as `basic.failed` on the canvas via reconcile, not here.
   const wsId = ws.id;
-  sw.checkout(wsId)
-    .then(async (ready) => {
-      const readyCwd = sw.checkoutLocation(ready);
-      if (sw.checkoutState(ready) === "ready" && readyCwd) {
-        const initialSessionId = randomUUID();
-        const session = spawnTerminal({
-          sessionKey: initialSessionId,
-          workstreamId: wsId,
-          cwd: readyCwd,
-          resume: false,
-        });
-        await recordFreshSession(wsId, initialSessionId, session);
-      }
-    })
-    .catch((e: any) => {
-      logError(`\x1b[38;5;141m[checkout]\x1b[0m ${wsId}: ${e.message}`);
-    });
+  sw.checkout(wsId).catch((e: any) => {
+    logError(`\x1b[38;5;141m[checkout]\x1b[0m ${wsId}: ${e.message}`);
+  });
 
   return c.json({
     sessionId: ws.id,
