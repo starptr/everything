@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Agent, Session } from "../types";
+import type { Agent } from "../types";
 import { randomUUID } from "crypto";
 import { PORT } from "../config";
 import {
@@ -8,7 +8,6 @@ import {
   killTerminal,
   resolveRuntime,
   pruneWorkstreams,
-  disconnectInfo,
   HOLDER,
 } from "../services/sessionManager";
 import * as sw from "../services/silverwood";
@@ -85,14 +84,12 @@ async function buildNode(ws: sw.Workstream) {
   } catch (e: any) {
     logError(`\x1b[38;5;141m[sessions]\x1b[0m ${ws.id}: ${e.message}`);
   }
+  // papyrus records a session durably BEFORE spawning its PTY, so every live PTY has a
+  // durable record here — no transient-tab projection is needed.
   const tabs: any[] = [];
   for (const [sid, rec] of Object.entries(durable)) {
     // The registry key IS the session id, so a live PTY is a direct lookup.
     const live = runtimes.some(([k]) => k === sid);
-    // For a disconnected tab whose last resume failed with "no conversation found",
-    // surface the reason and the variant `session doctor` reported (the button gates
-    // on doctor's kind, not this projection's rec.kind).
-    const info = !live ? disconnectInfo.get(sid) : undefined;
     tabs.push({
       sessionId: sid,
       name: rec.name,
@@ -100,23 +97,6 @@ async function buildNode(ws: sw.Workstream) {
       kind: rec.kind,
       connected: live,
       lock: rec.lock ? { holder: rec.lock.holder, mine: rec.lock.holder === HOLDER } : null,
-      disconnectReason: info?.reason,
-      doctorKind: info?.doctorKind,
-    });
-  }
-  // A live PTY not yet in the durable list: an agent or shell session in the tiny
-  // window between spawn and its `session create` landing. Surface it as a transient
-  // tab (rendered from the registry entry's kind) until the record appears in loop 1.
-  for (const [key, s] of runtimes) {
-    if (durable[key]) continue;
-    const isShell = s.kind === "plain-shell";
-    tabs.push({
-      sessionId: key,
-      name: isShell ? "shell" : "claude",
-      createdAt: ws.created_at,
-      kind: s.kind ?? "claude-code",
-      connected: true,
-      lock: null,
     });
   }
 
@@ -174,35 +154,27 @@ apiRoutes.get("/sessions", async (c) => {
   }
 });
 
-// Record a freshly-spawned session durably in silverwood (name "claude") and
-// acquire its advisory lock for this instance. papyrus mints the id and passes it
-// to `claude --session-id`, so this replaces what the plugin hook used to do —
-// no runtime callback. Best-effort: a failure is logged, not fatal (the live PTY
-// still runs; buildNode surfaces it as a transient tab until the record lands).
+// Record a fresh durable session in silverwood BEFORE its PTY is spawned — `spawn from-id`
+// reads the record to know how to run it, so the create is mandatory: this THROWS on failure
+// and the caller must not spawn without a record. papyrus mints the id (for a claude session it
+// is also the `claude --session-id`). For a claude kind it additionally acquires the advisory
+// lock (best-effort — advisory, so it never blocks the spawn). Returns whether the lock is held.
 async function recordFreshSession(
+  variant: "claude-code" | "plain-shell",
   wsId: string,
   sessionId: string,
-  session: Session,
-): Promise<void> {
-  try {
-    await sw.sessionCreate("claude-code", wsId, sessionId, "claude");
-    await sw.sessionLock(wsId, sessionId, HOLDER);
-    session.holdsLock = true;
-  } catch (e: any) {
-    logError(`\x1b[38;5;141m[session-register]\x1b[0m ${sessionId}: ${e.message}`);
-  }
-}
-
-// Record a freshly-spawned plain shell durably (name "shell"), so its tab and any
-// rename persist in silverwood (workstream-scoped) like a claude session. A shell
-// carries no lock — every reopen is an independent fresh login shell. Best-effort:
-// a failure is logged, not fatal (buildNode surfaces the live PTY as a transient
-// tab until the record lands).
-async function recordFreshShell(wsId: string, sessionId: string): Promise<void> {
-  try {
+): Promise<boolean> {
+  if (variant === "plain-shell") {
     await sw.sessionCreate("plain-shell", wsId, sessionId, "shell");
+    return false;
+  }
+  await sw.sessionCreate("claude-code", wsId, sessionId, "claude");
+  try {
+    await sw.sessionLock(wsId, sessionId, HOLDER);
+    return true;
   } catch (e: any) {
-    logError(`\x1b[38;5;141m[session-register]\x1b[0m ${sessionId}: ${e.message}`);
+    logError(`\x1b[38;5;141m[session-register]\x1b[0m lock ${sessionId}: ${e.message}`);
+    return false;
   }
 }
 
@@ -266,10 +238,10 @@ apiRoutes.post("/sessions", async (c) => {
   });
 });
 
-// Connect an existing session. For a claude-code session this acquires its advisory
-// lock and spawns a `claude --resume <id>` PTY; for a plain shell (no lock, no
-// process to resume) it just spawns a fresh login shell keyed by the durable id.
-// `force` steals a claude lock held elsewhere.
+// Connect (reopen) an existing durable session: acquire its advisory lock (claude kinds
+// only), then spawn its PTY via `spawn from-id` — silverwood runs it the way it records
+// itself (a shell reopens fresh; a claude session resumes if a transcript exists, else
+// starts fresh). `force` steals a claude lock held elsewhere.
 apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
   const wsId = c.req.param("wsId");
   const { sessionId, force } = await c.req.json();
@@ -292,41 +264,35 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
     return c.json({ error: "checkout not ready" }, 400);
   }
 
-  // silverwood is authoritative for the session's kind (the tab may be stale). A
-  // plain shell reopens as a fresh login shell — no lock, no `--resume`.
+  // silverwood is authoritative for the session's kind (the tab may be stale). A shell
+  // kind carries no lock; a claude kind acquires the advisory lock. Either way the PTY is
+  // a uniform `spawn from-id`, and silverwood decides how to run it (a shell reopens fresh;
+  // a claude session resumes if a transcript exists, else starts fresh).
   const durable = await sw
     .sessionLs(wsId)
     .catch(() => ({}) as Record<string, sw.AgentSession>);
-  if (durable[sessionId]?.kind === "plain-shell") {
-    spawnTerminal({
-      sessionKey: sessionId,
-      workstreamId: wsId,
-      cwd,
-      resume: false,
-      kind: "plain-shell",
-    });
-    log(`\x1b[38;5;141m[session]\x1b[0m reopened shell ${sessionId}`);
-    return c.json({ sessionId, connected: true });
-  }
+  const isShell = durable[sessionId]?.kind === "plain-shell";
 
-  // Acquire the advisory lock. A contention failure → 409 so the UI can offer
-  // Force; any other silverwood error is logged and ignored (the lock is advisory,
-  // so it must never block a connect on its own).
+  // Acquire the advisory lock (claude kinds only). A contention failure → 409 so the UI
+  // can offer Force; any other silverwood error is logged and ignored (the lock is
+  // advisory, so it must never block a connect on its own).
   let holdsLock = false;
-  try {
-    await sw.sessionLock(wsId, sessionId, HOLDER, !!force);
-    holdsLock = true;
-  } catch (e: any) {
-    const m = /is locked by (.+)$/.exec((e.message || "").trim());
-    if (m) return c.json({ error: e.message, locked: true, holder: m[1] }, 409);
-    log(`\x1b[38;5;141m[lock]\x1b[0m acquire ${sessionId}: ${e.message}`);
+  if (!isShell) {
+    try {
+      await sw.sessionLock(wsId, sessionId, HOLDER, !!force);
+      holdsLock = true;
+    } catch (e: any) {
+      const m = /is locked by (.+)$/.exec((e.message || "").trim());
+      if (m) return c.json({ error: e.message, locked: true, holder: m[1] }, 409);
+      log(`\x1b[38;5;141m[lock]\x1b[0m acquire ${sessionId}: ${e.message}`);
+    }
   }
 
   const session = spawnTerminal({
     sessionKey: sessionId,
     workstreamId: wsId,
     cwd,
-    resume: true,
+    kind: isShell ? "plain-shell" : "claude-code",
   });
   session.holdsLock = holdsLock;
   log(`\x1b[38;5;141m[session]\x1b[0m connected ${sessionId}`);
@@ -334,13 +300,10 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
 });
 
 // Add a fresh session tab of the requested `variant` (body `{ variant }`, default
-// "claude-code" — an empty/absent body keeps the old behavior). papyrus mints the id.
-// Both variants get a durable silverwood record immediately, so the tab (and any
-// rename) persists workstream-scoped:
-//  - "claude-code": spawn `claude --session-id <id>`, record the session + acquire
-//    its advisory lock (no hook).
-//  - "plain-shell": spawn `silverwood spawn <ws>` (a login shell), record the
-//    session with no lock. Reopening later spawns a fresh login shell.
+// "claude-code"). papyrus mints the id and records the durable silverwood session FIRST
+// (so `spawn from-id` can read it), then spawns its PTY — so the tab (and any rename)
+// persists workstream-scoped. A claude kind also acquires its advisory lock; a plain shell
+// carries none and reopens fresh. A record failure fails the request (nothing is spawned).
 apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
   const wsId = c.req.param("wsId");
   const body = await c.req.json().catch(() => ({}));
@@ -356,15 +319,15 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
     return c.json({ error: "checkout not ready" }, 400);
   }
   const sessionId = randomUUID();
-  const session = spawnTerminal({
-    sessionKey: sessionId,
-    workstreamId: wsId,
-    cwd,
-    resume: false,
-    kind: variant,
-  });
-  if (variant === "claude-code") await recordFreshSession(wsId, sessionId, session);
-  else await recordFreshShell(wsId, sessionId);
+  let holdsLock: boolean;
+  try {
+    holdsLock = await recordFreshSession(variant, wsId, sessionId);
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[session]\x1b[0m record ${variant} ${sessionId}: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+  const session = spawnTerminal({ sessionKey: sessionId, workstreamId: wsId, cwd, kind: variant });
+  session.holdsLock = holdsLock;
   log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${variant} ${sessionId}`);
   return c.json({ sessionId, connected: true, variant });
 });
@@ -378,8 +341,8 @@ apiRoutes.post("/sessions/:wsId/sessions/:sessionId/disconnect", (c) => {
 });
 
 // Remove a session entirely: kill its live PTY (if any) and delete the durable
-// silverwood record, so the tab is gone for good. This is how a plain shell is
-// closed — `doctor` can't retire a conversation-less shell, so removal is explicit.
+// silverwood record, so the tab is gone for good. This is how any tab is closed for
+// good — a plain shell, or a claude session you no longer want.
 apiRoutes.delete("/sessions/:wsId/sessions/:sessionId", async (c) => {
   const wsId = c.req.param("wsId");
   const sessionId = c.req.param("sessionId");
@@ -390,36 +353,7 @@ apiRoutes.delete("/sessions/:wsId/sessions/:sessionId", async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 400);
   }
-  disconnectInfo.delete(sessionId);
   return c.json({ success: true });
-});
-
-// Doctor a session, then delete it if it's an orphan. This backs the disconnected
-// screen's "Delete this claude session if it doesn't exist" button: it runs the
-// read-only `silverwood session doctor` and, only when a checked variant reports no
-// conversation on disk (`conversation_exists === false`), removes the durable session
-// via `session rm`. A `true` (real history) or `null` (unknown variant) is left alone.
-apiRoutes.post("/sessions/:wsId/sessions/:sessionId/doctor", async (c) => {
-  const wsId = c.req.param("wsId");
-  const sessionId = c.req.param("sessionId");
-  try {
-    const report = await sw.sessionDoctor(wsId, sessionId);
-    let removed = false;
-    if (report.conversation_exists === false) {
-      await sw.sessionRemove(wsId, sessionId);
-      removed = true;
-      log(`\x1b[38;5;141m[doctor]\x1b[0m removed orphaned ${sessionId}`);
-    }
-    disconnectInfo.delete(sessionId);
-    return c.json({
-      kind: report.kind,
-      conversationExists: report.conversation_exists,
-      removed,
-    });
-  } catch (e: any) {
-    logError(`\x1b[38;5;141m[doctor]\x1b[0m ${sessionId}: ${e.message}`);
-    return c.json({ error: e.message }, 500);
-  }
 });
 
 // Rename a session (its silverwood `name`, shown as the tab title). Name required
