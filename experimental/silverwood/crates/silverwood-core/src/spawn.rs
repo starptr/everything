@@ -1,30 +1,31 @@
-//! Interactive-shell spawning — the hard-coded variants for creating an agent
-//! shell in a checkout. silverwood owns *how* an interactive shell is created
-//! (both the environment scrub and the per-checkout-mode command), so a frontend
-//! (papyrus) just runs `silverwood spawn` instead of reconstructing any of it.
+//! Session spawning — how silverwood runs a session's shell in a checkout. silverwood
+//! owns *how* a shell is created (the environment scrub and the per-kind command), so a
+//! frontend (papyrus) just runs `silverwood spawn` instead of reconstructing any of it.
 //!
-//! Two variants, both fixed in code (never data — a data-driven command would be
-//! an arbitrary-code-execution surface):
-//!   1. a **base shell** — a clean login shell that does NOT inherit the parent
-//!      process's environment, and
-//!   2. an **agent** — `claude` run inside that clean env, wrapped in
-//!      `direnv exec <cwd>` for a direnv-unsafe checkout mode so it loads the
-//!      checkout's pre-approved `.envrc`.
+//! Every kind runs in a clean, non-inherited login environment (see `clean_env`): a
+//! frontend launched from a nix devshell has a polluted `process.env` (`IN_NIX_SHELL`,
+//! `DEVENV_*`, an augmented `PATH`, an overwritten `$SHELL`), so a spawned shell must not
+//! inherit it. The user's real login environment is reconstructed by running the login
+//! shell from an empty base in a dir with no `.envrc`, and the vars a login capture can't
+//! produce are overlaid on top (`TERM`, the ssh-agent socket, `SHELL`, a default `LANG`) —
+//! see `overlay_session_env`. The login shell comes from the passwd database (via the
+//! frontend's [`SpawnSeed`]), not the polluted `$SHELL`.
 //!
-//! The env scrub mirrors what papyrus used to do inline: `process.env` in a
-//! frontend launched from a nix devshell is polluted (`IN_NIX_SHELL`, `DEVENV_*`,
-//! an augmented `PATH`, an overwritten `$SHELL`), so a spawned agent must not inherit
-//! it. Instead the user's real login environment is reconstructed by running the login
-//! shell from an empty base in a dir with no `.envrc`, and the vars a login capture
-//! can't produce are overlaid on top (`TERM`, the ssh-agent socket, `SHELL`, a default
-//! `LANG`) — see `overlay_session_env`. The login shell itself comes from the passwd
-//! database (via the frontend's `SpawnSeed`), not the polluted `$SHELL`.
+//! silverwood is deliberately **direnv-blind** for the interactive kinds. Rather than
+//! wrapping `claude` in `direnv exec`, the interactive kinds (`claude-code`, `disk-space`)
+//! run the user's real login-interactive shell and *synchronously invoke its own prompt
+//! hooks* — whatever the user installed (direnv, git-prompt, …) — before chaining the
+//! command with `exec`. So a checkout's `.envrc` loads (or is ignored) exactly as it would
+//! when the user types the command at their own prompt, and a user with no direnv hook
+//! gets none. A non-interactive `<shell> -c 'cmd'` cannot do this (its interactive rc is
+//! not sourced and no prompt is drawn), which is why these kinds use `<shell> -l -i -c` and
+//! run the hooks by hand — see `interactive_shell_plan`/`prompt_hook_snippet`. The one
+//! kind that still wraps `direnv exec` explicitly is `claude-code-noninteractive`, gated on
+//! its own `run_direnv_exec` flag (the deterministic, rc-free counterpart).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-use crate::workstream::CheckoutMode;
 
 /// The dynamic, machine/session inputs a spawn needs, gathered by the frontend.
 /// Resolving these (identity from the passwd database, session context from the
@@ -79,9 +80,30 @@ impl ShellPlan {
     }
 }
 
-/// The **base shell** variant: an interactive login shell (`<shell> -l`) in `cwd`
-/// with a clean, non-inherited environment.
-pub fn base_shell_plan(cwd: &str, seed: &SpawnSeed) -> ShellPlan {
+/// Whether a claude-code session is starting for the first time (`--session-id`, which
+/// creates the conversation) or resuming an existing one (`--resume`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaudeRun {
+    /// First launch of this session id — `claude --session-id <id>`.
+    FirstRun,
+    /// Reconnect to an existing conversation — `claude --resume <id>`.
+    Resume,
+}
+
+impl ClaudeRun {
+    /// The `claude` flag that selects this run mode.
+    fn flag(self) -> &'static str {
+        match self {
+            ClaudeRun::FirstRun => "--session-id",
+            ClaudeRun::Resume => "--resume",
+        }
+    }
+}
+
+/// The **plain-shell** kind: an interactive login shell (`<shell> -l`) in `cwd` with a
+/// clean, non-inherited environment. Attached to a tty it reaches a real prompt, so the
+/// user's own prompt hooks (direnv, …) fire naturally — no synchronous hook run needed.
+pub fn plain_shell_plan(cwd: &str, seed: &SpawnSeed) -> ShellPlan {
     ShellPlan {
         program: seed.shell.clone(),
         args: vec!["-l".to_string()],
@@ -90,17 +112,55 @@ pub fn base_shell_plan(cwd: &str, seed: &SpawnSeed) -> ShellPlan {
     }
 }
 
-/// The **agent** variant: `claude` (fresh `--session-id`, or `--resume` to
-/// reconnect), wrapped in `direnv exec <cwd>` for a direnv-unsafe checkout mode,
-/// in a clean, non-inherited environment.
-pub fn agent_shell_plan(
-    mode: &CheckoutMode,
+/// The **claude-code** kind: `claude` run as a thin wrapper over the user's
+/// login-interactive shell (so their own direnv/rc setup applies), started fresh
+/// (`FirstRun`) or resumed (`Resume`). See `interactive_shell_plan`.
+pub fn claude_code_plan(
     cwd: &str,
     session_id: &str,
-    resume: bool,
+    run: ClaudeRun,
     seed: &SpawnSeed,
 ) -> ShellPlan {
-    let mut argv = agent_argv(mode, cwd, session_id, resume);
+    // `session_id` is single-quoted: it is interpolated into the shell `-c` script (a
+    // UUID in practice, but quote defensively). The flag is a fixed literal.
+    interactive_shell_plan(
+        cwd,
+        &format!("exec claude {} '{session_id}'", run.flag()),
+        seed,
+    )
+}
+
+/// The **disk-space** kind: a `df` refresh loop, run through the same interactive-shell
+/// mechanism as [`plain_shell_plan`] (so it is not special-cased). The loop is POSIX `sh`,
+/// not the login shell — the login shell's syntax may differ (e.g. fish).
+pub fn disk_space_plan(cwd: &str, seed: &SpawnSeed) -> ShellPlan {
+    interactive_shell_plan(
+        cwd,
+        "exec sh -c 'while true; do clear; df -h; sleep 1; done'",
+        seed,
+    )
+}
+
+/// The **claude-code-noninteractive** kind: `claude` run directly in the clean login env
+/// (no interactive shell), optionally wrapped in `direnv exec <cwd>` to load the checkout's
+/// pre-approved `.envrc`. The explicit, deterministic counterpart to [`claude_code_plan`] —
+/// `run_direnv_exec` selects the wrapping, not the checkout mode. `cwd` is a distinct argv
+/// element, so no shell quoting is needed (the plan is exec'd directly, never via a shell).
+pub fn claude_code_noninteractive_plan(
+    cwd: &str,
+    session_id: &str,
+    run: ClaudeRun,
+    run_direnv_exec: bool,
+    seed: &SpawnSeed,
+) -> ShellPlan {
+    let claude = ["claude", run.flag(), session_id].map(String::from);
+    let mut argv: Vec<String> = if run_direnv_exec {
+        let mut v = vec!["direnv".to_string(), "exec".to_string(), cwd.to_string()];
+        v.extend(claude);
+        v
+    } else {
+        claude.to_vec()
+    };
     let program = argv.remove(0);
     ShellPlan {
         program,
@@ -110,27 +170,63 @@ pub fn agent_shell_plan(
     }
 }
 
-/// The agent command argv, selected from the checkout mode. Hard-coded per mode
-/// (no data-driven templates): the direnv-unsafe modes run claude under
-/// `direnv exec <cwd>` (their `.envrc` was pre-approved at clone time); every other
-/// mode runs claude directly. `cwd` is passed as its own argv element, so no shell
-/// quoting is needed (the plan is exec'd directly, never through a shell).
-fn agent_argv(mode: &CheckoutMode, cwd: &str, session_id: &str, resume: bool) -> Vec<String> {
-    let flag = if resume { "--resume" } else { "--session-id" };
-    let claude = ["claude", flag, session_id].map(String::from);
-    match mode {
-        CheckoutMode::JjColocatedDirenvUnsafe { .. } | CheckoutMode::ApfsCowDirenvUnsafe { .. } => {
-            let mut argv = vec!["direnv".to_string(), "exec".to_string(), cwd.to_string()];
-            argv.extend(claude);
-            argv
-        }
-        _ => claude.to_vec(),
+/// Run `chained` inside the user's login-interactive shell (`<shell> -l -i -c`), after
+/// synchronously invoking the shell's own prompt hooks so `chained` inherits their
+/// environment (direnv, etc.). `chained` should `exec` its target so the shell is replaced
+/// (the PTY then tracks the target directly). The hook-running snippet is chosen from the
+/// login shell's basename; an unknown shell runs no hooks — the same environment a user
+/// with none installed would get.
+fn interactive_shell_plan(cwd: &str, chained: &str, seed: &SpawnSeed) -> ShellPlan {
+    let prefix = prompt_hook_snippet(&seed.shell)
+        .map(|s| format!("{s}\n"))
+        .unwrap_or_default();
+    ShellPlan {
+        program: seed.shell.clone(),
+        args: vec![
+            "-l".to_string(),
+            "-i".to_string(),
+            "-c".to_string(),
+            format!("{prefix}{chained}"),
+        ],
+        cwd: cwd.to_string(),
+        env: clean_env(seed),
     }
 }
 
+/// The inline command that runs the login shell's own prompt hooks once — whatever the
+/// user installed (direnv, git-prompt, …) — so a command chained after it inherits their
+/// environment. Keyed on the login shell's basename, because the shells' syntaxes are
+/// mutually unparseable (fish especially), so the branch is chosen before launch. `None`
+/// for a shell we do not know how to drive: it degrades to running no hooks (the same
+/// environment a user with none installed gets). silverwood names no specific hook (e.g.
+/// direnv) here — it just runs whatever the shell registered.
+fn prompt_hook_snippet(shell: &str) -> Option<String> {
+    let name = Path::new(shell).file_name()?.to_str()?;
+    let snippet = match name {
+        // zsh keeps prompt hooks in the `precmd_functions` array (+ an optional `precmd`).
+        "zsh" => "for f in $precmd_functions; do $f; done; (( $+functions[precmd] )) && precmd",
+        // fish exposes a first-class \"run the prompt hooks\": emit the event.
+        "fish" => "emit fish_prompt",
+        // bash: a login shell reads ~/.bash_profile, never ~/.bashrc — see BASH_PROMPT_HOOK.
+        "bash" => BASH_PROMPT_HOOK,
+        _ => return None,
+    };
+    Some(snippet.to_string())
+}
+
+/// bash prompt-hook runner (see `prompt_hook_snippet`). A bash login shell sources
+/// `~/.bash_profile`, never `~/.bashrc`, so if the profile did not source it the direnv
+/// hook was never installed — the guard pulls `~/.bashrc` in *only* when no prompt hook is
+/// registered (a no-op in the normal case, so no double-source). It then runs
+/// `PROMPT_COMMAND` (a string pre-5.1, an array in 5.1+) and any `precmd_functions`
+/// (bash-preexec). Works back to bash 3.2 (the array branch simply never matches there).
+const BASH_PROMPT_HOOK: &str = r#"if [[ -z "$(declare -p PROMPT_COMMAND 2>/dev/null)" && ${#precmd_functions[@]} -eq 0 ]]; then [[ -r ~/.bashrc ]] && . ~/.bashrc; fi
+if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then for c in "${PROMPT_COMMAND[@]}"; do eval "$c"; done; else [[ -n "${PROMPT_COMMAND:-}" ]] && eval "${PROMPT_COMMAND}"; fi
+for f in "${precmd_functions[@]}"; do "$f"; done"#;
+
 /// The scrubbed environment for a spawned shell: the captured login env (or a
 /// reconstructed fallback), with the session/identity vars a login capture can't
-/// produce overlaid on top (see [`overlay_session_env`]).
+/// produce overlaid on top (see `overlay_session_env`).
 fn clean_env(seed: &SpawnSeed) -> BTreeMap<String, String> {
     let mut env = capture_login_env(seed).unwrap_or_else(|| fallback_env(seed));
     overlay_session_env(&mut env, seed);
@@ -237,80 +333,115 @@ fn is_executable(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workstream::CheckoutState;
 
-    fn jj_colocated() -> CheckoutMode {
-        CheckoutMode::JjColocated {
-            initial_source: "https://example.com/x.git".into(),
-            state: CheckoutState::Ready,
-        }
-    }
-
-    fn direnv_unsafe() -> CheckoutMode {
-        CheckoutMode::JjColocatedDirenvUnsafe {
-            initial_source: "https://example.com/x.git".into(),
-            state: CheckoutState::Ready,
-        }
-    }
-
-    fn apfs_cow_direnv_unsafe() -> CheckoutMode {
-        CheckoutMode::ApfsCowDirenvUnsafe {
-            initial_source: "/Users/x/repo".into(),
-            state: CheckoutState::Ready,
+    fn seed_with_shell(shell: &str) -> SpawnSeed {
+        SpawnSeed {
+            home: "/home/x".to_string(),
+            user: Some("x".to_string()),
+            shell: shell.to_string(),
+            term: Some("xterm-256color".to_string()),
+            ssh_auth_sock: Some("/tmp/agent.sock".to_string()),
         }
     }
 
     #[test]
-    fn plain_mode_runs_claude_directly() {
-        assert_eq!(
-            agent_argv(&jj_colocated(), "/w/abc", "sess-1", false),
-            vec!["claude", "--session-id", "sess-1"]
+    fn plain_shell_is_a_login_shell() {
+        let plan = plain_shell_plan("/w/abc", &seed_with_shell("/bin/zsh"));
+        assert_eq!(plan.program, "/bin/zsh");
+        assert_eq!(plan.args, vec!["-l"]);
+        assert_eq!(plan.cwd, "/w/abc");
+    }
+
+    #[test]
+    fn claude_code_runs_inside_the_login_interactive_shell() {
+        let plan = claude_code_plan(
+            "/w/abc",
+            "sess-1",
+            ClaudeRun::FirstRun,
+            &seed_with_shell("/bin/zsh"),
+        );
+        assert_eq!(plan.program, "/bin/zsh");
+        assert_eq!(plan.args[0..3], ["-l", "-i", "-c"]);
+        let script = &plan.args[3];
+        assert!(
+            script.contains("exec claude --session-id 'sess-1'"),
+            "script: {script}"
+        );
+        // Runs the shell's own prompt hooks (zsh: precmd_functions) — never `direnv exec`.
+        assert!(script.contains("precmd_functions"), "script: {script}");
+        assert!(!script.contains("direnv exec"), "script: {script}");
+    }
+
+    #[test]
+    fn claude_code_resume_uses_the_resume_flag() {
+        let plan = claude_code_plan(
+            "/w/abc",
+            "sess-1",
+            ClaudeRun::Resume,
+            &seed_with_shell("/bin/bash"),
+        );
+        assert!(
+            plan.args[3].contains("exec claude --resume 'sess-1'"),
+            "script: {}",
+            plan.args[3]
         );
     }
 
     #[test]
-    fn resume_flips_the_claude_flag() {
-        assert_eq!(
-            agent_argv(&jj_colocated(), "/w/abc", "sess-1", true),
-            vec!["claude", "--resume", "sess-1"]
-        );
+    fn disk_space_runs_a_df_loop_via_the_interactive_shell() {
+        let plan = disk_space_plan("/w/abc", &seed_with_shell("/usr/bin/fish"));
+        assert_eq!(plan.program, "/usr/bin/fish");
+        assert_eq!(plan.args[0..3], ["-l", "-i", "-c"]);
+        let script = &plan.args[3];
+        assert!(script.contains("emit fish_prompt"), "script: {script}"); // fish's hook runner
+        assert!(script.contains("df -h"), "script: {script}");
     }
 
     #[test]
-    fn direnv_unsafe_mode_wraps_claude_in_direnv_exec() {
+    fn noninteractive_runs_claude_directly_when_direnv_off() {
+        let plan = claude_code_noninteractive_plan(
+            "/w/abc",
+            "sess-1",
+            ClaudeRun::FirstRun,
+            false,
+            &seed_with_shell("/bin/zsh"),
+        );
+        assert_eq!(plan.program, "claude");
+        assert_eq!(plan.args, vec!["--session-id", "sess-1"]);
+    }
+
+    #[test]
+    fn noninteractive_wraps_claude_in_direnv_exec_when_on() {
         // The checkout path is a distinct argv element (no shell quoting needed).
-        assert_eq!(
-            agent_argv(&direnv_unsafe(), "/w/a b/c", "sess-1", false),
-            vec![
-                "direnv",
-                "exec",
-                "/w/a b/c",
-                "claude",
-                "--session-id",
-                "sess-1"
-            ]
+        let plan = claude_code_noninteractive_plan(
+            "/w/a b/c",
+            "sess-1",
+            ClaudeRun::Resume,
+            true,
+            &seed_with_shell("/bin/zsh"),
         );
+        assert_eq!(plan.program, "direnv");
         assert_eq!(
-            agent_argv(&direnv_unsafe(), "/w/abc", "sess-1", true),
-            vec!["direnv", "exec", "/w/abc", "claude", "--resume", "sess-1"]
+            plan.args,
+            vec!["exec", "/w/a b/c", "claude", "--resume", "sess-1"]
         );
     }
 
     #[test]
-    fn apfs_cow_direnv_unsafe_mode_wraps_claude_in_direnv_exec() {
-        // The apfs-cow direnv-unsafe mode also pre-approves its `.envrc`, so it runs
-        // claude under `direnv exec` just like the jj direnv-unsafe mode.
+    fn prompt_hook_snippet_is_chosen_by_shell_basename() {
+        assert!(prompt_hook_snippet("/bin/zsh")
+            .unwrap()
+            .contains("precmd_functions"));
         assert_eq!(
-            agent_argv(&apfs_cow_direnv_unsafe(), "/w/abc", "sess-1", false),
-            vec![
-                "direnv",
-                "exec",
-                "/w/abc",
-                "claude",
-                "--session-id",
-                "sess-1"
-            ]
+            prompt_hook_snippet("/opt/homebrew/bin/fish").unwrap(),
+            "emit fish_prompt"
         );
+        // bash guards that ~/.bashrc loads even if the login profile didn't source it.
+        let bash = prompt_hook_snippet("/bin/bash").unwrap();
+        assert!(bash.contains(".bashrc"), "bash: {bash}");
+        assert!(bash.contains("PROMPT_COMMAND"), "bash: {bash}");
+        // An unknown shell degrades to no hooks.
+        assert!(prompt_hook_snippet("/usr/bin/nu").is_none());
     }
 
     #[test]
@@ -344,16 +475,6 @@ mod tests {
             env: BTreeMap::new(),
         };
         assert_eq!(plan.resolve_program(), Some(PathBuf::from("/bin/zsh")));
-    }
-
-    fn seed_with_shell(shell: &str) -> SpawnSeed {
-        SpawnSeed {
-            home: "/home/x".to_string(),
-            user: Some("x".to_string()),
-            shell: shell.to_string(),
-            term: Some("xterm-256color".to_string()),
-            ssh_auth_sock: Some("/tmp/agent.sock".to_string()),
-        }
     }
 
     #[test]

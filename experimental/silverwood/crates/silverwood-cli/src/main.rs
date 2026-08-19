@@ -13,9 +13,10 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    agent_shell_plan, base_shell_plan, AbsolutePath, AgentKind, AgentSession, CheckoutExtent,
-    CheckoutState, DoctorReport, Forest, HttpsGitUrl, LocationWithinForest, NewCheckoutMode,
-    NewKind, NewWorkstream, SpawnSeed, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
+    claude_code_noninteractive_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
+    AbsolutePath, AgentSession, CheckoutExtent, ClaudeRun, DoctorReport, Forest, HttpsGitUrl,
+    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionKind, ShellPlan,
+    SpawnSeed, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
 };
 
 /// Frontend-agnostic backend for the code you work on and the agent sessions
@@ -87,20 +88,106 @@ enum Command {
     /// fixed shape. Human output enumerates each leaf invocation.
     NewSchema,
 
-    /// Exec the interactive agent shell for a session in its checkout. The command
-    /// is chosen from the checkout mode (env-scrubbed; `direnv exec` for the
-    /// direnv-unsafe mode) — this replaces the process with the agent, so on
-    /// success it never returns. Omit `session_id` for a bare login shell.
+    /// Run a session: exec its shell in a checkout, replacing this process (so on success
+    /// it never returns; the caller's PTY then tracks the session directly). `from-id`
+    /// looks up a durable session and runs it the way it records itself; the per-kind
+    /// subcommands run a kind directly in the current directory (or
+    /// `--override-working-directory`). The environment is a scrubbed login env either way.
     Spawn {
-        /// The workstream id whose checkout to spawn in (from `silverwood ls`).
-        workstream_id: String,
-        /// The Claude session id to run (`claude --session-id`/`--resume`); omit
-        /// for a plain login shell in the checkout.
-        session_id: Option<String>,
-        /// Resume the session (`claude --resume`) instead of starting it fresh.
-        #[arg(long)]
-        resume: bool,
+        #[command(subcommand)]
+        what: SpawnCommand,
     },
+}
+
+/// `silverwood spawn <SUBCOMMAND>` — how to run a session. `from-id` resolves a durable
+/// session object; the per-kind leaves run a kind directly and take
+/// `--override-working-directory`. The kind-selecting shape mirrors the `SessionKind`s.
+#[derive(Subcommand)]
+enum SpawnCommand {
+    /// Run the durable session `<SESSION_ID>` on `--workstream <WS>` the way it records
+    /// itself (its kind, and first-run vs resume, are decided by silverwood). Runs in the
+    /// workstream's checkout, so it takes no `--override-working-directory`.
+    FromId {
+        /// The session id to run (from `silverwood session ls`).
+        session_id: String,
+        /// The workstream the session is attached to (from `silverwood ls`).
+        #[arg(long)]
+        workstream: String,
+    },
+    /// A plain interactive login shell.
+    PlainShell {
+        #[command(flatten)]
+        wd: WorkingDir,
+    },
+    /// A disk-space monitor (a `df` refresh loop), run via the same interactive-shell
+    /// mechanism as `plain-shell`.
+    DiskSpace {
+        #[command(flatten)]
+        wd: WorkingDir,
+    },
+    /// A Claude Code session, run as a thin wrapper over your login-interactive shell.
+    ClaudeCode {
+        #[command(subcommand)]
+        run: ClaudeRunArg,
+    },
+    /// A Claude Code session, run non-interactively (claude directly), with explicit
+    /// control over loading the checkout's `.envrc`.
+    ClaudeCodeNoninteractive {
+        /// Whether to wrap claude in `direnv exec <cwd>` — required, `true` or `false`.
+        #[arg(long, action = clap::ArgAction::Set, required = true)]
+        run_direnv_exec: bool,
+        #[command(subcommand)]
+        run: ClaudeRunArg,
+    },
+}
+
+/// First-run vs resume for a claude-code spawn — carries the claude session id and the
+/// per-leaf working directory.
+#[derive(Subcommand)]
+enum ClaudeRunArg {
+    /// First launch of this session id (`claude --session-id`, which creates the conversation).
+    FirstRun {
+        /// The Claude session id to run.
+        session_id: String,
+        #[command(flatten)]
+        wd: WorkingDir,
+    },
+    /// Resume an existing conversation (`claude --resume`).
+    Resume {
+        /// The Claude session id to run.
+        session_id: String,
+        #[command(flatten)]
+        wd: WorkingDir,
+    },
+}
+
+impl ClaudeRunArg {
+    /// Decompose into (session id, run mode, working dir).
+    fn parts(self) -> (String, ClaudeRun, WorkingDir) {
+        match self {
+            ClaudeRunArg::FirstRun { session_id, wd } => (session_id, ClaudeRun::FirstRun, wd),
+            ClaudeRunArg::Resume { session_id, wd } => (session_id, ClaudeRun::Resume, wd),
+        }
+    }
+}
+
+/// The working directory for a cwd-derived spawn kind: `--override-working-directory` if
+/// given, else this process's own cwd. (Not accepted by `from-id`, which uses the checkout.)
+#[derive(clap::Args)]
+struct WorkingDir {
+    /// Working directory to run in (default: this process's own cwd).
+    #[arg(long, value_name = "PATH")]
+    override_working_directory: Option<String>,
+}
+
+impl WorkingDir {
+    /// Resolve to a concrete path: the override, else the process's current directory.
+    fn resolve(self) -> Result<String, Box<dyn std::error::Error>> {
+        match self.override_working_directory {
+            Some(path) => Ok(path),
+            None => Ok(std::env::current_dir()?.to_string_lossy().into_owned()),
+        }
+    }
 }
 
 /// Positional args are shared across kv subcommands: `<ID> <NAMESPACE> [KEY] [VALUE]`.
@@ -232,6 +319,30 @@ enum SessionCreate {
         /// The workstream id to attach the session to (from `silverwood ls`).
         id: String,
         /// The caller-minted session id to record the shell under.
+        session_id: String,
+        /// Display name for the session (defaults to the session id).
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// A Claude Code session run non-interactively (claude directly, not inside the user's
+    /// interactive shell), with explicit `--run-direnv-exec` control over loading `.envrc`.
+    ClaudeCodeNoninteractive {
+        /// The workstream id to attach the session to (from `silverwood ls`).
+        id: String,
+        /// The Claude Code session id to record.
+        session_id: String,
+        /// Display name for the session (defaults to the session id).
+        #[arg(long)]
+        name: Option<String>,
+        /// Whether spawning runs claude under `direnv exec <cwd>` — required, `true`/`false`.
+        #[arg(long, action = clap::ArgAction::Set, required = true)]
+        run_direnv_exec: bool,
+    },
+    /// A disk-space monitor session (a `df` refresh loop). `session_id` is a caller-minted id.
+    DiskSpace {
+        /// The workstream id to attach the session to (from `silverwood ls`).
+        id: String,
+        /// The caller-minted session id to record the monitor under.
         session_id: String,
         /// Display name for the session (defaults to the session id).
         #[arg(long)]
@@ -515,11 +626,7 @@ fn run(cli: Cli) -> CliResult {
         Command::Kv(cmd) => run_kv(&forest, json, cmd),
         Command::Session(cmd) => run_session(&forest, json, cmd),
 
-        Command::Spawn {
-            workstream_id,
-            session_id,
-            resume,
-        } => run_spawn(&forest, json, &workstream_id, session_id.as_deref(), resume),
+        Command::Spawn { what } => run_spawn(&forest, json, what),
 
         Command::UpgradeForest { dry_run } => {
             let reports = forest.upgrade_all(dry_run)?;
@@ -638,6 +745,8 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
     let id = match &cmd {
         SessionCommand::Create(SessionCreate::ClaudeCode { id, .. })
         | SessionCommand::Create(SessionCreate::PlainShell { id, .. })
+        | SessionCommand::Create(SessionCreate::ClaudeCodeNoninteractive { id, .. })
+        | SessionCommand::Create(SessionCreate::DiskSpace { id, .. })
         | SessionCommand::Ls { id }
         | SessionCommand::Rename { id, .. }
         | SessionCommand::Rm { id, .. }
@@ -651,13 +760,41 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
             session_id, name, ..
         }) => {
             let name = name.unwrap_or_else(|| session_id.clone());
-            forest.create_session(id, &session_id, AgentKind::ClaudeCode { lock: None }, &name)?;
+            forest.create_session(
+                id,
+                &session_id,
+                SessionKind::ClaudeCode { lock: None },
+                &name,
+            )?;
         }
         SessionCommand::Create(SessionCreate::PlainShell {
             session_id, name, ..
         }) => {
             let name = name.unwrap_or_else(|| session_id.clone());
-            forest.create_session(id, &session_id, AgentKind::PlainShell {}, &name)?;
+            forest.create_session(id, &session_id, SessionKind::PlainShell {}, &name)?;
+        }
+        SessionCommand::Create(SessionCreate::ClaudeCodeNoninteractive {
+            session_id,
+            name,
+            run_direnv_exec,
+            ..
+        }) => {
+            let name = name.unwrap_or_else(|| session_id.clone());
+            forest.create_session(
+                id,
+                &session_id,
+                SessionKind::ClaudeCodeNoninteractive {
+                    lock: None,
+                    run_direnv_exec,
+                },
+                &name,
+            )?;
+        }
+        SessionCommand::Create(SessionCreate::DiskSpace {
+            session_id, name, ..
+        }) => {
+            let name = name.unwrap_or_else(|| session_id.clone());
+            forest.create_session(id, &session_id, SessionKind::DiskSpace {}, &name)?;
         }
         SessionCommand::Rename {
             session_id, name, ..
@@ -691,39 +828,50 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
     Ok(())
 }
 
-/// Build the interactive-shell plan for a session (from the checkout mode) and
-/// `exec` it, replacing this process with the agent — so the caller's PTY tracks
-/// the agent's lifetime directly. `--json` prints the resolved plan instead of
-/// exec'ing (for inspection/tests). The env/command construction lives in
-/// `silverwood-core`; reading the seed vars from the environment is frontend
+/// Build the [`ShellPlan`] for the chosen `spawn` subcommand and `exec` it (see
+/// [`exec_plan`]). `from-id` asks core to resolve a durable session into a plan (core owns
+/// *how* each kind runs); the per-kind subcommands call the matching plan builder with a
+/// resolved working directory. Reading the seed/config-dir from the environment is frontend
 /// policy (like [`resolve_forest_dir`]), so it stays here.
-fn run_spawn(
-    forest: &Forest,
-    json: bool,
-    id: &str,
-    session_id: Option<&str>,
-    resume: bool,
-) -> CliResult {
-    let ws = forest.get(parse_id(id)?)?;
-    let mode = ws
-        .body
-        .mode()
-        .ok_or("workstream has no checkout to spawn in")?;
-    if mode.state() != CheckoutState::Ready {
-        return Err(format!("checkout is not ready (state: {})", enum_str(mode.state())).into());
-    }
-    let Some(LocationWithinForest::BasicForest { path: cwd }) =
-        ws.body.location().map(|loc| &loc.within)
-    else {
-        return Err("workstream has no checkout location".into());
-    };
-
+fn run_spawn(forest: &Forest, json: bool, what: SpawnCommand) -> CliResult {
     let seed = spawn_seed()?;
-    let plan = match session_id {
-        Some(session_id) => agent_shell_plan(mode, cwd, session_id, resume, &seed),
-        None => base_shell_plan(cwd, &seed),
+    let plan = match what {
+        SpawnCommand::FromId {
+            session_id,
+            workstream,
+        } => forest.spawn_plan_from_session(
+            parse_id(&workstream)?,
+            &session_id,
+            &seed,
+            &resolve_claude_config_dir()?,
+        )?,
+        SpawnCommand::PlainShell { wd } => plain_shell_plan(&wd.resolve()?, &seed),
+        SpawnCommand::DiskSpace { wd } => disk_space_plan(&wd.resolve()?, &seed),
+        SpawnCommand::ClaudeCode { run } => {
+            let (session_id, run, wd) = run.parts();
+            claude_code_plan(&wd.resolve()?, &session_id, run, &seed)
+        }
+        SpawnCommand::ClaudeCodeNoninteractive {
+            run_direnv_exec,
+            run,
+        } => {
+            let (session_id, run, wd) = run.parts();
+            claude_code_noninteractive_plan(
+                &wd.resolve()?,
+                &session_id,
+                run,
+                run_direnv_exec,
+                &seed,
+            )
+        }
     };
+    exec_plan(json, plan)
+}
 
+/// `exec` the resolved plan, replacing this process so the caller's PTY tracks the session
+/// directly — or, with `--json`, print the plan and return (for inspection/tests). Shared by
+/// every `spawn` subcommand.
+fn exec_plan(json: bool, plan: ShellPlan) -> CliResult {
     if json {
         println!("{}", serde_json::to_string_pretty(&plan)?);
         return Ok(());

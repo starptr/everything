@@ -78,6 +78,12 @@ pub enum Error {
     #[error("session {session_id} is a {kind} session, which has no lock")]
     SessionNotLockable { session_id: String, kind: String },
 
+    /// A session could not be spawned because its workstream has no ready checkout to
+    /// run in (none materialized, or provisioning is incomplete). Carries the checkout
+    /// state string (or `none`).
+    #[error("workstream {id} has no ready checkout to spawn in (checkout state: {state})")]
+    NotSpawnable { id: WorkstreamId, state: String },
+
     /// A frontend tried to write a core-reserved kv namespace directly.
     #[error("namespace {0:?} is reserved for silverwood core; use `silverwood session`")]
     ReservedNamespace(String),

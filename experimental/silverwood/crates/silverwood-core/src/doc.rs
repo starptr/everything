@@ -41,7 +41,7 @@ use crate::error::{Error, Result};
 use crate::id::WorkstreamId;
 use crate::migrate;
 use crate::workstream::{
-    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest,
+    AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest, SessionKind,
     SessionLock, Status, Workstream, WorkstreamBody, WorkstreamKind, BASIC_KIND, SESSION_NS,
 };
 
@@ -214,7 +214,7 @@ pub(crate) fn unset_kv(doc: &LoroDoc, namespace: &str, key: &str) -> Result<()> 
 pub(crate) fn create_session(
     doc: &LoroDoc,
     session_id: &str,
-    agent_kind: AgentKind,
+    agent_kind: SessionKind,
     name: &str,
     created_at: &str,
 ) -> Result<()> {
@@ -291,9 +291,10 @@ pub(crate) fn set_session_lock(
     let mut session: AgentSession = serde_json::from_str(&existing)
         .map_err(|e| Error::Corrupt(format!("session {session_id}: {e}")))?;
     match &mut session.kind {
-        AgentKind::ClaudeCode { lock: slot } => *slot = lock,
-        // A plain shell has no lock slot; refuse rather than silently drop the request.
-        AgentKind::PlainShell {} => {
+        SessionKind::ClaudeCode { lock: slot }
+        | SessionKind::ClaudeCodeNoninteractive { lock: slot, .. } => *slot = lock,
+        // A shell kind has no lock slot; refuse rather than silently drop the request.
+        SessionKind::PlainShell {} | SessionKind::DiskSpace {} => {
             return Err(Error::SessionNotLockable {
                 session_id: session_id.to_string(),
                 kind: session.kind.tag().to_string(),
@@ -404,7 +405,7 @@ mod tests {
 
     use super::*;
     use crate::id::{ForestId, WorkstreamId};
-    use crate::workstream::{AgentKind, AgentSession, CheckoutMode, WorkstreamKind};
+    use crate::workstream::{AgentSession, CheckoutMode, SessionKind, WorkstreamKind};
 
     fn sample_body() -> WorkstreamBody {
         WorkstreamBody {
@@ -438,7 +439,7 @@ mod tests {
         body.kv.entry(SESSION_NS.into()).or_default().insert(
             "sid-1".into(),
             agent_session_json(&AgentSession {
-                kind: AgentKind::ClaudeCode { lock: None },
+                kind: SessionKind::ClaudeCode { lock: None },
                 name: "planning".into(),
                 created_at: "t0".into(),
             }),
@@ -533,7 +534,7 @@ mod tests {
         create_session(
             &a,
             "sess-A",
-            AgentKind::ClaudeCode { lock: None },
+            SessionKind::ClaudeCode { lock: None },
             "from A",
             "t0",
         )
@@ -542,7 +543,7 @@ mod tests {
         create_session(
             &b,
             "sess-B",
-            AgentKind::ClaudeCode { lock: None },
+            SessionKind::ClaudeCode { lock: None },
             "from B",
             "t0",
         )
@@ -577,7 +578,7 @@ mod tests {
         body.kv.entry(SESSION_NS.into()).or_default().insert(
             "sid-1".into(),
             agent_session_json(&AgentSession {
-                kind: AgentKind::ClaudeCode { lock: None },
+                kind: SessionKind::ClaudeCode { lock: None },
                 name: "planning".into(),
                 created_at: "t0".into(),
             }),
@@ -601,7 +602,7 @@ mod tests {
         assert!(json.get("sessions").is_none());
         let encoded = json["kv"][SESSION_NS]["sid-1"].as_str().unwrap();
         let session: AgentSession = serde_json::from_str(encoded).unwrap();
-        assert_eq!(session.kind, AgentKind::ClaudeCode { lock: None });
+        assert_eq!(session.kind, SessionKind::ClaudeCode { lock: None });
         assert_eq!(session.name, "planning");
     }
 
@@ -611,10 +612,10 @@ mod tests {
     #[test]
     fn plain_shell_session_roundtrip() {
         let doc = build(1, &sample_body()).unwrap();
-        create_session(&doc, "sh-1", AgentKind::PlainShell {}, "shell", "t0").unwrap();
+        create_session(&doc, "sh-1", SessionKind::PlainShell {}, "shell", "t0").unwrap();
 
         let session = get_session(&doc, "sh-1").unwrap().unwrap();
-        assert_eq!(session.kind, AgentKind::PlainShell {});
+        assert_eq!(session.kind, SessionKind::PlainShell {});
         assert_eq!(session.kind.tag(), "plain-shell");
         assert_eq!(session.lock(), None);
 
@@ -629,7 +630,7 @@ mod tests {
         rename_session(&doc, "sh-1", "my shell").unwrap();
         let renamed = get_session(&doc, "sh-1").unwrap().unwrap();
         assert_eq!(renamed.name, "my shell");
-        assert_eq!(renamed.kind, AgentKind::PlainShell {});
+        assert_eq!(renamed.kind, SessionKind::PlainShell {});
         assert_eq!(renamed.created_at, "t0");
 
         // A plain shell has no lock slot: locking is refused.

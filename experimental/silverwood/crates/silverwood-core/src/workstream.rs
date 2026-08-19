@@ -110,34 +110,56 @@ pub struct SessionLock {
     pub acquired_at: String,
 }
 
-/// Which agent (or shell) an [`AgentSession`] belongs to, carrying that kind's own
-/// state. Open, internally-tagged enum. The claude-code kind carries an optional
-/// [`SessionLock`] (a Claude Code session can be resumed by only one client at a
-/// time); a kind that already guarantees single-user access — such as `plain-shell`,
-/// whose every reopen is an independent fresh login shell — carries no lock.
+/// Which kind of session an [`AgentSession`] is (agent or shell), carrying that
+/// kind's own state. Open, internally-tagged enum. The claude-code kinds carry an
+/// optional [`SessionLock`] (a Claude Code session can be resumed by only one client
+/// at a time); a kind that already guarantees single-user access — such as
+/// `plain-shell`, whose every reopen is an independent fresh login shell — carries no
+/// lock. A session records *how to run itself*, so `silverwood spawn from-id` can
+/// materialize it without the frontend re-deriving the command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[non_exhaustive]
-pub enum AgentKind {
-    /// A Claude Code session, with its best-effort resumption lock (if held).
+pub enum SessionKind {
+    /// A Claude Code session run as a thin wrapper over the user's login-interactive
+    /// shell (so the user's own direnv/rc setup applies), with its resumption lock
+    /// (if held).
     ClaudeCode {
         /// The advisory resumption lock, if currently held.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lock: Option<SessionLock>,
+    },
+    /// A Claude Code session run non-interactively — `claude` directly, rather than
+    /// inside the user's interactive shell — with `direnv exec <cwd>` wrapping chosen
+    /// explicitly by `run_direnv_exec` (not derived from the checkout mode). Carries a
+    /// resumption lock like [`SessionKind::ClaudeCode`].
+    ClaudeCodeNoninteractive {
+        /// The advisory resumption lock, if currently held.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lock: Option<SessionLock>,
+        /// Whether to run `claude` under `direnv exec <cwd>` to load the checkout's
+        /// pre-approved `.envrc`.
+        run_direnv_exec: bool,
     },
     /// A plain login shell recorded so its tab (name) persists. It has no durable
     /// process to resume — reopening spawns a fresh login shell — so it carries no
     /// lock and no conversation for doctor to check. Named to leave room for other
     /// shell kinds later.
     PlainShell {},
+    /// A disk-space monitor: a `df` loop run through the same interactive-shell
+    /// mechanism as [`SessionKind::PlainShell`]. An example of a non-agent session
+    /// kind that exercises the algebraic spawn path.
+    DiskSpace {},
 }
 
-impl AgentKind {
+impl SessionKind {
     /// The stored `kind` discriminant for this variant (matches its serde tag).
     pub fn tag(&self) -> &'static str {
         match self {
-            AgentKind::ClaudeCode { .. } => "claude-code",
-            AgentKind::PlainShell {} => "plain-shell",
+            SessionKind::ClaudeCode { .. } => "claude-code",
+            SessionKind::ClaudeCodeNoninteractive { .. } => "claude-code-noninteractive",
+            SessionKind::PlainShell {} => "plain-shell",
+            SessionKind::DiskSpace {} => "disk-space",
         }
     }
 }
@@ -269,7 +291,7 @@ impl LocationWithinForest {
 pub struct AgentSession {
     /// Which agent this session belongs to, plus that kind's own state.
     #[serde(flatten)]
-    pub kind: AgentKind,
+    pub kind: SessionKind,
     /// Human-friendly name for the session.
     pub name: String,
     /// When the association was created (RFC3339).
@@ -281,8 +303,9 @@ impl AgentSession {
     /// currently held.
     pub fn lock(&self) -> Option<&SessionLock> {
         match &self.kind {
-            AgentKind::ClaudeCode { lock } => lock.as_ref(),
-            AgentKind::PlainShell {} => None,
+            SessionKind::ClaudeCode { lock }
+            | SessionKind::ClaudeCodeNoninteractive { lock, .. } => lock.as_ref(),
+            SessionKind::PlainShell {} | SessionKind::DiskSpace {} => None,
         }
     }
 }

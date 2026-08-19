@@ -4,7 +4,7 @@
 mod common;
 
 use common::{new_ws, temp_forest, FakeOk};
-use silverwood_core::{AgentKind, Forest};
+use silverwood_core::{Forest, LocationWithinForest, SessionKind, SpawnSeed};
 
 #[test]
 fn kv_round_trip() {
@@ -66,7 +66,7 @@ fn reserved_namespace_is_rejected() {
 
     // Sessions go through the typed API and land in the reserved namespace.
     forest
-        .create_session(ws.id, "s1", AgentKind::ClaudeCode { lock: None }, "n")
+        .create_session(ws.id, "s1", SessionKind::ClaudeCode { lock: None }, "n")
         .unwrap();
     assert_eq!(forest.get(ws.id).unwrap().body.sessions().len(), 1);
 
@@ -83,7 +83,7 @@ fn session_lifecycle() {
         .create_session(
             ws.id,
             "abc-123",
-            AgentKind::ClaudeCode { lock: None },
+            SessionKind::ClaudeCode { lock: None },
             "planning",
         )
         .unwrap();
@@ -92,7 +92,7 @@ fn session_lifecycle() {
             .create_session(
                 ws.id,
                 "abc-123",
-                AgentKind::ClaudeCode { lock: None },
+                SessionKind::ClaudeCode { lock: None },
                 "dup"
             )
             .is_err(),
@@ -106,7 +106,7 @@ fn session_lifecycle() {
     let sessions = got.body.sessions();
     let session = &sessions["abc-123"];
     assert_eq!(session.name, "planning v2");
-    assert_eq!(session.kind, AgentKind::ClaudeCode { lock: None });
+    assert_eq!(session.kind, SessionKind::ClaudeCode { lock: None });
     assert!(!session.created_at.is_empty());
 
     assert!(
@@ -132,7 +132,7 @@ fn session_doctor_reports_variant_and_conversation_presence() {
         .create_session(
             ws.id,
             "sess-1",
-            AgentKind::ClaudeCode { lock: None },
+            SessionKind::ClaudeCode { lock: None },
             "planning",
         )
         .unwrap();
@@ -166,6 +166,143 @@ fn session_doctor_reports_variant_and_conversation_presence() {
 }
 
 #[test]
+fn session_doctor_and_lock_cover_the_new_kinds() {
+    let dir = temp_forest("new-kinds");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+    let ws = forest.create_workstream(new_ws("new-kinds-demo")).unwrap();
+    let claude = temp_forest("new-kinds-claude");
+
+    // claude-code-noninteractive is a claude kind: doctor checks the transcript, and it locks.
+    forest
+        .create_session(
+            ws.id,
+            "ni",
+            SessionKind::ClaudeCodeNoninteractive {
+                lock: None,
+                run_direnv_exec: true,
+            },
+            "ni",
+        )
+        .unwrap();
+    let report = forest.doctor_session(ws.id, "ni", &claude).unwrap();
+    assert_eq!(report.kind, "claude-code-noninteractive");
+    assert_eq!(report.conversation_exists, Some(false));
+    forest.lock_session(ws.id, "ni", "A", false).unwrap();
+    assert_eq!(
+        forest.get(ws.id).unwrap().body.sessions()["ni"]
+            .lock()
+            .unwrap()
+            .holder,
+        "A"
+    );
+
+    // disk-space is a shell kind: no conversation to check, and it is not lockable.
+    forest
+        .create_session(ws.id, "ds", SessionKind::DiskSpace {}, "ds")
+        .unwrap();
+    let report = forest.doctor_session(ws.id, "ds", &claude).unwrap();
+    assert_eq!(report.kind, "disk-space");
+    assert_eq!(report.conversation_exists, None);
+    assert!(forest.lock_session(ws.id, "ds", "A", false).is_err());
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&claude);
+}
+
+#[test]
+fn spawn_plan_from_session_resolves_each_kind() {
+    let dir = temp_forest("spawn-from-id");
+    let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
+    let ws = forest.create_workstream(new_ws("spawn-demo")).unwrap();
+    let LocationWithinForest::BasicForest { path: cwd } =
+        ws.body.location().unwrap().within.clone()
+    else {
+        unreachable!("a basic workstream has a basic-forest location");
+    };
+    let claude = temp_forest("spawn-claude"); // empty ⇒ no transcript ⇒ first-run
+
+    let seed = SpawnSeed {
+        home: "/home/x".into(),
+        user: Some("x".into()),
+        shell: "/bin/zsh".into(),
+        term: None,
+        ssh_auth_sock: None,
+    };
+
+    // claude-code (interactive): runs inside the login-interactive shell, first-run.
+    forest
+        .create_session(ws.id, "cc-1", SessionKind::ClaudeCode { lock: None }, "cc")
+        .unwrap();
+    let plan = forest
+        .spawn_plan_from_session(ws.id, "cc-1", &seed, &claude)
+        .unwrap();
+    assert_eq!(plan.program, "/bin/zsh");
+    assert_eq!(plan.args[0..3], ["-l", "-i", "-c"]);
+    assert!(plan.args[3].contains("exec claude --session-id 'cc-1'"));
+    assert_eq!(plan.cwd, cwd);
+
+    // claude-code-noninteractive with direnv on: `direnv exec <cwd> claude --session-id`.
+    forest
+        .create_session(
+            ws.id,
+            "ni-1",
+            SessionKind::ClaudeCodeNoninteractive {
+                lock: None,
+                run_direnv_exec: true,
+            },
+            "ni",
+        )
+        .unwrap();
+    let plan = forest
+        .spawn_plan_from_session(ws.id, "ni-1", &seed, &claude)
+        .unwrap();
+    assert_eq!(plan.program, "direnv");
+    assert_eq!(
+        plan.args,
+        vec!["exec", &cwd, "claude", "--session-id", "ni-1"]
+    );
+
+    // plain-shell: a login shell in the checkout.
+    forest
+        .create_session(ws.id, "sh-1", SessionKind::PlainShell {}, "sh")
+        .unwrap();
+    let plan = forest
+        .spawn_plan_from_session(ws.id, "sh-1", &seed, &claude)
+        .unwrap();
+    assert_eq!(plan.program, "/bin/zsh");
+    assert_eq!(plan.args, vec!["-l"]);
+
+    // disk-space: a `df` loop via the interactive shell.
+    forest
+        .create_session(ws.id, "ds-1", SessionKind::DiskSpace {}, "ds")
+        .unwrap();
+    let plan = forest
+        .spawn_plan_from_session(ws.id, "ds-1", &seed, &claude)
+        .unwrap();
+    assert!(plan.args[3].contains("df -h"));
+
+    // A transcript on disk flips the claude flag to --resume.
+    let proj = claude.join("projects").join("-any");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("cc-2.jsonl"), "{}\n").unwrap();
+    forest
+        .create_session(ws.id, "cc-2", SessionKind::ClaudeCode { lock: None }, "cc2")
+        .unwrap();
+    let plan = forest
+        .spawn_plan_from_session(ws.id, "cc-2", &seed, &claude)
+        .unwrap();
+    assert!(plan.args[3].contains("exec claude --resume 'cc-2'"));
+
+    // An absent session errors.
+    assert!(forest
+        .spawn_plan_from_session(ws.id, "nope", &seed, &claude)
+        .is_err());
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&claude);
+}
+
+#[test]
 fn session_lock_lifecycle() {
     let dir = temp_forest("session-lock");
     let forest = Forest::open_with_provider(&dir, Box::new(FakeOk)).unwrap();
@@ -174,7 +311,7 @@ fn session_lock_lifecycle() {
         .create_session(
             ws.id,
             "s1",
-            AgentKind::ClaudeCode { lock: None },
+            SessionKind::ClaudeCode { lock: None },
             "planning",
         )
         .unwrap();

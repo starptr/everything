@@ -308,21 +308,131 @@ fn remove_rejects_bad_and_absent_ids() {
 }
 
 #[test]
-fn spawn_rejects_bad_and_absent_ids() {
+fn spawn_from_id_rejects_bad_and_absent_ids() {
     let dir = forest();
 
-    // Bad id → parse error, before any forest work or exec.
-    let stderr = fails(&dir, &["spawn", "not-a-uuid", "sess-1"]);
+    // Bad workstream id → parse error, before any forest work or exec.
+    let stderr = fails(
+        &dir,
+        &["spawn", "from-id", "sess-1", "--workstream", "not-a-uuid"],
+    );
     assert!(stderr.contains("invalid workstream id"), "got: {stderr}");
 
-    // Well-formed but absent id → not-found (there is no checkout to spawn in).
+    // Well-formed but absent id → not-found (there is no workstream to spawn from).
     fails(
         &dir,
         &[
             "spawn",
-            "uuidv7_01999999-0000-7000-8000-000000000000",
+            "from-id",
             "sess-1",
+            "--workstream",
+            "uuidv7_01999999-0000-7000-8000-000000000000",
         ],
+    );
+}
+
+/// The direct spawn kinds build their plan from `--override-working-directory` (no
+/// checkout needed), so their `--json` plan shape is testable in the sandbox. We assert on
+/// shell-agnostic parts only — the interactive kinds' `program` is the login shell, which
+/// varies by environment.
+#[test]
+fn spawn_direct_variants_reflect_the_kind() {
+    let dir = forest();
+
+    // plain-shell: an interactive login shell (`<shell> -l`).
+    let plan = json(
+        &dir,
+        &[
+            "--json",
+            "spawn",
+            "plain-shell",
+            "--override-working-directory",
+            "/tmp/x",
+        ],
+    );
+    assert_eq!(plan["args"], serde_json::json!(["-l"]));
+    assert_eq!(plan["cwd"], "/tmp/x");
+
+    // claude-code (interactive): runs inside the login-interactive shell, chaining `exec claude`.
+    let plan = json(
+        &dir,
+        &[
+            "--json",
+            "spawn",
+            "claude-code",
+            "first-run",
+            "sess-1",
+            "--override-working-directory",
+            "/tmp/x",
+        ],
+    );
+    let args = plan["args"].as_array().unwrap();
+    assert_eq!(args[0], "-l");
+    assert_eq!(args[1], "-i");
+    assert_eq!(args[2], "-c");
+    assert!(
+        args[3]
+            .as_str()
+            .unwrap()
+            .contains("exec claude --session-id 'sess-1'"),
+        "script: {}",
+        args[3]
+    );
+
+    // claude-code-noninteractive: claude directly when direnv off …
+    let plan = json(
+        &dir,
+        &[
+            "--json",
+            "spawn",
+            "claude-code-noninteractive",
+            "--run-direnv-exec",
+            "false",
+            "resume",
+            "sess-1",
+            "--override-working-directory",
+            "/tmp/x",
+        ],
+    );
+    assert_eq!(plan["program"], "claude");
+    assert_eq!(plan["args"], serde_json::json!(["--resume", "sess-1"]));
+
+    // … and under `direnv exec <cwd>` when on.
+    let plan = json(
+        &dir,
+        &[
+            "--json",
+            "spawn",
+            "claude-code-noninteractive",
+            "--run-direnv-exec",
+            "true",
+            "first-run",
+            "sess-1",
+            "--override-working-directory",
+            "/tmp/x",
+        ],
+    );
+    assert_eq!(plan["program"], "direnv");
+    assert_eq!(
+        plan["args"],
+        serde_json::json!(["exec", "/tmp/x", "claude", "--session-id", "sess-1"])
+    );
+
+    // disk-space: a `df` loop via the interactive shell.
+    let plan = json(
+        &dir,
+        &[
+            "--json",
+            "spawn",
+            "disk-space",
+            "--override-working-directory",
+            "/tmp/x",
+        ],
+    );
+    assert!(
+        plan["args"][3].as_str().unwrap().contains("df -h"),
+        "script: {}",
+        plan["args"][3]
     );
 }
 

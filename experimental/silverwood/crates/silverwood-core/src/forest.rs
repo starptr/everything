@@ -17,9 +17,13 @@ use crate::error::{Error, Result};
 use crate::id::{ForestId, WorkstreamId};
 use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
+use crate::spawn::{
+    claude_code_noninteractive_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
+    ClaudeRun, ShellPlan, SpawnSeed,
+};
 use crate::workstream::{
-    AgentKind, CheckoutExtent, CheckoutMode, CheckoutState, DoctorReport, Location,
-    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream,
+    CheckoutExtent, CheckoutMode, CheckoutState, DoctorReport, Location, LocationWithinForest,
+    NewCheckoutMode, NewKind, NewWorkstream, SessionKind, SessionLock, Status, Workstream,
     WorkstreamBody, WorkstreamKind, RESERVED_NS_PREFIX,
 };
 
@@ -343,7 +347,7 @@ impl Forest {
         &self,
         id: WorkstreamId,
         session_id: &str,
-        agent_kind: AgentKind,
+        agent_kind: SessionKind,
         name: &str,
     ) -> Result<()> {
         let doc = self.load_doc(id)?;
@@ -373,7 +377,7 @@ impl Forest {
     /// [`Error::SessionNotFound`] if the session is absent.
     ///
     /// The match over the session kind is deliberately exhaustive: adding an
-    /// [`AgentKind`] forces a decision here about how (or whether) doctor checks it,
+    /// [`SessionKind`] forces a decision here about how (or whether) doctor checks it,
     /// rather than silently reporting `conversation_exists: None`.
     pub fn doctor_session(
         &self,
@@ -385,12 +389,12 @@ impl Forest {
         let session = doc::get_session(&doc, session_id)?
             .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
         let conversation_exists = match &session.kind {
-            AgentKind::ClaudeCode { .. } => Some(crate::claude::claude_conversation_exists(
-                config_dir, session_id,
-            )),
-            // A plain shell has no persisted conversation to check; doctor can't
+            SessionKind::ClaudeCode { .. } | SessionKind::ClaudeCodeNoninteractive { .. } => Some(
+                crate::claude::claude_conversation_exists(config_dir, session_id),
+            ),
+            // A shell kind has no persisted conversation to check; doctor can't
             // judge whether it's safe to remove, so report `None`.
-            AgentKind::PlainShell {} => None,
+            SessionKind::PlainShell {} | SessionKind::DiskSpace {} => None,
         };
         Ok(DoctorReport {
             workstream_id: id.to_string(),
@@ -398,6 +402,73 @@ impl Forest {
             kind: session.kind.tag().to_string(),
             conversation_exists,
         })
+    }
+
+    /// Build the [`ShellPlan`] for running a durable session (`silverwood spawn from-id`).
+    /// A session records *how to run itself*: this reads its [`SessionKind`] and materializes
+    /// the matching command in the workstream's ready checkout, so a frontend never re-derives
+    /// the command. For a claude kind, first-run vs resume is chosen from whether Claude's
+    /// transcript exists on disk under `claude_config_dir` (so a never-prompted session starts
+    /// fresh rather than failing a resume). `seed`/`claude_config_dir` are frontend policy
+    /// (env/passwd), supplied by the caller — mirroring [`Forest::doctor_session`].
+    ///
+    /// Errors [`Error::NotSpawnable`] if there is no ready checkout, or
+    /// [`Error::SessionNotFound`] if the session is absent.
+    pub fn spawn_plan_from_session(
+        &self,
+        id: WorkstreamId,
+        session_id: &str,
+        seed: &SpawnSeed,
+        claude_config_dir: &Path,
+    ) -> Result<ShellPlan> {
+        let ws = self.get(id)?;
+        let not_spawnable = |state: &str| Error::NotSpawnable {
+            id,
+            state: state.to_string(),
+        };
+        let mode = ws.body.mode().ok_or_else(|| not_spawnable("none"))?;
+        if mode.state() != CheckoutState::Ready {
+            return Err(not_spawnable(mode.state().as_str()));
+        }
+        let cwd = match ws.body.location().map(|loc| &loc.within) {
+            Some(LocationWithinForest::BasicForest { path }) => path.clone(),
+            // A ready checkout without a location would be a corrupt document.
+            None => {
+                return Err(Error::Corrupt(format!(
+                    "workstream {id} has no checkout location"
+                )))
+            }
+        };
+
+        let session = doc::get_session(&self.load_doc(id)?, session_id)?
+            .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
+
+        // First-run vs resume from ground truth: does Claude's transcript exist on disk?
+        let claude_run = || {
+            if crate::claude::claude_conversation_exists(claude_config_dir, session_id) {
+                ClaudeRun::Resume
+            } else {
+                ClaudeRun::FirstRun
+            }
+        };
+
+        let plan = match session.kind {
+            SessionKind::ClaudeCode { .. } => {
+                claude_code_plan(&cwd, session_id, claude_run(), seed)
+            }
+            SessionKind::ClaudeCodeNoninteractive {
+                run_direnv_exec, ..
+            } => claude_code_noninteractive_plan(
+                &cwd,
+                session_id,
+                claude_run(),
+                run_direnv_exec,
+                seed,
+            ),
+            SessionKind::PlainShell {} => plain_shell_plan(&cwd, seed),
+            SessionKind::DiskSpace {} => disk_space_plan(&cwd, seed),
+        };
+        Ok(plan)
     }
 
     /// Acquire the best-effort advisory lock on a session for `holder`. Succeeds

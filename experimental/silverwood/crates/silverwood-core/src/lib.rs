@@ -36,9 +36,12 @@ pub use id::{ForestId, IdScheme, ParseWorkstreamIdError, WorkstreamId};
 pub use migrate::DOC_SCHEMA_VERSION;
 pub use provider::{CheckoutProvider, JjColocated};
 pub use source::{AbsolutePath, HttpsGitUrl};
-pub use spawn::{agent_shell_plan, base_shell_plan, ShellPlan, SpawnSeed};
+pub use spawn::{
+    claude_code_noninteractive_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
+    ClaudeRun, ShellPlan, SpawnSeed,
+};
 pub use workstream::{
-    AgentKind, AgentSession, CheckoutExtent, CheckoutMode, CheckoutState, DoctorReport, Location,
-    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionLock, Status, Workstream,
-    WorkstreamBody, WorkstreamKind,
+    AgentSession, CheckoutExtent, CheckoutMode, CheckoutState, DoctorReport, Location,
+    LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionKind, SessionLock,
+    Status, Workstream, WorkstreamBody, WorkstreamKind,
 };

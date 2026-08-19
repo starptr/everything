@@ -13,7 +13,7 @@ use proptest::prelude::*;
 
 use super::{any_id, sample_bodies};
 use crate::doc;
-use crate::workstream::AgentKind;
+use crate::workstream::SessionKind;
 
 /// Per-forest ops: kv entries `(key index, value index)` and session indices.
 /// Namespacing by forest index (below) keeps every forest's writes disjoint, so
@@ -81,7 +81,7 @@ proptest! {
                 doc::create_session(
                     &d,
                     &format!("f{i}-s{si}"),
-                    AgentKind::ClaudeCode { lock: None },
+                    SessionKind::ClaudeCode { lock: None },
                     "n",
                     "t0",
                 )

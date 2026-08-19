@@ -288,17 +288,20 @@ fn new_direnv_unsafe_mode_is_ready() {
     assert!(Path::new(loc).join(".jj").is_dir(), ".jj missing");
 }
 
-/// `spawn --json` resolves the interactive-shell plan from the workstream's
-/// stored checkout mode: plain `claude` for jj-colocated, `direnv exec <cwd>` for
-/// the direnv-unsafe mode; `--resume` flips the claude flag; and omitting the
-/// session id yields the base login shell. Needs a real (ready) checkout — hence
-/// ignored. (The pure mode→argv logic is unit-tested in `silverwood-core`.)
+/// `spawn from-id --json` resolves a durable session into a plan: it reads the session's
+/// kind and runs it in the workstream's checkout, deciding first-run vs resume from whether
+/// a Claude transcript exists under `CLAUDE_CONFIG_DIR`. Needs a real (ready) checkout —
+/// hence ignored. (The pure kind→plan builders are unit-tested in `silverwood-core`;
+/// direnv-unsafe checkout modes no longer affect the plan — the interactive claude-code kind
+/// is direnv-blind, and explicit `direnv exec` lives on `claude-code-noninteractive`.)
 #[test]
 #[ignore = "network + jj; run via `cargo test -- --ignored`"]
-fn spawn_plan_reflects_checkout_mode() {
+fn spawn_from_id_resolves_each_session_kind() {
     let dir = forest();
+    // An empty CLAUDE_CONFIG_DIR ⇒ no transcripts ⇒ claude sessions resolve to first-run.
+    let claude_cfg = forest();
+    let cfg = claude_cfg.path().to_str().unwrap();
 
-    // Plain jj-colocated → `claude --session-id <sid>`, run in the checkout.
     let ws = json(
         &dir,
         &[
@@ -310,47 +313,75 @@ fn spawn_plan_reflects_checkout_mode() {
             "jj-colocated",
             EXAMPLE_SOURCE,
             "--name",
-            "plain",
+            "work",
         ],
     );
     let id = ws["id"].as_str().unwrap();
-    let plan = json(&dir, &["--json", "spawn", id, "sess-1"]);
-    assert_eq!(plan["program"], "claude");
-    assert_eq!(plan["args"], serde_json::json!(["--session-id", "sess-1"]));
-    assert_eq!(plan["cwd"], ws["location"]["within"]["path"]);
+    let cwd = ws["location"]["within"]["path"].as_str().unwrap();
 
-    // `--resume` flips the claude flag.
-    let resumed = json(&dir, &["--json", "spawn", id, "sess-1", "--resume"]);
-    assert_eq!(resumed["args"], serde_json::json!(["--resume", "sess-1"]));
+    // claude-code (interactive): runs inside the login-interactive shell, first-run (no transcript).
+    ok(&dir, &["session", "create", "claude-code", id, "cc-1"]);
+    let plan = json_env(
+        &dir,
+        &[("CLAUDE_CONFIG_DIR", cfg)],
+        &["--json", "spawn", "from-id", "cc-1", "--workstream", id],
+    );
+    assert_eq!(plan["args"][0], "-l");
+    assert_eq!(plan["args"][1], "-i");
+    assert_eq!(plan["args"][2], "-c");
+    assert!(plan["args"][3]
+        .as_str()
+        .unwrap()
+        .contains("exec claude --session-id 'cc-1'"));
+    assert_eq!(plan["cwd"], cwd);
 
-    // The base-shell variant (no session id) runs a login shell in the checkout.
-    let base = json(&dir, &["--json", "spawn", id]);
-    assert!(base["program"].as_str().is_some_and(|p| !p.is_empty()));
-    assert_eq!(base["args"], serde_json::json!(["-l"]));
-
-    // Direnv-unsafe → claude wrapped in `direnv exec <cwd>` (cwd is its own argv).
-    let ws2 = json(
+    // claude-code-noninteractive with direnv on: `direnv exec <cwd> claude --session-id`.
+    ok(
         &dir,
         &[
-            "--json",
-            "new",
-            "basic",
-            "--checkout-extent",
-            "full",
-            "jj-colocated-direnv-unsafe",
-            EXAMPLE_SOURCE,
-            "--name",
-            "with-direnv",
+            "session",
+            "create",
+            "claude-code-noninteractive",
+            id,
+            "ni-1",
+            "--run-direnv-exec",
+            "true",
         ],
     );
-    let id2 = ws2["id"].as_str().unwrap();
-    let cwd2 = ws2["location"]["within"]["path"].as_str().unwrap();
-    let plan2 = json(&dir, &["--json", "spawn", id2, "sess-2"]);
-    assert_eq!(plan2["program"], "direnv");
-    assert_eq!(
-        plan2["args"],
-        serde_json::json!(["exec", cwd2, "claude", "--session-id", "sess-2"])
+    let plan = json_env(
+        &dir,
+        &[("CLAUDE_CONFIG_DIR", cfg)],
+        &["--json", "spawn", "from-id", "ni-1", "--workstream", id],
     );
+    assert_eq!(plan["program"], "direnv");
+    assert_eq!(
+        plan["args"],
+        serde_json::json!(["exec", cwd, "claude", "--session-id", "ni-1"])
+    );
+
+    // plain-shell: a login shell in the checkout.
+    ok(&dir, &["session", "create", "plain-shell", id, "sh-1"]);
+    let plan = json(
+        &dir,
+        &["--json", "spawn", "from-id", "sh-1", "--workstream", id],
+    );
+    assert_eq!(plan["args"], serde_json::json!(["-l"]));
+    assert_eq!(plan["cwd"], cwd);
+
+    // A claude session WITH a transcript on disk resolves to resume, not first-run.
+    let proj = claude_cfg.path().join("projects").join("-any");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("cc-2.jsonl"), "{}\n").unwrap();
+    ok(&dir, &["session", "create", "claude-code", id, "cc-2"]);
+    let plan = json_env(
+        &dir,
+        &[("CLAUDE_CONFIG_DIR", cfg)],
+        &["--json", "spawn", "from-id", "cc-2", "--workstream", id],
+    );
+    assert!(plan["args"][3]
+        .as_str()
+        .unwrap()
+        .contains("exec claude --resume 'cc-2'"));
 }
 
 #[test]

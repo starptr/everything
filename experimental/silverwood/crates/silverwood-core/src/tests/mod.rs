@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 use crate::id::ForestId;
 use crate::workstream::{
-    AgentKind, AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest, Status,
+    AgentSession, CheckoutMode, CheckoutState, Location, LocationWithinForest, SessionKind, Status,
     WorkstreamBody, WorkstreamKind, SESSION_NS,
 };
 
@@ -126,7 +126,7 @@ fn basic(
     }
     for (id, nm) in sessions {
         let session = AgentSession {
-            kind: AgentKind::ClaudeCode { lock: None },
+            kind: SessionKind::ClaudeCode { lock: None },
             name: nm.to_string(),
             created_at: "1970-01-01T00:00:00Z".to_string(),
         };
