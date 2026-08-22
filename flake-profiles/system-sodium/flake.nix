@@ -89,6 +89,20 @@
               (final: super: {
                 resticprofile = super.resticprofile.overrideAttrs (o: { doCheck = false; });
               })
+              # HACK: curl-cffi's darwin build omits an rpath to libcurl-impersonate,
+              # so _wrapper.abi3.so fails to dlopen; add the missing LC_RPATH.
+              (final: super: {
+                pythonPackagesExtensions = (super.pythonPackagesExtensions or [ ]) ++ [
+                  (pyfinal: pyprev: {
+                    curl-cffi = pyprev.curl-cffi.overrideAttrs (o: {
+                      postFixup = (o.postFixup or "") + final.lib.optionalString final.stdenv.hostPlatform.isDarwin ''
+                        install_name_tool -add_rpath ${final.curl-impersonate}/lib \
+                          "$out/${pyfinal.python.sitePackages}/curl_cffi/_wrapper.abi3.so"
+                      '';
+                    });
+                  })
+                ];
+              })
             ];
             config = import ./../../venus/app-configs/nixpkgs-config.nix; # Configures pkgs for evaluating this darwinConfiguration ("buildtime" config)
           };
