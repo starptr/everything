@@ -26,8 +26,8 @@ your account **password** instead — run the command in an interactive terminal
 (the non-interactive harness shell has no TTY for a password and would otherwise fall back to the
 Touch ID dialog). The macOS `darwinConfigurations` attr is `"Yutos-Sodium"`.
 
-x86_64-linux pieces (e.g. whale images) build via the `linux-builder` VM; if a switch fails with
-`path '…' is not valid`, reset it: `nix run ./flake-profiles/system-sodium#reset-linux-builder`.
+x86_64-linux pieces (e.g. whale images) build on **methanol**, the native x86_64-linux remote
+builder, via sodium's `nix.buildMachines` (see `venus/modules/nixos-darwin/sodium.nix`).
 
 ## Activating methanol (remote NixOS, via deploy-rs)
 
@@ -35,8 +35,8 @@ x86_64-linux pieces (e.g. whale images) build via the `linux-builder` VM; if a s
 deploy ./flake-profiles/system-methanol --ssh-opts="-i ~/.ssh/id_rsa"
 ```
 
-This builds `nixosConfigurations.methanol` (x86_64-linux — uses the Sodium `linux-builder` when
-run from the Mac) and activates it on the node over SSH as `root@10.0.0.211`, with deploy-rs's
+This builds `nixosConfigurations.methanol` (x86_64-linux — built on the methanol remote builder
+via sodium's `nix.buildMachines`) and activates it on the node over SSH as `root@10.0.0.211`, with deploy-rs's
 magic-rollback safety net (auto-reverts if the new generation can't confirm itself).
 
 `--ssh-opts="-i ~/.ssh/id_rsa"` forces the connection to use that key. The 1Password SSH agent is

@@ -11,10 +11,11 @@ The flake profile lives at `flake-profiles/whale`; targets are referenced as
 ## How it works
 
 - **Images are always `x86_64-linux`** (built from `imagePkgs`), regardless of the host
-  driving the build. On the M1 they are realized via sodium's emulated `linux-builder`
-  (QEMU binfmt — see `venus/modules/nixos-darwin/sodium.nix`). Heavy deps come as
-  x86_64 substitutes from cache.nixos.org; only the layered-image tar/gzip step is
-  emulated, so storage/CPU stay modest.
+  driving the build. On the M1 they are built on **methanol**, the native x86_64-linux
+  remote builder, via sodium's `nix.buildMachines` (see
+  `venus/modules/nixos-darwin/sodium.nix`). Heavy deps come as x86_64 substitutes from
+  cache.nixos.org (methanol fetches them directly); only the layered-image tar/gzip is
+  actually built, natively on methanol.
 - **Push-scripts and the auth dev-shell are host-native** (`x86_64-linux` and
   `aarch64-darwin`). On the Mac, `skopeo` runs natively and reuses the Mac's own
   `~/.config/containers/auth.json`; the `docker-archive` tarball is arch-agnostic, so
@@ -45,23 +46,17 @@ nix develop ./flake-profiles/whale -c \
 # -> "Architecture": "amd64", "Os": "linux"
 ```
 
-## Prerequisite: x86_64 emulation on the builder
+## Prerequisite: the methanol remote builder
 
-The M1 builds x86_64-linux because sodium's `nix.linux-builder` advertises
-`x86_64-linux` with `boot.binfmt.emulatedSystems = ["x86_64-linux"]`. Apply with
-`darwin-rebuild switch --flake ./flake-profiles/system-sodium`.
+The M1 builds x86_64-linux by offloading to methanol, a native x86_64-linux box registered in
+sodium's `nix.buildMachines` (reached over the LAN at `10.0.0.211` as the `remote-builder`
+user). Apply the config with `darwin-rebuild switch --flake ./flake-profiles/system-sodium`;
+methanol must be up and reachable for the build to proceed.
 
-## Troubleshooting: `path '…' is not valid`
+## Troubleshooting: build fails or can't reach the builder
 
-If a build fails with `path '…-…json' is not valid` / `builder failed with exit code 1`,
-the linux-builder VM's nix store is corrupted (a truncated path that nix still marks
-"valid", so re-copies skip it; `repair-path` isn't reachable via the guest daemon). The
-classic trigger is a truncated `binfmt_nixos.conf`, which silently disables x86_64
-emulation. Reset the builder's persistent disk (keys are preserved):
-
-```bash
-nix run ./flake-profiles/system-sodium#reset-linux-builder
-```
-
-This stops the service, removes `/var/lib/linux-builder/nixos.qcow2`, restarts it, and
-verifies `/proc/sys/fs/binfmt_misc/x86_64-linux` is registered after reboot.
+x86_64-linux builds run on methanol, so a failure usually means methanol is down or
+unreachable. Confirm it answers over SSH as the `remote-builder` user and that it's listed in
+`/etc/nix/machines`. If methanol's own nix store is genuinely corrupt (`path '…' is not
+valid`), repair it on methanol itself with `nix store verify` / `nix-store --repair-path`,
+not from the Mac.
