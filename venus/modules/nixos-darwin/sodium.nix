@@ -86,7 +86,7 @@ in
     distributedBuilds = true;
     # methanol (the cluster/storage node) is a NATIVE x86_64-linux box (16 cores / 27 GB), so x86_64
     # builds -- e.g. whale's container images -- are offloaded to it instead of emulating x86 on the M1
-    # via the linux-builder (QEMU TCG, ~5-8x slower). The image BUILDS on methanol; nix then copies the
+    # (QEMU TCG, ~5-8x slower). The image BUILDS on methanol; nix then copies the
     # result back here, and the whale push-script still runs LOCALLY with the local skopeo credentials
     # (see whale/outputs.nix / whale/readme.md). Reached over the LAN as the dedicated, unprivileged
     # `remote-builder` user (defined + added to trusted-users in methanol.nix; deploy-rs still uses
@@ -112,18 +112,6 @@ in
     # methanol substitutes build inputs from the public caches itself rather than this Mac uploading
     # them (this aarch64-darwin host has no x86_64-linux store paths to send anyway).
     settings.builders-use-substitutes = true;
-
-    # The auto-managed darwin linux-builder, now for aarch64-linux ONLY (x86_64 goes to methanol above).
-    linux-builder = {
-      enable = true;
-      maxJobs = 4;
-      # aarch64-linux ONLY (the module default). x86_64-linux is built natively by methanol (see
-      # buildMachines above), so there's no QEMU x86 emulation here and the VM keeps its small default
-      # size (1 vCPU / 3 GB).
-      #
-      # If an aarch64-linux build fails with `path '…' is not valid` (guest store corruption), reset:
-      #   nix run ./flake-profiles/system-sodium#reset-linux-builder
-    };
   };
 
   # Create /etc/zshrc that loads the nix-darwin environment.
