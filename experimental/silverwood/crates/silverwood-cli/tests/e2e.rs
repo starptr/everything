@@ -651,8 +651,9 @@ fn archive_tombstones_but_keeps_checkout_and_persists() {
 }
 
 /// `remove` is the delete-like tombstone: unlike archive it discards the checkout,
-/// but (add-wins union) still keeps the document, marked `deleted`. Without `--force`
-/// the stubbed safety check refuses.
+/// but (add-wins union) still keeps the document, marked `deleted`. With unpushed
+/// non-empty work (here an uncommitted file) the safety check refuses without
+/// `--force`; `--force` overrides and soft-deletes.
 #[test]
 #[ignore = "network + jj; run via `cargo test -- --ignored`"]
 fn remove_deletes_checkout_but_keeps_deleted_tombstone() {
@@ -678,8 +679,14 @@ fn remove_deletes_checkout_but_keeps_deleted_tombstone() {
         .to_string();
     assert!(Path::new(&location).join("README.md").is_file());
 
-    // Without --force the safety check (stubbed false) refuses; nothing changes.
-    fails(&dir, &["workstream", &id, "remove"]);
+    // Uncommitted work makes `@` non-empty and off the remote trunk: without --force
+    // the safety check refuses; nothing changes.
+    std::fs::write(Path::new(&location).join("dirty.txt"), "unpushed\n").unwrap();
+    let stderr = fails(&dir, &["workstream", &id, "remove"]);
+    assert!(
+        stderr.contains("not safe to remove"),
+        "expected unsafe-to-remove refusal, got: {stderr}"
+    );
     assert_eq!(
         json(&dir, &["--json", "workstream", &id, "show"])["status"],
         "active"
@@ -700,6 +707,32 @@ fn remove_deletes_checkout_but_keeps_deleted_tombstone() {
     assert_eq!(all[0]["status"], "deleted");
 
     // The checked-out code on disk is deleted.
+    assert!(
+        !Path::new(&location).exists(),
+        "remove must delete the checkout"
+    );
+}
+
+/// The safe path: a fresh, untouched colocated clone has `@` as an empty commit atop
+/// `main@origin`, so all non-empty revs are already on the remote trunk. `remove`
+/// then needs no `--force` — the check confirms discarding the checkout loses nothing.
+#[test]
+#[ignore = "network + jj; run via `cargo test -- --ignored`"]
+fn remove_without_force_succeeds_when_all_work_is_pushed() {
+    let dir = forest();
+    let id = create(&dir, "clean");
+    let location = json(&dir, &["--json", "workstream", &id, "show"])["location"]["within"]["path"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(Path::new(&location).join("README.md").is_file());
+
+    // No --force: the check passes (jj root + every non-empty rev on main@origin).
+    ok(&dir, &["workstream", &id, "remove"]);
+    assert_eq!(
+        json(&dir, &["--json", "workstream", &id, "show"])["status"],
+        "deleted"
+    );
     assert!(
         !Path::new(&location).exists(),
         "remove must delete the checkout"

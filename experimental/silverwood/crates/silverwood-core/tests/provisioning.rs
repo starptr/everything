@@ -61,7 +61,8 @@ fn remove_soft_deletes_and_discards_checkout() {
     let checkout = Path::new(path).to_path_buf();
     assert!(checkout.is_dir(), "FakeOk should have created the checkout");
 
-    // Without --force the stubbed safety check refuses; nothing changes.
+    // Without --force the safety check refuses: FakeOk's checkout is a bare dir, not a
+    // jj workspace root, so it fails condition 1 without shelling out to jj.
     assert!(matches!(
         forest.remove(ws.id, false).unwrap_err(),
         Error::UnsafeToRemove(_)
