@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -262,15 +263,18 @@ impl Forest {
 
     /// Soft-delete a workstream: keep the document but mark it `Deleted`, then discard
     /// the workstream kind's on-disk materialization (a `Basic` workstream's checkout).
-    /// Refuses with [`Error::UnsafeToRemove`] unless the workstream is safe to remove —
-    /// currently never (see `is_safe_to_remove`) — or `force` overrides the check.
+    /// Refuses with [`Error::UnsafeToRemove`] unless the workstream is safe to remove
+    /// (for a `Basic` workstream: its checkout is a jj workspace root and all non-empty
+    /// revs are already on the remote trunk — see `is_safe_to_remove`), or `force`
+    /// overrides the check. An operational VCS failure (jj missing/erroring) surfaces as
+    /// [`Error::Vcs`] on the non-`force` path; `--force` skips the check entirely.
     ///
     /// Unlike a hard delete (impossible under the add-wins membership union, see
     /// `DESIGN.md` §2.1), the document is retained so the tombstone merges under sync —
     /// this is a stronger sibling of [`Forest::archive`] that also discards the checkout.
     pub fn remove(&self, id: WorkstreamId, force: bool) -> Result<()> {
         let ws = self.get(id)?; // NotFound if absent
-        if !force && !is_safe_to_remove(&ws) {
+        if !force && !is_safe_to_remove(&ws)? {
             return Err(Error::UnsafeToRemove(id));
         }
 
@@ -666,13 +670,108 @@ fn precheck_new_mode(mode: &NewCheckoutMode, working_copies_dir: &Path) -> Resul
     }
 }
 
+/// The trunk bookmark whose remote copy defines "already pushed" for the removal
+/// safety check.
+const TRUNK_BOOKMARK: &str = "main";
+
+/// Remotes to look for the trunk on, in preference order. Provisioning clones with
+/// `jj git clone --colocate` (jj's default remote name is `origin`), so `origin` is
+/// the common case; `github` covers checkouts made outside silverwood. Kept in
+/// lockstep with the clone remote name in `provider.rs`.
+const SAFETY_REMOTES: [&str; 2] = ["origin", "github"];
+
 /// Whether a workstream is safe to remove without `--force`.
 ///
-/// STUB: always `false` for now — nothing is removable without `--force`. A real
-/// check would refuse while there is in-flight work: unmerged changes in the
-/// checkout, live or locked agent sessions, or state not yet synced to peers.
-fn is_safe_to_remove(_ws: &Workstream) -> bool {
-    false
+/// For a `Basic` workstream this runs the "all jj revs are on the remote trunk"
+/// check (see [`all_jj_revs_are_in_remote_github`]): only a confirmed pass returns
+/// `Ok(true)`. `Ok(false)` is a definite "not safe" (→ [`Error::UnsafeToRemove`]);
+/// an operational VCS failure surfaces as `Err`.
+fn is_safe_to_remove(ws: &Workstream) -> Result<bool> {
+    match &ws.body.kind {
+        WorkstreamKind::Basic { location, .. } => match &location.within {
+            LocationWithinForest::BasicForest { path } => {
+                all_jj_revs_are_in_remote_github(Path::new(path))
+            }
+        },
+    }
+}
+
+/// True iff `checkout` is a jj workspace root and every non-empty rev in it is an
+/// ancestor-or-equal of the remote trunk bookmark (`main@origin`, else `main@github`)
+/// — i.e. all local work already lives on the remote, so discarding the checkout loses
+/// nothing. Returns `Ok(false)` for a definite "not safe" (not a jj root, no remote
+/// trunk, or unpushed non-empty work) and `Err` for an operational jj failure.
+fn all_jj_revs_are_in_remote_github(checkout: &Path) -> Result<bool> {
+    // Condition 1 — `checkout` must be its own jj workspace root, checked BEFORE any
+    // `jj` runs here: a colocated root has `.jj` at its own root, a mere subdirectory
+    // of an ancestor jj repo does not. Skipping this would let the revsets below run
+    // against the ancestor repo and wrongly report "safe".
+    if !checkout.join(".jj").is_dir() {
+        return Ok(false);
+    }
+
+    // The remote trunk to compare against, or "not safe" if neither remote has it.
+    let Some(trunk) = resolve_remote_trunk(checkout)? else {
+        return Ok(false);
+    };
+
+    // Condition 2 — any non-empty rev not yet an ancestor of the trunk is unpushed
+    // work. No `--ignore-working-copy`: letting `jj log` snapshot the working copy
+    // means uncommitted edits count as a non-empty `@` and are flagged. Empty output
+    // ⇒ nothing outside the trunk ⇒ safe.
+    let revset = format!("~empty() & ~::{trunk}");
+    let out = run_jj(
+        checkout,
+        &["log", "--no-graph", "-T", "commit_id", "-r", &revset],
+    )?;
+    Ok(out.stdout.is_empty())
+}
+
+/// Resolve the remote trunk bookmark to compare against: `main@origin` if it exists,
+/// else `main@github`, else `None`. Probes with `remote_bookmarks(...)`, which yields
+/// an *empty set* (not an error) for an absent bookmark, so absence falls through to
+/// the next remote while a genuine jj failure still surfaces as `Err`.
+fn resolve_remote_trunk(checkout: &Path) -> Result<Option<String>> {
+    for remote in SAFETY_REMOTES {
+        let revset = format!(r#"remote_bookmarks(exact:"{TRUNK_BOOKMARK}", exact:"{remote}")"#);
+        let out = run_jj(
+            checkout,
+            &[
+                "log",
+                "--ignore-working-copy",
+                "--no-graph",
+                "-T",
+                "commit_id",
+                "-r",
+                &revset,
+            ],
+        )?;
+        if !out.stdout.is_empty() {
+            return Ok(Some(format!("{TRUNK_BOOKMARK}@{remote}")));
+        }
+    }
+    Ok(None)
+}
+
+/// Run `jj` in `checkout` and capture its output, mapping a spawn failure or a
+/// non-zero exit to [`Error::Vcs`] (mirrors `provider.rs`'s command pattern, plus
+/// `current_dir`). A successful run may still have empty `stdout`; callers interpret
+/// that as a meaningful, non-error result.
+fn run_jj(checkout: &Path, args: &[&str]) -> Result<Output> {
+    let out = Command::new("jj")
+        .current_dir(checkout)
+        .args(args)
+        .output()
+        .map_err(|e| Error::Vcs(format!("spawning jj: {e}")))?;
+    if !out.status.success() {
+        return Err(Error::Vcs(format!(
+            "`jj {}` exited {}: {}",
+            args.join(" "),
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    Ok(out)
 }
 
 /// Remove a directory tree, treating an already-absent path as success (a

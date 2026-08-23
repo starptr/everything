@@ -397,7 +397,8 @@ enum WorkstreamCommand {
     Archive,
 
     /// Remove the workstream: mark it deleted and delete its checked-out code. Refuses
-    /// unless the workstream is safe to remove (currently: never) — pass `--force`.
+    /// unless it is safe to remove (a `basic` checkout that is a jj workspace root with
+    /// all non-empty revs already on the remote trunk) — pass `--force` to remove anyway.
     Remove {
         /// Remove even if the workstream is not deemed safe to remove.
         #[arg(long)]

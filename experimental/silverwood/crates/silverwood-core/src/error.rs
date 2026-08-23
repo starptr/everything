@@ -41,6 +41,11 @@ pub enum Error {
     #[error("checkout provisioning failed: {0}")]
     Provision(String),
 
+    /// A version-control (jj) query failed while evaluating removal safety — jj was
+    /// missing, failed to spawn, or exited non-zero unexpectedly.
+    #[error("vcs error: {0}")]
+    Vcs(String),
+
     /// No workstream exists with the given id.
     #[error("workstream not found: {0}")]
     NotFound(WorkstreamId),
