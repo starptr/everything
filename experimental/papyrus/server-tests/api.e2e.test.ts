@@ -65,6 +65,22 @@ describe("papyrus routes → silverwood (in-process, skip-mode)", () => {
     expect((cli(["ls"]).json as any[]).length).toBe(1);
   });
 
+  // A checkout-less `local-blank` node: the route creates it with no checkout mode and
+  // skips the basic-only background `checkout` (which would error on a non-basic kind).
+  test("create a local-blank node (no checkout, no background provisioning)", async () => {
+    const { status, body } = await api(
+      "/sessions",
+      jsonInit("POST", { name: "blank", path: ["local-blank"], args: [] }),
+    );
+    expect(status).toBe(200);
+    expect(body.checkoutState).toBe("none");
+
+    const ns = await nodes();
+    expect(ns).toHaveLength(1);
+    // Ground truth: a real local-blank workstream in silverwood.
+    expect(cli(["workstream", body.nodeId, "show"]).json.kind).toBe("local-blank");
+  });
+
   test("edit node: name/color/notes/position round-trip through silverwood", async () => {
     const { body } = await createNode("orig");
     const id = body.nodeId;

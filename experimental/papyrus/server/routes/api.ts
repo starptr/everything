@@ -225,10 +225,17 @@ apiRoutes.post("/sessions", async (c) => {
   // reconcile. No session is attached on create: a fresh workstream starts with zero
   // sessions; the user adds one from the sidebar ("+" / "Start a session"). A provisioning
   // failure surfaces as `basic.failed` on the canvas via reconcile, not here.
+  //
+  // Only a workstream awaiting a checkout needs provisioning — i.e. a `basic` kind created
+  // with `--checkout-extent skip` (`mode.state === "initialized-without-checkout"`). The
+  // `local-*` kinds have no checkout mode and are ready on create, so skip the (basic-only)
+  // `checkout` call, which would otherwise error on their non-basic kind.
   const wsId = ws.id;
-  sw.checkout(wsId).catch((e: any) => {
-    logError(`\x1b[38;5;141m[checkout]\x1b[0m ${wsId}: ${e.message}`);
-  });
+  if (ws.mode?.state === "initialized-without-checkout") {
+    sw.checkout(wsId).catch((e: any) => {
+      logError(`\x1b[38;5;141m[checkout]\x1b[0m ${wsId}: ${e.message}`);
+    });
+  }
 
   return c.json({
     sessionId: ws.id,

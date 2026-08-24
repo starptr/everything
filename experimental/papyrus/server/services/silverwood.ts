@@ -121,20 +121,20 @@ export function create(params: {
   path: string[]; // chosen subcommand names, e.g. ["basic", "apfs-cow"]
   args: string[]; // positional values along that path, in order
 }): Promise<Workstream> {
-  // Register the workstream WITHOUT provisioning (`--checkout-extent skip`): this is
-  // the fast, validating phase — precheck + write the doc — and returns the workstream
-  // in the `initialized-without-checkout` state. It does NOT block on the (slow) clone;
-  // the caller provisions via `checkout()` in the background. So a synchronous
-  // validation/precheck error still throws here (non-zero exit), but an async
-  // provisioning failure does not. `--checkout-extent` is a flag on the `basic` variant,
-  // so it goes right after the variant segment; `path`/`args` come from `new-schema` and
-  // become argv verbatim (no shell) — silverwood is the single validator.
+  // For `basic`, register WITHOUT provisioning (`--checkout-extent skip`): the fast,
+  // validating phase — precheck + write the doc — returning the workstream in the
+  // `initialized-without-checkout` state; the caller provisions via `checkout()` in the
+  // background. `--checkout-extent` is a flag on the `basic` variant ONLY. The `local-*`
+  // kinds have no slow provisioning (they just create/adopt a directory), so they take no
+  // such flag and complete synchronously here. Either way a synchronous validation/precheck
+  // error throws (non-zero exit). `path`/`args` come from `new-schema` and become argv
+  // verbatim (no shell) — silverwood is the single validator.
   const [variant, ...rest] = params.path;
+  const extentFlag = variant === "basic" ? ["--checkout-extent", "skip"] : [];
   return run([
     "new",
     variant,
-    "--checkout-extent",
-    "skip",
+    ...extentFlag,
     ...rest,
     ...params.args,
     "--name",
