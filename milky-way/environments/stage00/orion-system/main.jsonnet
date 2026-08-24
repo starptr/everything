@@ -17,6 +17,7 @@ local qui = import 'milky-way/lib/qui.libsonnet';
 local vpnProxy = import 'milky-way/lib/vpn-proxy.libsonnet';
 local thelounge = import 'milky-way/lib/thelounge.libsonnet';
 local sonarrForSdxarr = import 'milky-way/lib/sonarr.libsonnet';
+local radarrForSdxarr = import 'milky-way/lib/radarr.libsonnet';
 local prowlarr = import 'milky-way/lib/prowlarr.libsonnet';
 local jellyfin = import 'milky-way/lib/jellyfin.libsonnet';
 local seanime = import 'milky-way/lib/seanime.libsonnet';
@@ -285,9 +286,27 @@ local pubkeys = import 'magic/common/public_keys.json';
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
   ),
 
-  // Prowlarr: indexer manager. No media volume -- it pushes indexer configs to Sonarr
-  // (sonarr-for-sdxarr.default.svc.cluster.local:8989, and later Radarr) over ClusterIP DNS. WebUI via
-  // Tailscale L7 ingress; SQLite config on its own iSCSI RWO PVC.
+  // radarr-for-sdxarr: the Radarr instance dedicated to being reconciled by SeaDexArr -- the anime
+  // MOVIE counterpart of sonarr-for-sdxarr (which handles series). Its supported use-case is the
+  // seadexarr wiring below, NOT a general/global Radarr. Monitors/grabs movies, hands torrents to
+  // qbittorrent (qbittorrent.default.svc.cluster.local:8080), then imports completed downloads by
+  // hardlinking them out of /data/downloads/qbittorrent into a library tree
+  // ('/data/library/Animation Movies (Seadexarr)', set as the Radarr root folder via buildarrConfig
+  // below -- the '(Seadexarr)' suffix marks it as this instance's SeaDexArr-managed root) on the
+  // SHARED mdata volume -- same PVC, same /data mount path as qbittorrent, so hardlinks/atomic moves
+  // stay on one filesystem. WebUI via Tailscale L7 ingress; SQLite config on its own iSCSI RWO PVC.
+  // The download-client/indexer links are entered in the UI post-deploy (they need API keys each app
+  // generates on first boot).
+  radarrForSdxarr: radarrForSdxarr.new(
+    apiKey = secrets.radarrForSdxarr.apiKey,
+    tailscaleHostname = "radarr-for-sdxarr",
+    name = "radarr-for-sdxarr",
+    mediaVolumeClaimName = this.mdataPvc.metadata.name,
+  ),
+
+  // Prowlarr: indexer manager. No media volume -- it pushes indexer configs to the *arr apps
+  // (sonarr-for-sdxarr.default.svc.cluster.local:8989 and radarr-for-sdxarr...:7878) over ClusterIP
+  // DNS. WebUI via Tailscale L7 ingress; SQLite config on its own iSCSI RWO PVC.
   prowlarr: prowlarr.new(
     apiKey = secrets.prowlarr.apiKey,
     tailscaleHostname = "prowlarr",
@@ -412,6 +431,7 @@ local pubkeys = import 'magic/common/public_keys.json';
   // also exposes gluetun-ctrl). API keys come from sops.
   local buildarrConfig =
     local sonarrForSdxarrInstanceName = 'sonarr-for-sdxarr';
+    local radarrForSdxarrInstanceName = 'radarr-for-sdxarr';
     local prowlarrOrionSystemInstanceName = 'prowlarr-orion-system';
     local httpUrl(hostname, port) = 'http://%s:%d' % [hostname, port];
     {
@@ -490,6 +510,81 @@ local pubkeys = import 'magic/common/public_keys.json';
           },
         },
       },
+      radarr: {
+        // GLOBAL defaults for all radarr instances (current + future). MUST stay false -- never
+        // clobber download clients (or root folders) added by hand in Radarr's UI. NOTE the shape
+        // DIFFERS from the sonarr block above: buildarr-radarr (0.2.6, bundled in the pinned
+        // callum027/buildarr:0.7.8) NESTS root folders under
+        // media_management.root_folders.{delete_unmanaged, definitions} and has NO
+        // media_management.delete_unmanaged_root_folders field (buildarr-sonarr uses a flat list +
+        // that sibling boolean). Wrong field names render fine in jsonnet but break buildarr's
+        // runtime reconcile.
+        settings: {
+          download_clients: { delete_unmanaged: false },
+          media_management: { root_folders: { delete_unmanaged: false } },
+        },
+        instances: {
+          [radarrForSdxarrInstanceName]: {
+            hostname: utils.domainOfService(this.radarrForSdxarr.service),
+            port: utils.associateObjectsByKey(this.radarrForSdxarr.service.spec.ports, 'name')['webui'].port,
+            protocol: 'http',
+            api_key: secrets.radarrForSdxarr.apiKey,
+            settings: {
+              download_clients: {
+                delete_unmanaged: false,  // also explicit per-instance (belt & suspenders)
+                definitions: {
+                  qBittorrent: {
+                    type: 'qbittorrent',
+                    // buildarr-radarr's qBittorrent client field is `hostname` (buildarr-sonarr uses
+                    // `host`) -- verified against buildarr-radarr 0.2.6 (it remote-maps to qBittorrent's host).
+                    hostname: utils.domainOfService(this.qbittorrent.service),
+                    port: utils.associateObjectsByKey(this.qbittorrent.service.spec.ports, 'name')['webui'].port,
+                    // No username/password: qBittorrent's AuthSubnetWhitelist bypasses auth for
+                    // in-cluster callers (Radarr is in the pod CIDR). See lib/qbittorrent.libsonnet.
+                    category: 'radarr-for-sdxarr',  // qBittorrent category Radarr tags its grabs with
+                  },
+                },
+              },
+              media_management: {
+                // Movie naming / media-management rules, asserted declaratively so they self-heal on
+                // the hourly reconcile instead of being hand-set in the UI. Mirrors the sonarr block's
+                // intent with Radarr's movie tokens/fields.
+                rename_movies: true,
+                replace_illegal_characters: true,
+                // buildarr-radarr 0.2.6 has NO 'smart' colon replacement (only delete/dash/spaceDash/
+                // spaceDashSpace), so Radarr's native "Smart Replace" default can't be expressed here.
+                // 'dash' is the closest filesystem-safe approximation (colon -> '-'). GOTCHA: Radarr 6.x
+                // SHIPS colonReplacementFormat='smart', which buildarr-radarr 0.2.6's bundled API client
+                // can't even DESERIALIZE -- so on a FRESH Radarr config buildarr's from_remote fetch
+                // crashes (ValidationError) before it can set this. One-time bootstrap on a new config
+                // PVC: PUT /api/v3/config/naming/1 with colonReplacementFormat set to any legacy value
+                // ('dash') so buildarr can read it; buildarr then holds it at 'dash' every reconcile.
+                colon_replacement: 'dash',
+                standard_movie_format: '{Movie CleanTitle} ({Release Year}) [{Quality Full}]{[MediaInfo VideoDynamicRangeType]}[{MediaInfo VideoBitDepth}bit]{[MediaInfo VideoCodec]}[{Mediainfo AudioCodec} {Mediainfo AudioChannels}]{MediaInfo AudioLanguages}{-Release Group}',
+                movie_folder_format: '{Movie CleanTitle} ({Release Year}) [imdb-{ImdbId}]',
+                // This root folder is a path INSIDE the Radarr container -- the `mdata` PVC, which
+                // Radarr mounts at /data (matching qbittorrent so hardlinks stay on one fs). Look up
+                // the media mount by name, then assert that mount is /data, so a future mediaMountPath
+                // change (or a renamed mount) fails at evaluation instead of silently leaving this root
+                // folder pointing where Radarr no longer mounts (its API rejects a non-existent path).
+                // The path below stays LITERAL on purpose. NOTE: nested under root_folders per the
+                // buildarr-radarr shape (see the global-settings note above).
+                local mediaMount = utils.associateObjectsByKey(
+                  this.radarrForSdxarr.deployment.spec.template.spec.containers[0].volumeMounts, 'name'
+                )['media'],
+                assert mediaMount.mountPath == '/data' :
+                  'radarr media mount must be at /data for these buildarr root_folders to resolve',
+                root_folders: {
+                  delete_unmanaged: false,  // also explicit per-instance (belt & suspenders)
+                  definitions: [
+                    '/data/library/Animation Movies (Seadexarr)',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
       prowlarr: {
         // GLOBAL default for all prowlarr instances (current + future). MUST stay false -- never
         // clobber apps/indexers added by hand in Prowlarr's UI.
@@ -534,6 +629,33 @@ local pubkeys = import 'magic/common/public_keys.json';
                       // if this instance should ever search indexers on its own.
                       sync_level: 'disabled',
                     },
+                    Radarr: {
+                      type: 'radarr',
+                      // Cross-link by name: Buildarr resolves the Radarr instance above and fills in
+                      // its API key itself. The two URLs are still required explicitly (instance_name
+                      // only links the key): prowlarr_url is how Radarr dials back to Prowlarr for the
+                      // indexer proxy; base_url is how Prowlarr reaches Radarr to push the sync.
+                      instance_name: radarrForSdxarrInstanceName,
+                      prowlarr_url: httpUrl(
+                        utils.domainOfService(this.prowlarr.service),
+                        utils.associateObjectsByKey(this.prowlarr.service.spec.ports, 'name')['webui'].port,
+                      ),
+                      base_url: httpUrl(
+                        utils.domainOfService(this.radarrForSdxarr.service),
+                        utils.associateObjectsByKey(this.radarrForSdxarr.service.spec.ports, 'name')['webui'].port,
+                      ),
+                      // DISABLED on purpose: radarr-for-sdxarr is a SeaDex-only instance, same reasoning
+                      // as the Sonarr app above -- if Prowlarr pushed indexers here, Radarr's RSS/auto-search
+                      // would grab non-SeaDex releases competing with SeaDexArr, and since every quality
+                      // profile has upgradeAllowed=false, whichever release lands first wins forever, so an
+                      // on-its-own grab would permanently block SeaDexArr's curated release from ever
+                      // importing. The app entry is KEPT (not deleted) so Buildarr still owns the
+                      // Prowlarr<->Radarr link; only the indexer sync is turned off. As with Sonarr,
+                      // Buildarr's Prowlarr reconcile is currently broken (an empty-apikey indexer trips
+                      // pydantic), so this was ALSO applied at runtime via the Prowlarr API. Flip to
+                      // 'full_sync' only if this instance should ever search indexers on its own.
+                      sync_level: 'disabled',
+                    },
                   },
                 },
               },
@@ -544,14 +666,16 @@ local pubkeys = import 'magic/common/public_keys.json';
     },
   buildarrConnect: buildarr.new(config = buildarrConfig),
 
-  // SeaDexArr: scheduled daemon (no web UI -> no Service/Ingress) that reads the Sonarr library, picks
-  // SeaDex's "best" release per anime, and adds its torrent straight into qBittorrent under the
-  // sonarr-for-sdxarr category (so Sonarr imports it) tagged `from-seadexarr`. qBittorrent creds are omitted:
-  // its AuthSubnetWhitelist bypasses auth for in-cluster callers (same as buildarr/Sonarr). Radarr
-  // isn't deployed, so only Sonarr + qBittorrent are wired; the scheduled run tolerates the absent
-  // Radarr per-module. Host/port for each app come from its Service (the source of truth) the same way
-  // buildarrConfig does (utils.domainOfService + the webui port looked up by name); API key + Discord
-  // webhook come from sops. config.yml is authoritative -- the app reads it read-only and never rewrites it.
+  // SeaDexArr: scheduled daemon (no web UI -> no Service/Ingress) that reads the Sonarr AND Radarr
+  // libraries, picks SeaDex's "best" release per anime series/movie, and adds its torrent straight
+  // into qBittorrent under the matching *arr category (sonarr-for-sdxarr / radarr-for-sdxarr, so the
+  // owning *arr imports it) tagged `from-seadexarr`. qBittorrent creds are omitted: its
+  // AuthSubnetWhitelist bypasses auth for in-cluster callers (same as buildarr/Sonarr/Radarr). Both
+  // *arr modules are now wired (Radarr manages anime movies, the movie counterpart to Sonarr's
+  // series). Host/port for each app come from its Service (the source of truth) the same way
+  // buildarrConfig does (utils.domainOfService + the webui port looked up by name); API keys +
+  // Discord webhook come from sops. config.yml is authoritative -- the app reads it read-only and
+  // never rewrites it.
   seadexarr: seadexarr.new(
     config = {
       sonarr_url: 'http://%s:%d' % [
@@ -559,6 +683,11 @@ local pubkeys = import 'magic/common/public_keys.json';
         utils.associateObjectsByKey(this.sonarrForSdxarr.service.spec.ports, 'name')['webui'].port,
       ],
       sonarr_api_key: secrets.sonarrForSdxarr.apiKey,
+      radarr_url: 'http://%s:%d' % [
+        utils.domainOfService(this.radarrForSdxarr.service),
+        utils.associateObjectsByKey(this.radarrForSdxarr.service.spec.ports, 'name')['webui'].port,
+      ],
+      radarr_api_key: secrets.radarrForSdxarr.apiKey,
       qbit_info: {
         host: 'http://%s:%d' % [
           utils.domainOfService(this.qbittorrent.service),
@@ -568,6 +697,7 @@ local pubkeys = import 'magic/common/public_keys.json';
         password: '',
       },
       sonarr_torrent_category: 'sonarr-for-sdxarr',   // matches Sonarr's qBittorrent download-client category (buildarr)
+      radarr_torrent_category: 'radarr-for-sdxarr',   // matches Radarr's qBittorrent download-client category (buildarr)
       // qBittorrent tags on grabs: `from-seadexarr` (provenance) + `on-finish-hardlink-to-shoko-import`
       // (marks SeaDexArr grabs Shoko-bound). Comma-separated, no space -- qBittorrent splits on comma.
       torrent_tags: 'from-seadexarr,on-finish-hardlink-to-shoko-import',

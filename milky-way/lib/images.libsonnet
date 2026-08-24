@@ -60,6 +60,13 @@ local images = {
       fullyQualifiedRepository: "lscr.io/linuxserver/sonarr",
       defaultDigest: { hash: "sha256:02bc962946fef994e67a38152446df25c10a52f8583aefeeb6467f9dd44cab99", tagHint: "4.0.17.2952-ls314" },
     },
+    // Radarr, Sonarr's movie sibling (LinuxServer.io). Same multi-arch INDEX-digest convention as
+    // the sonarr/prowlarr pins above; tagHint is the readable LinuxServer version. Re-resolve with
+    // `docker buildx imagetools inspect lscr.io/linuxserver/radarr:latest`.
+    radarr: {
+      fullyQualifiedRepository: "lscr.io/linuxserver/radarr",
+      defaultDigest: { hash: "sha256:119aaa4a4f7349bcd2a136c5373a0d7925b5479915c7dfe0c0ad352db2a6d438", tagHint: "6.3.0.10514-ls314" },
+    },
     prowlarr: {
       fullyQualifiedRepository: "lscr.io/linuxserver/prowlarr",
       defaultDigest: { hash: "sha256:7ab5769616c1929247c8e7944453253f0b777fac2724c3bc9976ae2ff4023257", tagHint: "2.4.0.5397-ls150" },
