@@ -78,6 +78,45 @@ fn new_schema_reflects_the_new_command_tree() {
     assert_eq!(sole_arg_value_name(apfs), "ABSOLUTE_PATH");
 }
 
+/// `session-schema` is pure metadata (no forest), reflecting the `session create`
+/// subcommands so a frontend renders the "new session" menu without hardcoding the kinds.
+#[test]
+fn session_schema_reflects_the_session_create_subcommands() {
+    let dir = forest();
+    let kinds = json(&dir, &["--json", "session-schema"]);
+    let kinds = kinds.as_array().expect("session-schema is an array");
+    let kind = |tag: &str| {
+        kinds
+            .iter()
+            .find(|k| k["kind"] == tag)
+            .unwrap_or_else(|| panic!("missing kind {tag}: {kinds:?}"))
+    };
+
+    // The kinds papyrus supplies id/session_id/name for; only extra options are surfaced.
+    // Three kinds take no options; the noninteractive kind takes a required bool.
+    for tag in ["claude-code", "plain-shell", "disk-space"] {
+        assert!(
+            kind(tag)["options"].as_array().unwrap().is_empty(),
+            "{tag} should have no options"
+        );
+    }
+    let opts = kind("claude-code-noninteractive")["options"]
+        .as_array()
+        .expect("options array");
+    assert_eq!(opts.len(), 1);
+    assert_eq!(opts[0]["long"], "run-direnv-exec");
+    assert_eq!(opts[0]["required"], true);
+    assert_eq!(opts[0]["value_kind"], "bool");
+    assert!(opts[0]["help"].as_str().is_some_and(|h| !h.is_empty()));
+
+    // No kind exposes `--name` — papyrus always supplies it.
+    for k in kinds {
+        for o in k["options"].as_array().unwrap() {
+            assert_ne!(o["long"], "name", "--name must be excluded");
+        }
+    }
+}
+
 #[test]
 #[ignore = "network + jj; run via `cargo test -- --ignored`"]
 fn new_creates_a_ready_colocated_checkout() {

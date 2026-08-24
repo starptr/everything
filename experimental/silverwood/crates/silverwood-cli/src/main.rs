@@ -88,6 +88,11 @@ enum Command {
     /// fixed shape. Human output enumerates each leaf invocation.
     NewSchema,
 
+    /// Print the `session create` subcommands (each session kind, its description, and
+    /// its options beyond `--name`) as JSON, so a frontend renders the "new session" menu
+    /// without hardcoding the kind list. Human output lists one line per kind.
+    SessionSchema,
+
     /// Run a session: exec its shell in a checkout, replacing this process (so on success
     /// it never returns; the caller's PTY then tracks the session directly). `from-id`
     /// looks up a durable session and runs it the way it records itself; the per-kind
@@ -521,6 +526,29 @@ struct CommandNode {
     subcommands: Vec<CommandNode>,
 }
 
+/// A user-relevant option on a `session create` subcommand (e.g. `--run-direnv-exec`).
+/// `--name` is excluded — papyrus always supplies it.
+#[derive(serde::Serialize)]
+struct SessionOptionInfo {
+    /// Long flag without `--`, e.g. "run-direnv-exec".
+    long: String,
+    /// One-line help for the option.
+    help: String,
+    /// Whether the option must be supplied.
+    required: bool,
+    /// "bool" for a true/false Set flag, else "string".
+    value_kind: String,
+}
+
+/// One `session create` subcommand: its kind tag (kebab, = the `SessionKind` tag), its
+/// description, and the options a caller must supply beyond `--name`. Flat — no nesting.
+#[derive(serde::Serialize)]
+struct SessionKindInfo {
+    kind: String,
+    description: String,
+    options: Vec<SessionOptionInfo>,
+}
+
 /// Reflect the whole `new` subcommand tree so the clap definitions stay the single source
 /// of truth for how a workstream is created — a frontend renders inputs from this without
 /// hardcoding any variant/mode/seed shape.
@@ -548,6 +576,42 @@ fn reflect_command(cmd: &clap::Command) -> CommandNode {
             })
             .collect(),
         subcommands: cmd.get_subcommands().map(reflect_command).collect(),
+    }
+}
+
+/// Reflect the `session create` subcommands so clap stays the single source of truth for
+/// which session kinds exist and what each needs. The `id`/`session_id` positionals are
+/// caller-minted (papyrus supplies them), and `--name` is papyrus-supplied, so neither is
+/// surfaced — only the kind tag, description, and any remaining options.
+fn session_schema() -> Vec<SessionKindInfo> {
+    SessionCreate::augment_subcommands(clap::Command::new("create"))
+        .get_subcommands()
+        .map(|sc| SessionKindInfo {
+            kind: sc.get_name().to_string(),
+            description: sc.get_about().map(|a| a.to_string()).unwrap_or_default(),
+            options: sc
+                .get_opts()
+                .filter(|o| o.get_long() != Some("name"))
+                .map(reflect_option)
+                .collect(),
+        })
+        .collect()
+}
+
+/// Reflect one clap option. A bool `Set` flag exposes `true`/`false` as its value parser's
+/// possible values; anything else is a free string.
+fn reflect_option(opt: &clap::Arg) -> SessionOptionInfo {
+    let pvs: Vec<String> = opt
+        .get_possible_values()
+        .iter()
+        .map(|v| v.get_name().to_string())
+        .collect();
+    let is_bool = pvs.iter().any(|v| v == "true") && pvs.iter().any(|v| v == "false");
+    SessionOptionInfo {
+        long: opt.get_long().unwrap_or_default().to_string(),
+        help: opt.get_help().map(|h| h.to_string()).unwrap_or_default(),
+        required: opt.is_required_set(),
+        value_kind: if is_bool { "bool" } else { "string" }.to_string(),
     }
 }
 
@@ -579,6 +643,17 @@ fn print_new_leaves(
     path.pop();
 }
 
+/// Human output for `session-schema`: one line per kind, then its options indented.
+fn print_session_kinds(kinds: &[SessionKindInfo]) {
+    for k in kinds {
+        println!("{}  {}", k.kind, k.description);
+        for o in &k.options {
+            let req = if o.required { " (required)" } else { "" };
+            println!("  --{} <{}>{}  {}", o.long, o.value_kind, req, o.help);
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli) {
@@ -599,18 +674,26 @@ fn run(cli: Cli) -> CliResult {
     };
     let json = cli.json;
 
-    // `new-schema` is pure metadata — handle it before opening (and thereby
-    // creating) the forest, so it never touches `$HOME/.silverwood`.
-    if let Command::NewSchema = cli.command {
-        let schema = new_schema();
-        emit(json, &schema, || {
-            let mut lines = Vec::new();
-            print_new_leaves(&schema, &mut Vec::new(), &mut Vec::new(), &mut lines);
-            for line in &lines {
-                println!("{line}");
-            }
-        });
-        return Ok(());
+    // `new-schema`/`session-schema` are pure metadata — handle them before opening (and
+    // thereby creating) the forest, so they never touch `$HOME/.silverwood`.
+    match &cli.command {
+        Command::NewSchema => {
+            let schema = new_schema();
+            emit(json, &schema, || {
+                let mut lines = Vec::new();
+                print_new_leaves(&schema, &mut Vec::new(), &mut Vec::new(), &mut lines);
+                for line in &lines {
+                    println!("{line}");
+                }
+            });
+            return Ok(());
+        }
+        Command::SessionSchema => {
+            let schema = session_schema();
+            emit(json, &schema, || print_session_kinds(&schema));
+            return Ok(());
+        }
+        _ => {}
     }
 
     let forest = Forest::open(&root)?;
@@ -651,6 +734,9 @@ fn run(cli: Cli) -> CliResult {
 
         // Handled above, before the forest is opened.
         Command::NewSchema => unreachable!("new-schema is handled before Forest::open"),
+        Command::SessionSchema => {
+            unreachable!("session-schema is handled before Forest::open")
+        }
     }
 }
 
