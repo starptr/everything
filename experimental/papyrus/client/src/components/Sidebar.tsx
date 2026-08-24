@@ -26,9 +26,14 @@ import { useStore, SessionTab } from "../stores/useStore";
 import { AgentIcon } from "./AgentIcon";
 import { type PendingOptimism, shouldDropOptimism, mergePendingTabs } from "./sessionOptimism";
 import { Terminal } from "./Terminal";
-import { NewSessionMenu } from "./NewSessionMenu";
+import { NewSessionMenu, type SessionPick } from "./NewSessionMenu";
 import { useResizablePane } from "./useResizablePane";
 import { workstreamStateLabel } from "../workstreamState";
+
+// An ephemeral (non-agent) session kind — a shell or disk-space monitor. These reopen fresh
+// (no conversation to resume), carry no advisory lock, and are directly removable, unlike the
+// resumable claude-code* kinds. Mirrors the server's `kindLocks` split.
+const isEphemeralKind = (kind?: string) => !kind?.startsWith("claude-code");
 
 const presetColors = [
   "#F97316", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#FBBF24", "#14B8A6"
@@ -60,7 +65,6 @@ export function Sidebar() {
     updateSession,
     updateNode,
     nodes,
-    agents,
   } = useStore();
 
   const session = selectedNodeId ? sessions.get(selectedNodeId) : null;
@@ -215,8 +219,10 @@ export function Sidebar() {
     }
   };
 
-  // Start a fresh session of `variant` ("claude-code" | "plain-shell") in this workstream.
-  const startSession = async (variant: string) => {
+  // Start a fresh session of the picked kind (+ its option values) in this workstream. The
+  // server records the durable silverwood session, then returns the id + the kind/name it
+  // used, so the optimistic tab is correct for every kind (not just shell vs claude).
+  const startSession = async (pick: SessionPick) => {
     setMenuAnchor(null);
     if (!selectedNodeId) return;
     setBusy(true);
@@ -225,18 +231,17 @@ export function Sidebar() {
       const res = await fetch(`/api/sessions/${selectedNodeId}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variant }),
+        body: JSON.stringify({ kind: pick.kind, options: pick.options }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setConnectError(data.error || "Failed to start session");
         return;
       }
-      const shell = variant === "plain-shell";
       setPending((p) => ({
         ...p,
         [data.sessionId]: {
-          ov: { connected: true, ...(shell ? { name: "shell", kind: "plain-shell" } : {}) },
+          ov: { connected: true, kind: data.kind, name: data.name },
           seq: reconcileSeqRef.current,
         },
       }));
@@ -530,14 +535,14 @@ export function Sidebar() {
                   >
                     <Edit3 className="w-3 h-3" />
                   </button>
-                  {/* Close: only plain shells (a shell has no doctor-based removal). */}
-                  {t.kind === "plain-shell" && (
+                  {/* Close: ephemeral kinds only (a claude session has no doctor-based removal). */}
+                  {isEphemeralKind(t.kind) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         removeSession(t);
                       }}
-                      title="Close shell"
+                      title="Close session"
                       className="flex-shrink-0 rounded p-0.5 text-content-faint hover:text-content transition-colors"
                     >
                       <X className="w-3 h-3" />
@@ -647,8 +652,8 @@ export function Sidebar() {
                   <div>
                     <p className="text-sm text-content font-medium">{tabLabel(activeTab)}</p>
                     <p className="text-xs text-content-subtle mt-0.5">
-                      {activeTab.kind === "plain-shell"
-                        ? "Disconnected — connecting opens a new shell in the checkout."
+                      {isEphemeralKind(activeTab.kind)
+                        ? "Disconnected — connecting reopens this session fresh in the checkout (no state is resumed)."
                         : "Disconnected — connecting resumes this Claude Code conversation (or starts it fresh if none was saved)."}
                     </p>
                   </div>
@@ -677,15 +682,15 @@ export function Sidebar() {
                       Connect
                     </button>
                   )}
-                  {activeTab.kind === "plain-shell" && (
+                  {isEphemeralKind(activeTab.kind) && (
                     <button
                       onClick={() => removeSession(activeTab)}
                       disabled={busy}
-                      title="Remove this shell (deletes its silverwood record)"
+                      title="Remove this session (deletes its silverwood record)"
                       className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md border border-border text-content-muted text-sm font-medium hover:text-content hover:bg-surface-active disabled:opacity-50 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Close shell
+                      Close session
                     </button>
                   )}
                   {connectError && <p className="text-xs text-red-400">{connectError}</p>}
@@ -729,7 +734,6 @@ export function Sidebar() {
           <NewSessionMenu
             open={menuAnchor !== null}
             anchor={menuAnchor}
-            agents={agents}
             onClose={() => setMenuAnchor(null)}
             onPick={startSession}
           />

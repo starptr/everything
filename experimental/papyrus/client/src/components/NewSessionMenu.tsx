@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Terminal,
@@ -11,7 +11,11 @@ import {
   Brain,
   Wand2,
 } from "lucide-react";
-import { Agent } from "../stores/useStore";
+import {
+  FALLBACK_SESSION_SCHEMA,
+  schemaToRows,
+  type SessionKindInfo,
+} from "./sessionSchema";
 
 // Icon-string → component, matching the canvas node's map (AgentNode/index.tsx).
 const iconMap: Record<string, any> = {
@@ -26,32 +30,40 @@ const iconMap: Record<string, any> = {
   terminal: Terminal,
 };
 
-// One row in the picker. `variant` is the string POSTed to the server; the agent
-// variant(s) map to the durable "claude-code" session, "plain-shell" to a durable
-// `silverwood spawn` login shell.
-interface VariantItem {
-  variant: string;
-  label: string;
-  description: string;
-  icon: string;
-  color?: string;
+// What a picked row creates: the silverwood kind tag + its option values (POSTed verbatim).
+export interface SessionPick {
+  kind: string;
+  options: Record<string, string>;
 }
 
 interface NewSessionMenuProps {
   open: boolean;
   anchor: DOMRect | null;
-  agents: Agent[];
   onClose: () => void;
-  onPick: (variant: string) => void;
+  onPick: (pick: SessionPick) => void;
 }
 
 const MENU_WIDTH = 244;
 
-// An anchored dropdown that opens under the "+" button, letting the user pick the
-// session variant to start. Rows are the available agent session kinds (from
-// `agents`) plus a static Plain shell. Rendered in a body portal so it escapes the
-// sidebar's overflow; closes on outside-click or Escape.
-export function NewSessionMenu({ open, anchor, agents, onClose, onPick }: NewSessionMenuProps) {
+// An anchored dropdown that opens under the "+" button, letting the user pick the session
+// to start. Rows are generated from `silverwood session-schema` (GET /api/session-schema)
+// so the kind list lives only in silverwood — a required bool option (e.g. run-direnv-exec)
+// becomes two rows. Rendered in a body portal so it escapes the sidebar's overflow; closes
+// on outside-click or Escape.
+export function NewSessionMenu({ open, anchor, onClose, onPick }: NewSessionMenuProps) {
+  const [schema, setSchema] = useState<SessionKindInfo[]>(FALLBACK_SESSION_SCHEMA);
+
+  useEffect(() => {
+    if (!open) return;
+    // Refresh from silverwood each open (cheap); keep the fallback if it fails.
+    fetch("/api/session-schema")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) setSchema(data);
+      })
+      .catch(() => {});
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -70,25 +82,9 @@ export function NewSessionMenu({ open, anchor, agents, onClose, onPick }: NewSes
     };
   }, [open, onClose]);
 
-  if (!open || !anchor) return null;
+  const rows = useMemo(() => schemaToRows(schema), [schema]);
 
-  const items: VariantItem[] = [
-    // Today silverwood has exactly one create-variant (claude-code); each agent
-    // maps to it. Add a new agent/kind here to grow the picker.
-    ...agents.map((a) => ({
-      variant: "claude-code",
-      label: a.name,
-      description: a.description,
-      icon: a.icon,
-      color: a.color,
-    })),
-    {
-      variant: "plain-shell",
-      label: "Plain shell",
-      description: "Login shell (silverwood spawn)",
-      icon: "terminal",
-    },
-  ];
+  if (!open || !anchor) return null;
 
   const left = Math.max(8, Math.min(anchor.left, window.innerWidth - MENU_WIDTH - 8));
   const top = anchor.bottom + 4;
@@ -98,24 +94,30 @@ export function NewSessionMenu({ open, anchor, agents, onClose, onPick }: NewSes
       className="new-session-menu fixed z-[9999] rounded-lg border border-popover-border bg-popover shadow-xl py-1"
       style={{ left, top, width: MENU_WIDTH }}
     >
-      {items.map((item, i) => {
-        const Icon = iconMap[item.icon] || Cpu;
+      {rows.map((row) => {
+        const Icon = iconMap[row.icon] || Cpu;
         return (
           <button
-            key={`${item.variant}:${i}`}
+            key={row.key}
+            disabled={row.disabled}
             onClick={() => {
-              onPick(item.variant);
+              if (row.disabled) return;
+              onPick({ kind: row.kind, options: row.options });
               onClose();
             }}
-            className="w-full px-3 py-2 text-left hover:bg-surface-active flex items-start gap-2.5 transition-colors"
+            className={`w-full px-3 py-2 text-left flex items-start gap-2.5 transition-colors ${
+              row.disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-surface-active"
+            }`}
           >
             <Icon
               className="w-4 h-4 flex-shrink-0 mt-0.5"
-              style={{ color: item.color || "rgb(var(--color-content-muted))" }}
+              style={{ color: row.color || "rgb(var(--color-content-muted))" }}
             />
             <div className="min-w-0">
-              <div className="text-xs text-content">{item.label}</div>
-              <div className="text-[10px] text-content-subtle truncate">{item.description}</div>
+              <div className="text-xs text-content break-words">{row.label}</div>
+              <div className="text-[10px] text-content-subtle whitespace-normal break-words">
+                {row.description}
+              </div>
             </div>
           </button>
         );

@@ -1,62 +1,65 @@
-// UNIT test (mine to maintain — see ../../../TESTING.md): the variant picker lists
-// one row per agent plus a Plain shell, and each row picks its variant then closes.
-import { describe, test, expect, mock } from "bun:test";
+// UNIT test (mine to maintain — see ../../../TESTING.md): the menu renders one row per
+// session kind from silverwood's schema (a required bool option becomes two rows), and each
+// row picks its { kind, options } then closes. The /api/session-schema fetch is stubbed to
+// reject, so the menu falls back to FALLBACK_SESSION_SCHEMA (deterministic, no network).
+import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { NewSessionMenu } from "./NewSessionMenu";
-import type { Agent } from "../stores/useStore";
 
-const agents: Agent[] = [
-  {
-    id: "claude",
-    name: "Claude Code",
-    command: "claude",
-    description: "Anthropic's official CLI for Claude",
-    color: "#F97316",
-    icon: "sparkles",
-  },
-];
-
-// A minimal anchor rect; only bottom/left are read for positioning.
 const anchor = { bottom: 100, left: 40 } as DOMRect;
 
+let originalFetch: typeof globalThis.fetch;
+beforeEach(() => {
+  originalFetch = globalThis.fetch;
+  globalThis.fetch = mock(() => Promise.reject(new Error("no network in test"))) as any;
+});
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
 function renderMenu(open = true) {
-  const onPick = mock(() => {});
+  const onPick = mock((_: { kind: string; options: Record<string, string> }) => {});
   const onClose = mock(() => {});
-  render(
-    <NewSessionMenu
-      open={open}
-      anchor={anchor}
-      agents={agents}
-      onClose={onClose}
-      onPick={onPick}
-    />,
-  );
+  render(<NewSessionMenu open={open} anchor={anchor} onClose={onClose} onPick={onPick} />);
   return { onPick, onClose };
 }
 
 describe("NewSessionMenu", () => {
-  test("renders a row per agent plus Plain shell", () => {
+  test("renders a row per fallback kind, titled by the silverwood tag (noninteractive → two rows)", () => {
     renderMenu();
-    expect(screen.getByText("Claude Code")).not.toBeNull();
-    expect(screen.getByText("Plain shell")).not.toBeNull();
+    expect(screen.getByText("claude-code")).not.toBeNull();
+    expect(screen.getByText("plain-shell")).not.toBeNull();
+    expect(screen.getByText("disk-space")).not.toBeNull();
+    // The noninteractive kind's required bool option becomes two rows, differentiated by flag.
+    expect(screen.getByText(/run-direnv-exec=true/)).not.toBeNull();
+    expect(screen.getByText(/run-direnv-exec=false/)).not.toBeNull();
   });
 
   test("renders nothing when closed", () => {
     renderMenu(false);
-    expect(screen.queryByText("Plain shell")).toBeNull();
+    expect(screen.queryByText("plain-shell")).toBeNull();
   });
 
-  test("picking the agent row fires onPick('claude-code') then onClose", () => {
+  test("picking claude-code fires onPick({ kind: 'claude-code', options: {} }) then onClose", () => {
     const { onPick, onClose } = renderMenu();
-    fireEvent.click(screen.getByText("Claude Code"));
-    expect(onPick).toHaveBeenCalledWith("claude-code");
+    fireEvent.click(screen.getByText("claude-code"));
+    expect(onPick).toHaveBeenCalledWith({ kind: "claude-code", options: {} });
     expect(onClose).toHaveBeenCalled();
   });
 
-  test("picking Plain shell fires onPick('plain-shell') then onClose", () => {
+  test("picking plain-shell fires onPick({ kind: 'plain-shell', options: {} }) then onClose", () => {
     const { onPick, onClose } = renderMenu();
-    fireEvent.click(screen.getByText("Plain shell"));
-    expect(onPick).toHaveBeenCalledWith("plain-shell");
+    fireEvent.click(screen.getByText("plain-shell"));
+    expect(onPick).toHaveBeenCalledWith({ kind: "plain-shell", options: {} });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  test("picking a noninteractive row carries its run-direnv-exec option value", () => {
+    const { onPick } = renderMenu();
+    fireEvent.click(screen.getByText(/run-direnv-exec=true/));
+    expect(onPick).toHaveBeenCalledWith({
+      kind: "claude-code-noninteractive",
+      options: { "run-direnv-exec": "true" },
+    });
   });
 });
