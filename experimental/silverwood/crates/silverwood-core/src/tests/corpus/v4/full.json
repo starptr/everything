@@ -1,0 +1,30 @@
+{
+  "name": "full",
+  "status": "active",
+  "created_at": "1970-01-01T00:00:00Z",
+  "kind": "basic",
+  "mode": {
+    "checkout_mode": "jj-colocated",
+    "initial_source": "https://example.com/x.git",
+    "state": "ready"
+  },
+  "location": {
+    "forest_id": "00000000-0000-0000-0000-000000000000",
+    "within": {
+      "forest_kind": "basic-forest",
+      "path": "/tmp/a"
+    }
+  },
+  "kv": {
+    "app.andref.silverwood.session": {
+      "sid-1": "{\"kind\":\"claude-code\",\"name\":\"one\",\"created_at\":\"1970-01-01T00:00:00Z\"}",
+      "sid-2": "{\"kind\":\"claude-code\",\"name\":\"two\",\"created_at\":\"1970-01-01T00:00:00Z\"}"
+    },
+    "ns1": {
+      "a": "1"
+    },
+    "ns2": {
+      "b": "\"two\""
+    }
+  }
+}

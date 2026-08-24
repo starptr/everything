@@ -9,6 +9,18 @@ use crate::source::{AbsolutePath, HttpsGitUrl};
 /// The `kind` discriminant stored on a basic workstream.
 pub(crate) const BASIC_KIND: &str = "basic";
 
+/// The `kind` discriminant for a workstream adopting an existing, externally-managed
+/// path (see [`WorkstreamKind::LocalUnmanagedExistingPath`]).
+pub(crate) const LOCAL_UNMANAGED_EXISTING_PATH_KIND: &str = "local-unmanaged-existing-path";
+
+/// The `kind` discriminant for an ephemeral `/tmp` workstream
+/// (see [`WorkstreamKind::LocalTmp`]).
+pub(crate) const LOCAL_TMP_KIND: &str = "local-tmp";
+
+/// The `kind` discriminant for an empty in-forest workstream with no code checkout
+/// (see [`WorkstreamKind::LocalBlank`]).
+pub(crate) const LOCAL_BLANK_KIND: &str = "local-blank";
+
 /// The core-reserved KV namespace holding a workstream's agent sessions.
 /// Sessions are a special case of namespaced KV (see `DESIGN.md` §5): frontends
 /// must not write here directly — they go through the session API (`Forest::`
@@ -330,8 +342,10 @@ pub struct DoctorReport {
     pub conversation_exists: Option<bool>,
 }
 
-/// The kind of a workstream — an open, tagged enum. Today the only kind is
-/// [`WorkstreamKind::Basic`]; future kinds may hold different data.
+/// The kind of a workstream — an open, tagged enum. [`WorkstreamKind::Basic`]
+/// manages a materialized code-checkout; the `Local*` kinds instead track a plain
+/// directory (adopted, ephemeral, or blank) with no checkout mode. Future kinds may
+/// hold different data.
 ///
 /// Agent sessions are **not** part of the kind: they are stored as namespaced KV
 /// under the core-reserved `app.andref.silverwood.session` namespace and are
@@ -354,6 +368,27 @@ pub enum WorkstreamKind {
         /// Where the checkout physically lives.
         location: Location,
     },
+    /// An existing absolute path adopted as a workstream. silverwood never created the
+    /// directory and never deletes it — removal is unsupported (even `--force`), because
+    /// the path may be managed by a lifecycle outside silverwood. Has no checkout mode.
+    LocalUnmanagedExistingPath {
+        /// The adopted directory (an absolute path on the forest's filesystem).
+        location: Location,
+    },
+    /// An ephemeral, silverwood-created directory under `/tmp` (`/tmp/<uuidv7_…>`), with
+    /// no code checkout. Removal usually needs `--force`, except once its directory is
+    /// already gone (e.g. `/tmp` cleared on reboot). Has no checkout mode.
+    LocalTmp {
+        /// The created `/tmp` directory.
+        location: Location,
+    },
+    /// A silverwood-created empty directory under the forest's `working-copies/<uuid>`,
+    /// like `Basic` but with **no** code checkout provisioned. Removal usually needs
+    /// `--force`, except when the directory is still empty. Has no checkout mode.
+    LocalBlank {
+        /// The created working-copies directory.
+        location: Location,
+    },
 }
 
 impl WorkstreamKind {
@@ -361,20 +396,26 @@ impl WorkstreamKind {
     pub fn tag(&self) -> &'static str {
         match self {
             WorkstreamKind::Basic { .. } => BASIC_KIND,
+            WorkstreamKind::LocalUnmanagedExistingPath { .. } => LOCAL_UNMANAGED_EXISTING_PATH_KIND,
+            WorkstreamKind::LocalTmp { .. } => LOCAL_TMP_KIND,
+            WorkstreamKind::LocalBlank { .. } => LOCAL_BLANK_KIND,
         }
     }
 
     /// The kind-qualified state label, e.g. `basic.pending`.
     ///
     /// The `.<state>` suffix exists only for kinds that carry a [`CheckoutState`]
-    /// (today: `Basic`). A future kind that does not use `CheckoutState` renders just
-    /// its `tag()` (e.g. `basic-external`), or its own state type. The exhaustive match
-    /// forces each new kind to decide. Uses the stored lowercase/kebab forms.
+    /// (today: `Basic`). A kind that does not use `CheckoutState` — the `Local*` kinds —
+    /// renders just its `tag()` (e.g. `local-tmp`). The exhaustive match forces each new
+    /// kind to decide. Uses the stored lowercase/kebab forms.
     pub fn state_label(&self) -> String {
         match self {
             WorkstreamKind::Basic { mode, .. } => {
                 format!("{}.{}", self.tag(), mode.state().as_str())
             }
+            WorkstreamKind::LocalUnmanagedExistingPath { .. }
+            | WorkstreamKind::LocalTmp { .. }
+            | WorkstreamKind::LocalBlank { .. } => self.tag().to_string(),
         }
     }
 }
@@ -401,16 +442,24 @@ pub struct WorkstreamBody {
 
 impl WorkstreamBody {
     /// The checkout mode (with its seed + state), if this workstream's kind has one.
+    /// Only `Basic` has a checkout mode; the `Local*` kinds return `None`.
     pub fn mode(&self) -> Option<&CheckoutMode> {
         match &self.kind {
             WorkstreamKind::Basic { mode, .. } => Some(mode),
+            WorkstreamKind::LocalUnmanagedExistingPath { .. }
+            | WorkstreamKind::LocalTmp { .. }
+            | WorkstreamKind::LocalBlank { .. } => None,
         }
     }
 
-    /// The checkout location, if this workstream's kind has one.
+    /// The workstream's directory, if its kind has one. Every kind today records a
+    /// single location (a directory), so this is `Some` for all of them.
     pub fn location(&self) -> Option<&Location> {
         match &self.kind {
-            WorkstreamKind::Basic { location, .. } => Some(location),
+            WorkstreamKind::Basic { location, .. }
+            | WorkstreamKind::LocalUnmanagedExistingPath { location }
+            | WorkstreamKind::LocalTmp { location }
+            | WorkstreamKind::LocalBlank { location } => Some(location),
         }
     }
 
@@ -478,6 +527,17 @@ pub enum NewKind {
         /// Whether to provision the checkout now or defer it (see [`CheckoutExtent`]).
         checkout_extent: CheckoutExtent,
     },
+    /// Adopt an existing directory (validated absolute + on the forest's filesystem).
+    /// silverwood does not create or ever delete it (see
+    /// [`WorkstreamKind::LocalUnmanagedExistingPath`]).
+    LocalUnmanagedExistingPath {
+        /// The existing directory to adopt.
+        path: AbsolutePath,
+    },
+    /// Create a fresh ephemeral `/tmp/<uuidv7_…>` directory (no checkout).
+    LocalTmp,
+    /// Create a fresh empty `working-copies/<uuid>` directory (no checkout).
+    LocalBlank,
 }
 
 /// Whether creation should provision the checkout synchronously or only register the
@@ -592,20 +652,28 @@ mod tests {
     /// the document stores the tag via `tag()` and reads it back as the `kind`.
     #[test]
     fn kind_tag_matches_serde() {
-        let kind = WorkstreamKind::Basic {
-            mode: CheckoutMode::JjColocated {
-                initial_source: "https://example.com/x.git".into(),
-                state: CheckoutState::Pending,
-            },
-            location: Location {
-                forest_id: ForestId::generate(),
-                within: LocationWithinForest::BasicForest {
-                    path: "/tmp/x".into(),
-                },
+        let loc = || Location {
+            forest_id: ForestId::generate(),
+            within: LocationWithinForest::BasicForest {
+                path: "/tmp/x".into(),
             },
         };
-        let json = serde_json::to_value(&kind).unwrap();
-        assert_eq!(json["kind"], serde_json::json!(kind.tag()));
+        let kinds = [
+            WorkstreamKind::Basic {
+                mode: CheckoutMode::JjColocated {
+                    initial_source: "https://example.com/x.git".into(),
+                    state: CheckoutState::Pending,
+                },
+                location: loc(),
+            },
+            WorkstreamKind::LocalUnmanagedExistingPath { location: loc() },
+            WorkstreamKind::LocalTmp { location: loc() },
+            WorkstreamKind::LocalBlank { location: loc() },
+        ];
+        for kind in kinds {
+            let json = serde_json::to_value(&kind).unwrap();
+            assert_eq!(json["kind"], serde_json::json!(kind.tag()));
+        }
     }
 
     fn basic_body(status: Status, state: CheckoutState) -> WorkstreamBody {
@@ -653,5 +721,50 @@ mod tests {
         // The kind segment alone is `<kind>.<state>`.
         let body = basic_body(Status::Active, CheckoutState::Pending);
         assert_eq!(body.kind.state_label(), "basic.pending");
+    }
+
+    /// The `Local*` kinds carry no `CheckoutState`, so their state label is just the
+    /// kind tag and `overall_state` is `<status> - <kind>`.
+    #[test]
+    fn local_kinds_state_label_is_bare_tag() {
+        let loc = Location {
+            forest_id: ForestId::generate(),
+            within: LocationWithinForest::BasicForest {
+                path: "/tmp/x".into(),
+            },
+        };
+        let body = |kind| WorkstreamBody {
+            name: "ws".into(),
+            status: Status::Active,
+            created_at: "2020-01-01T00:00:00Z".into(),
+            kind,
+            kv: BTreeMap::new(),
+        };
+        for (kind, want) in [
+            (
+                WorkstreamKind::LocalTmp {
+                    location: loc.clone(),
+                },
+                "active - local-tmp",
+            ),
+            (
+                WorkstreamKind::LocalBlank {
+                    location: loc.clone(),
+                },
+                "active - local-blank",
+            ),
+            (
+                WorkstreamKind::LocalUnmanagedExistingPath {
+                    location: loc.clone(),
+                },
+                "active - local-unmanaged-existing-path",
+            ),
+        ] {
+            let b = body(kind.clone());
+            assert_eq!(b.kind.state_label(), kind.tag());
+            assert_eq!(b.overall_state(), want);
+            assert!(b.mode().is_none());
+            assert!(b.location().is_some());
+        }
     }
 }

@@ -71,7 +71,8 @@ pub(crate) fn build(peer_id: u64, body: &WorkstreamBody) -> Result<LoroDoc> {
     .map_err(loro_err)?;
 
     // The kind container (named after the kind). Created once here — never in a
-    // mutator — per the module's merge-safety invariant.
+    // mutator — per the module's merge-safety invariant. `Basic` nests a `mode` +
+    // `location`; the `Local*` kinds have no checkout mode, so only a `location`.
     match &body.kind {
         WorkstreamKind::Basic { mode, location } => {
             let basic = root
@@ -79,6 +80,14 @@ pub(crate) fn build(peer_id: u64, body: &WorkstreamBody) -> Result<LoroDoc> {
                 .map_err(loro_err)?;
             write_mode(&basic, mode)?;
             write_location(&basic, location)?;
+        }
+        WorkstreamKind::LocalUnmanagedExistingPath { location }
+        | WorkstreamKind::LocalTmp { location }
+        | WorkstreamKind::LocalBlank { location } => {
+            let container = root
+                .insert_container(body.kind.tag(), LoroMap::new())
+                .map_err(loro_err)?;
+            write_location(&container, location)?;
         }
     }
 
@@ -515,6 +524,45 @@ mod tests {
         let json = serde_json::to_value(&ws).unwrap();
         assert_eq!(json["mode"]["checkout_mode"], "apfs-cow-direnv-unsafe");
         assert_eq!(json["mode"]["initial_source"], "/Users/x/repo");
+    }
+
+    /// Each `Local*` kind round-trips through build → hydrate: it persists a `location`
+    /// but **no** `mode`, and projects the flat `{kind, location, no mode}` shape.
+    #[test]
+    fn local_kinds_round_trip() {
+        for (kind, tag) in [
+            (
+                WorkstreamKind::LocalUnmanagedExistingPath {
+                    location: sample_body().location().unwrap().clone(),
+                },
+                "local-unmanaged-existing-path",
+            ),
+            (
+                WorkstreamKind::LocalTmp {
+                    location: sample_body().location().unwrap().clone(),
+                },
+                "local-tmp",
+            ),
+            (
+                WorkstreamKind::LocalBlank {
+                    location: sample_body().location().unwrap().clone(),
+                },
+                "local-blank",
+            ),
+        ] {
+            let mut body = sample_body();
+            body.kind = kind;
+
+            let doc = build(7, &body).unwrap();
+            let ws = hydrate(WorkstreamId::generate(), &snapshot(&doc).unwrap()).unwrap();
+            assert_eq!(ws.body, body, "{tag}: round-trip");
+
+            let json = serde_json::to_value(&ws).unwrap();
+            assert_eq!(json["kind"], tag);
+            assert!(json.get("mode").is_none(), "{tag}: no mode");
+            assert_eq!(json["location"]["within"]["forest_kind"], "basic-forest");
+            assert!(json["location"]["within"]["path"].is_string());
+        }
     }
 
     /// The heart of the CRDT model: two forests editing the same workstream

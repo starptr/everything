@@ -64,6 +64,12 @@ pub enum Error {
     #[error("workstream {0} is not safe to remove; pass --force to remove anyway")]
     UnsafeToRemove(WorkstreamId),
 
+    /// A workstream's kind forbids removal entirely — even `--force` cannot remove it,
+    /// because its directory is managed by a lifecycle outside silverwood (a
+    /// `local-unmanaged-existing-path` workstream).
+    #[error("workstream {0} cannot be removed (its path is managed outside silverwood)")]
+    RemovalUnsupported(WorkstreamId),
+
     /// A session with this id is already attached to the workstream.
     #[error("session already attached: {0}")]
     SessionExists(String),

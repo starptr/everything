@@ -5,7 +5,8 @@
 use std::path::{Path, PathBuf};
 
 use silverwood_core::{
-    CheckoutExtent, CheckoutProvider, HttpsGitUrl, NewCheckoutMode, NewKind, NewWorkstream, Result,
+    AbsolutePath, CheckoutExtent, CheckoutProvider, HttpsGitUrl, NewCheckoutMode, NewKind,
+    NewWorkstream, Result,
 };
 
 /// A fresh, unique temp dir for an isolated forest.
@@ -40,6 +41,32 @@ pub fn new_ws_extent(name: &str, checkout_extent: CheckoutExtent) -> NewWorkstre
                     .unwrap(),
             },
             checkout_extent,
+        },
+    }
+}
+
+/// A `NewWorkstream` for the `local-blank` kind (fresh empty in-forest directory).
+pub fn new_local_blank(name: &str) -> NewWorkstream {
+    NewWorkstream {
+        name: name.into(),
+        kind: NewKind::LocalBlank,
+    }
+}
+
+/// A `NewWorkstream` for the `local-tmp` kind (fresh `/tmp/<uuid>` directory).
+pub fn new_local_tmp(name: &str) -> NewWorkstream {
+    NewWorkstream {
+        name: name.into(),
+        kind: NewKind::LocalTmp,
+    }
+}
+
+/// A `NewWorkstream` for the `local-unmanaged-existing-path` kind, adopting `path`.
+pub fn new_local_unmanaged(name: &str, path: &str) -> NewWorkstream {
+    NewWorkstream {
+        name: name.into(),
+        kind: NewKind::LocalUnmanagedExistingPath {
+            path: AbsolutePath::parse(path).unwrap(),
         },
     }
 }

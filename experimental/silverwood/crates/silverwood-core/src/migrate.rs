@@ -25,7 +25,8 @@ use crate::error::{Error, Result};
 use crate::id::{ForestId, WorkstreamId};
 use crate::workstream::{
     CheckoutMode, CheckoutState, Location, LocationWithinForest, Status, WorkstreamBody,
-    WorkstreamKind, BASIC_KIND, SESSION_NS,
+    WorkstreamKind, BASIC_KIND, LOCAL_BLANK_KIND, LOCAL_TMP_KIND,
+    LOCAL_UNMANAGED_EXISTING_PATH_KIND, SESSION_NS,
 };
 
 /// The document schema version this build reads and writes.
@@ -33,8 +34,11 @@ use crate::workstream::{
 /// v1 stored agent sessions inside the `basic` kind container; v2 relocated them
 /// into the reserved `app.andref.silverwood.session` kv namespace (`DESIGN.md` §5);
 /// v3 collapses the basic kind's `code_change` + per-forest `checkouts` map into a
-/// single data-carrying `mode` (seed + state) and a single `location`.
-pub const DOC_SCHEMA_VERSION: u32 = 3;
+/// single data-carrying `mode` (seed + state) and a single `location`; v4 adds the
+/// checkout-less `local-*` kinds (each a lone `location` container named after its
+/// kind), leaving the `basic` shape untouched — so `v3 → v4` is identity for the
+/// only kind that existed in v3.
+pub const DOC_SCHEMA_VERSION: u32 = 4;
 
 /// Root scalar key holding a document's schema version.
 pub(crate) const SCHEMA_VERSION_KEY: &str = "schema_version";
@@ -57,9 +61,14 @@ pub(crate) fn detect_version(root: &serde_json::Value) -> Result<u32> {
 pub(crate) fn to_latest_body(id: WorkstreamId, root: &serde_json::Value) -> Result<WorkstreamBody> {
     let version = detect_version(root)?;
     match version {
-        1 => decode_v1(id, root)?.into_v2().into_v3().into_body(id),
-        2 => decode_v2(id, root)?.into_v3().into_body(id),
-        3 => decode_v3(id, root)?.into_body(id),
+        1 => decode_v1(id, root)?
+            .into_v2()
+            .into_v3()
+            .into_v4()
+            .into_body(id),
+        2 => decode_v2(id, root)?.into_v3().into_v4().into_body(id),
+        3 => decode_v3(id, root)?.into_v4().into_body(id),
+        4 => decode_v4(id, root)?.into_body(id),
         v if v > DOC_SCHEMA_VERSION => Err(Error::SchemaTooNew {
             found: v,
             supported: DOC_SCHEMA_VERSION,
@@ -83,6 +92,11 @@ fn decode_v2(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV2>
 fn decode_v3(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV3> {
     serde_json::from_value(root.clone())
         .map_err(|e| Error::Corrupt(format!("workstream {id} (schema v3): {e}")))
+}
+
+fn decode_v4(id: WorkstreamId, root: &serde_json::Value) -> Result<StoredBodyV4> {
+    serde_json::from_value(root.clone())
+        .map_err(|e| Error::Corrupt(format!("workstream {id} (schema v4): {e}")))
 }
 
 // ---- frozen decode types for the pre-v3 `basic` container -------------------
@@ -259,11 +273,11 @@ impl StoredBodyV2 {
     }
 }
 
-// ---- v3 (current latest) ----------------------------------------------------
+// ---- v3 (frozen) ------------------------------------------------------------
 
-/// The v3 on-disk body shape — the current latest. **Frozen** once v4 lands.
-/// The `basic` container holds a data-carrying `mode` and a single `location`
-/// (decoded straight into the domain types, which are `Deserialize`).
+/// The v3 on-disk body shape. **Frozen.** The `basic` container holds a
+/// data-carrying `mode` and a single `location` (decoded straight into the domain
+/// types, which are `Deserialize`). v3 only ever had the `basic` kind.
 #[derive(Deserialize)]
 struct StoredBodyV3 {
     name: String,
@@ -278,7 +292,8 @@ struct StoredBodyV3 {
     kv: BTreeMap<String, String>,
 }
 
-/// The v3 stored shape of the `basic` kind container. **Frozen** once v4 lands.
+/// The v3 stored shape of the `basic` kind container. **Frozen.** Its shape is
+/// unchanged in v4, so v4 reuses it for the `basic` kind.
 #[derive(Deserialize)]
 struct StoredBasicV3 {
     mode: CheckoutMode,
@@ -286,20 +301,98 @@ struct StoredBasicV3 {
 }
 
 impl StoredBodyV3 {
-    /// Encode into the latest domain body. v3 is the latest, so this is the
-    /// `into_body` encoder; when v4 lands it moves onto the v4 struct and v3
-    /// instead keeps only decode + a `migrate_to_v4`.
+    /// v3 → v4: **additive** — v3 only ever held the `basic` kind, so carry it forward
+    /// verbatim and leave the new `local-*` kind containers absent. Identity for every
+    /// real v3 document. **Frozen** once v5 lands.
+    fn into_v4(self) -> StoredBodyV4 {
+        StoredBodyV4 {
+            name: self.name,
+            status: self.status,
+            kind: self.kind,
+            created_at: self.created_at,
+            basic: self.basic,
+            local_unmanaged_existing_path: None,
+            local_tmp: None,
+            local_blank: None,
+            kv: self.kv,
+        }
+    }
+}
+
+// ---- v4 (current latest) ----------------------------------------------------
+
+/// The v4 on-disk body shape — the current latest. **Frozen** once v5 lands.
+/// Adds the checkout-less `local-*` kinds: each is a container named after its kind
+/// tag holding a lone `location`. Exactly one kind container is present, selected by
+/// the `kind` discriminant; `basic` is unchanged from v3.
+#[derive(Deserialize)]
+struct StoredBodyV4 {
+    name: String,
+    status: Status,
+    kind: String,
+    created_at: String,
+    /// Present iff `kind == "basic"`.
+    #[serde(default)]
+    basic: Option<StoredBasicV3>,
+    /// Present iff `kind == "local-unmanaged-existing-path"`.
+    #[serde(default, rename = "local-unmanaged-existing-path")]
+    local_unmanaged_existing_path: Option<StoredLocalKindV4>,
+    /// Present iff `kind == "local-tmp"`.
+    #[serde(default, rename = "local-tmp")]
+    local_tmp: Option<StoredLocalKindV4>,
+    /// Present iff `kind == "local-blank"`.
+    #[serde(default, rename = "local-blank")]
+    local_blank: Option<StoredLocalKindV4>,
+    /// JSON `["namespace","key"]` → value (sessions live here under SESSION_NS).
+    #[serde(default)]
+    kv: BTreeMap<String, String>,
+}
+
+/// The v4 stored shape of a `local-*` kind container: a lone `location`, no checkout
+/// mode. **Frozen** once v5 lands.
+#[derive(Deserialize)]
+struct StoredLocalKindV4 {
+    location: Location,
+}
+
+impl StoredBodyV4 {
+    /// Encode into the latest domain body. v4 is the latest, so this is the
+    /// `into_body` encoder; when v5 lands it moves onto the v5 struct and v4
+    /// instead keeps only decode + an `into_v5`.
     fn into_body(self, id: WorkstreamId) -> Result<WorkstreamBody> {
+        // Each kind's container must be present for its discriminant.
+        let missing = |container: &str| {
+            Error::Corrupt(format!(
+                "workstream {id}: kind={} but no `{container}` container",
+                self.kind
+            ))
+        };
         let kind = match self.kind.as_str() {
             BASIC_KIND => {
-                let basic = self.basic.ok_or_else(|| {
-                    Error::Corrupt(format!(
-                        "workstream {id}: kind=basic but no `basic` container"
-                    ))
-                })?;
+                let basic = self.basic.ok_or_else(|| missing(BASIC_KIND))?;
                 WorkstreamKind::Basic {
                     mode: basic.mode,
                     location: basic.location,
+                }
+            }
+            LOCAL_UNMANAGED_EXISTING_PATH_KIND => {
+                let c = self
+                    .local_unmanaged_existing_path
+                    .ok_or_else(|| missing(LOCAL_UNMANAGED_EXISTING_PATH_KIND))?;
+                WorkstreamKind::LocalUnmanagedExistingPath {
+                    location: c.location,
+                }
+            }
+            LOCAL_TMP_KIND => {
+                let c = self.local_tmp.ok_or_else(|| missing(LOCAL_TMP_KIND))?;
+                WorkstreamKind::LocalTmp {
+                    location: c.location,
+                }
+            }
+            LOCAL_BLANK_KIND => {
+                let c = self.local_blank.ok_or_else(|| missing(LOCAL_BLANK_KIND))?;
+                WorkstreamKind::LocalBlank {
+                    location: c.location,
                 }
             }
             other => {

@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use loro::{ExportMode, LoroDoc};
 
-use super::{any_id, sample_bodies};
+use super::{any_id, current_kind_bodies, sample_bodies};
 use crate::doc;
 use crate::error::Error;
 use crate::migrate::DOC_SCHEMA_VERSION;
@@ -45,10 +45,11 @@ fn read_fixture(dir: &Path, name: &str) -> (Vec<u8>, serde_json::Value) {
 }
 
 /// Every structure round-trips, is stamped at the latest version, and reports as
-/// already-latest (no migration needed).
+/// already-latest (no migration needed). Covers the basic `sample_bodies` plus the
+/// kinds introduced at the current version.
 #[test]
 fn round_trips_all_structures() {
-    for (name, body) in sample_bodies() {
+    for (name, body) in sample_bodies().into_iter().chain(current_kind_bodies()) {
         let doc = doc::build(PEER, &body).unwrap();
         let bytes = doc::snapshot(&doc).unwrap();
 
@@ -102,7 +103,7 @@ fn future_version_is_rejected() {
 #[test]
 fn frozen_current_corpus_hydrates_to_projection() {
     let dir = corpus_dir(DOC_SCHEMA_VERSION);
-    for (name, body) in sample_bodies() {
+    for (name, body) in sample_bodies().into_iter().chain(current_kind_bodies()) {
         let (bytes, expected) = read_fixture(&dir, name);
         let ws = doc::hydrate(any_id(), &bytes).unwrap();
         assert_eq!(
@@ -210,6 +211,51 @@ fn frozen_v2_corpus_migrates_to_current_projection() {
     }
 }
 
+/// The migration guard for **v3** bytes (a single data-carrying `mode` + `location`,
+/// basic-only). Reading them migrates v3→v4 — identity for the basic kind, only the
+/// version stamp changes — and must yield the committed current projection (and today's
+/// model) on both the old-bytes and rewritten-bytes paths.
+#[test]
+fn frozen_v3_corpus_migrates_to_current_projection() {
+    let dir = corpus_dir(3);
+    for (name, body) in sample_bodies() {
+        let (bytes, expected) = read_fixture(&dir, name);
+
+        // The frozen bytes really are v3, and migrating rewrites them to latest.
+        assert_eq!(
+            doc::peek_version(any_id(), &bytes).unwrap(),
+            3,
+            "{name}: v3"
+        );
+        let rewritten = doc::migrate_bytes(any_id(), &bytes, PEER)
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name}: v3 must migrate to a rewrite"));
+        assert_eq!(
+            doc::peek_version(any_id(), &rewritten).unwrap(),
+            DOC_SCHEMA_VERSION,
+            "{name}: rewrite is stamped latest"
+        );
+
+        // Old bytes and rewritten bytes both hydrate to the current projection.
+        for (label, b) in [
+            ("old", bytes.as_slice()),
+            ("rewritten", rewritten.as_slice()),
+        ] {
+            let ws = doc::hydrate(any_id(), b).unwrap();
+            assert_eq!(
+                serde_json::to_value(&ws.body).unwrap(),
+                expected,
+                "{name} ({label}): migrated projection"
+            );
+        }
+        assert_eq!(
+            serde_json::to_value(&body).unwrap(),
+            expected,
+            "{name}: model drift — regenerate the corpus"
+        );
+    }
+}
+
 /// Regenerate the corpus. A no-op unless `SILVERWOOD_REGEN_CORPUS` is set, so
 /// normal test runs never write. Writes the current version's `.loro` + `.json`
 /// fixtures from the live model, and refreshes older versions' `.json` projection
@@ -221,10 +267,11 @@ fn regenerate() {
         return;
     }
 
-    // Current version: (re)write both bytes and projection from the live model.
+    // Current version: (re)write both bytes and projection from the live model — the
+    // basic sample set plus kinds introduced at this version.
     let cur = corpus_dir(DOC_SCHEMA_VERSION);
     std::fs::create_dir_all(&cur).unwrap();
-    for (name, body) in sample_bodies() {
+    for (name, body) in sample_bodies().into_iter().chain(current_kind_bodies()) {
         let doc = doc::build(PEER, &body).unwrap();
         std::fs::write(
             cur.join(format!("{name}.loro")),

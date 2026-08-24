@@ -53,6 +53,8 @@ const CONFIG_FILE: &str = "config.toml";
 const WORKSTREAMS_DIR: &str = "workstreams";
 /// Subdirectory holding provisioned checkouts.
 const WORKING_COPIES_DIR: &str = "working-copies";
+/// Parent directory for the ephemeral `local-tmp` kind's created checkout.
+const LOCAL_TMP_DIR: &str = "/tmp";
 
 /// One local instance of silverwood state, rooted at a directory.
 ///
@@ -115,66 +117,124 @@ impl Forest {
         &self.config
     }
 
-    /// Create a workstream, provisioning its checkout unless deferred.
+    /// Create a workstream. Dispatches on the [`NewKind`]:
     ///
-    /// The document is written first (with the checkout `Pending` for a `Full`
-    /// create, or `InitializedWithoutCheckout` for a `Skip` create). A `Full` create
-    /// then provisions the checkout and flips the state to `Ready`/`Failed` in place;
-    /// a failed provision leaves a recoverable workstream (its document persists with
-    /// state `Failed`) and surfaces the error. A `Skip` create returns immediately with
-    /// the checkout unprovisioned, to be materialized later by [`Self::checkout_workstream`].
+    /// - **`Basic`** materializes a code-checkout. The document is written first (with the
+    ///   checkout `Pending` for a `Full` create, or `InitializedWithoutCheckout` for a
+    ///   `Skip` create). A `Full` create then provisions the checkout and flips the state
+    ///   to `Ready`/`Failed` in place; a failed provision leaves a recoverable workstream
+    ///   and surfaces the error. A `Skip` create returns immediately, to be materialized
+    ///   later by [`Self::checkout_workstream`].
+    /// - **`LocalBlank`/`LocalTmp`** create their own empty directory (no checkout) —
+    ///   under `working-copies/<uuid>` and `/tmp/<uuid>` respectively — *before* persisting,
+    ///   so a saved record always has its directory.
+    /// - **`LocalUnmanagedExistingPath`** adopts an existing directory as-is (validated
+    ///   absolute + on the forest's filesystem); it is never created or deleted by silverwood.
     pub fn create_workstream(&self, new: NewWorkstream) -> Result<Workstream> {
-        let NewKind::Basic {
-            mode: new_mode,
-            checkout_extent,
-        } = &new.kind;
-
         let working_copies = self.root.join(WORKING_COPIES_DIR);
-
-        // Mode-specific creation preconditions that must reject *before* anything is
-        // persisted (a hard failure, unlike a provisioning error, which leaves a
-        // recoverable `Failed` document). Today only apfs-cow has one. Runs for both
-        // extents, so a deferred (`Skip`) create still rejects a bad seed up front.
-        precheck_new_mode(new_mode, &working_copies)?;
-
         let id = WorkstreamId::generate();
-        let dest = working_copies.join(id.to_string());
 
-        // The stored mode's initial state depends on the extent: `Full` starts `Pending`
-        // (core flips it after provisioning below); `Skip` rests at
-        // `InitializedWithoutCheckout`. dest/location are mode- and extent-independent.
-        let initial_state = match checkout_extent {
-            CheckoutExtent::Full => CheckoutState::Pending,
-            CheckoutExtent::Skip => CheckoutState::InitializedWithoutCheckout,
-        };
-        let mode = stored_mode(new_mode, initial_state);
+        match new.kind {
+            NewKind::Basic {
+                mode: new_mode,
+                checkout_extent,
+            } => {
+                // Mode-specific creation preconditions that must reject *before* anything is
+                // persisted (a hard failure, unlike a provisioning error, which leaves a
+                // recoverable `Failed` document). Today only apfs-cow has one. Runs for both
+                // extents, so a deferred (`Skip`) create still rejects a bad seed up front.
+                precheck_new_mode(&new_mode, &working_copies)?;
 
-        // The location records this forest as the single materialization site.
+                let dest = working_copies.join(id.to_string());
+
+                // `Full` starts `Pending` (core flips it after provisioning below); `Skip`
+                // rests at `InitializedWithoutCheckout`. dest/location are extent-independent.
+                let initial_state = match checkout_extent {
+                    CheckoutExtent::Full => CheckoutState::Pending,
+                    CheckoutExtent::Skip => CheckoutState::InitializedWithoutCheckout,
+                };
+                let mode = stored_mode(&new_mode, initial_state);
+
+                let doc = self.save_new(
+                    id,
+                    new.name,
+                    WorkstreamKind::Basic {
+                        mode,
+                        location: self.location_at(dest.display().to_string()),
+                    },
+                )?;
+
+                match checkout_extent {
+                    // Registered only; the caller provisions later via `checkout_workstream`.
+                    CheckoutExtent::Skip => self.get(id),
+                    // Provision now, recording the outcome in place.
+                    CheckoutExtent::Full => self.provision_checkout(id, &doc, &new_mode, &dest),
+                }
+            }
+
+            NewKind::LocalBlank => {
+                let dest = working_copies.join(id.to_string());
+                ensure_dir(&dest)?;
+                self.save_new(
+                    id,
+                    new.name,
+                    WorkstreamKind::LocalBlank {
+                        location: self.location_at(dest.display().to_string()),
+                    },
+                )?;
+                self.get(id)
+            }
+
+            NewKind::LocalTmp => {
+                let dest = Path::new(LOCAL_TMP_DIR).join(id.to_string());
+                ensure_dir(&dest)?;
+                self.save_new(
+                    id,
+                    new.name,
+                    WorkstreamKind::LocalTmp {
+                        location: self.location_at(dest.display().to_string()),
+                    },
+                )?;
+                self.get(id)
+            }
+
+            NewKind::LocalUnmanagedExistingPath { path } => {
+                // Hard-reject before persisting: the path must be an existing directory on
+                // the forest's filesystem. silverwood never creates or deletes it.
+                precheck_existing_path(path.as_path(), &working_copies)?;
+                self.save_new(
+                    id,
+                    new.name,
+                    WorkstreamKind::LocalUnmanagedExistingPath {
+                        location: self.location_at(path.as_str().to_string()),
+                    },
+                )?;
+                self.get(id)
+            }
+        }
+    }
+
+    /// A single-forest location at `path` (this forest is the materialization site).
+    fn location_at(&self, path: String) -> Location {
+        Location {
+            forest_id: self.id(),
+            within: LocationWithinForest::BasicForest { path },
+        }
+    }
+
+    /// Build a fresh active workstream body around `kind`, persist it, and return the
+    /// built document (a `Basic` create reuses it to provision; other kinds discard it).
+    fn save_new(&self, id: WorkstreamId, name: String, kind: WorkstreamKind) -> Result<LoroDoc> {
         let body = WorkstreamBody {
-            name: new.name,
+            name,
             status: Status::Active,
             created_at: now_rfc3339(),
-            kind: WorkstreamKind::Basic {
-                mode,
-                location: Location {
-                    forest_id: self.id(),
-                    within: LocationWithinForest::BasicForest {
-                        path: dest.display().to_string(),
-                    },
-                },
-            },
+            kind,
             kv: BTreeMap::new(),
         };
-
         let doc = doc::build(self.peer_id(), &body)?;
         self.docs.save(id, &doc::snapshot(&doc)?)?;
-
-        match checkout_extent {
-            // Registered only; the caller provisions later via `checkout_workstream`.
-            CheckoutExtent::Skip => self.get(id),
-            // Provision now, recording the outcome in place.
-            CheckoutExtent::Full => self.provision_checkout(id, &doc, new_mode, &dest),
-        }
+        Ok(doc)
     }
 
     /// Provision the checkout of a workstream that was created with the checkout
@@ -188,9 +248,15 @@ impl Forest {
         let bytes = self.docs.load(id)?.ok_or(Error::NotFound(id))?;
         let ws = doc::hydrate(id, &bytes)?;
 
-        // Basic is the only kind, so this destructure is irrefutable in-crate; a future
-        // non-checkout kind would branch here.
-        let WorkstreamKind::Basic { mode, location } = &ws.body.kind;
+        // Only `Basic` has a checkout to provision; the checkout-less `Local*` kinds have
+        // nothing to await. (The CLI already gates `workstream <id> basic checkout` on the
+        // kind, so this is defense-in-depth.)
+        let WorkstreamKind::Basic { mode, location } = &ws.body.kind else {
+            return Err(Error::NotAwaitingCheckout {
+                id,
+                state: ws.body.kind.tag(),
+            });
+        };
         if mode.state() != CheckoutState::InitializedWithoutCheckout {
             return Err(Error::NotAwaitingCheckout {
                 id,
@@ -262,37 +328,38 @@ impl Forest {
     }
 
     /// Soft-delete a workstream: keep the document but mark it `Deleted`, then discard
-    /// the workstream kind's on-disk materialization (a `Basic` workstream's checkout).
-    /// Refuses with [`Error::UnsafeToRemove`] unless the workstream is safe to remove
-    /// (for a `Basic` workstream: its checkout is a jj workspace root and all non-empty
-    /// revs are already on the remote trunk — see `is_safe_to_remove`), or `force`
-    /// overrides the check. An operational VCS failure (jj missing/erroring) surfaces as
-    /// [`Error::Vcs`] on the non-`force` path; `--force` skips the check entirely.
+    /// the on-disk directory silverwood manages for it. Removability is per-kind (see
+    /// the private `removability` helper):
+    /// - `Basic` — safe once its checkout is a jj workspace root with all non-empty revs
+    ///   already on the remote trunk; otherwise refuses with [`Error::UnsafeToRemove`]
+    ///   unless `force`. An operational VCS failure surfaces as [`Error::Vcs`] on the
+    ///   non-`force` path; `force` skips the check.
+    /// - `LocalTmp` — safe once its directory is gone; otherwise `force`-only.
+    /// - `LocalBlank` — safe while its directory is empty; otherwise `force`-only.
+    /// - `LocalUnmanagedExistingPath` — **never** removable (errors [`Error::RemovalUnsupported`]
+    ///   even with `force`), and its adopted directory is never deleted.
     ///
     /// Unlike a hard delete (impossible under the add-wins membership union, see
     /// `DESIGN.md` §2.1), the document is retained so the tombstone merges under sync —
-    /// this is a stronger sibling of [`Forest::archive`] that also discards the checkout.
+    /// this is a stronger sibling of [`Forest::archive`] that also discards the directory.
     pub fn remove(&self, id: WorkstreamId, force: bool) -> Result<()> {
         let ws = self.get(id)?; // NotFound if absent
-        if !force && !is_safe_to_remove(&ws)? {
-            return Err(Error::UnsafeToRemove(id));
+        match removability(&ws)? {
+            // Forbidden outright — `force` cannot override, and nothing is tombstoned.
+            Removability::Forbidden => return Err(Error::RemovalUnsupported(id)),
+            Removability::ForceOnly if !force => return Err(Error::UnsafeToRemove(id)),
+            Removability::ForceOnly | Removability::Safe => {}
         }
 
-        // Tombstone first (the sync-relevant record of truth), then discard the code.
+        // Tombstone first (the sync-relevant record of truth), then discard the directory.
         let doc = self.load_doc(id)?;
         doc::set_status(&doc, Status::Deleted)?;
         self.docs.save(id, &doc::snapshot(&doc)?)?;
 
-        // Dispatch the on-disk cleanup on the exact workstream kind. A `Basic`
-        // workstream owns a checkout working copy at its location — delete it. (Nested
-        // match on the exact `LocationWithinForest` variant for the same reason: each
-        // kind/forest-kind must consciously decide its own cleanup.)
-        match &ws.body.kind {
-            WorkstreamKind::Basic { location, .. } => match &location.within {
-                LocationWithinForest::BasicForest { path } => {
-                    remove_tree_if_present(Path::new(path))?
-                }
-            },
+        // Delete only a silverwood-managed directory. `LocalUnmanagedExistingPath` returns
+        // `None` here (and is already `Forbidden` above), so an adopted path is never touched.
+        if let Some(path) = managed_checkout_path(&ws.body.kind) {
+            remove_tree_if_present(Path::new(path))?;
         }
         Ok(())
     }
@@ -410,13 +477,15 @@ impl Forest {
 
     /// Build the [`ShellPlan`] for running a durable session (`silverwood spawn from-id`).
     /// A session records *how to run itself*: this reads its [`SessionKind`] and materializes
-    /// the matching command in the workstream's ready checkout, so a frontend never re-derives
-    /// the command. For a claude kind, first-run vs resume is chosen from whether Claude's
-    /// transcript exists on disk under `claude_config_dir` (so a never-prompted session starts
-    /// fresh rather than failing a resume). `seed`/`claude_config_dir` are frontend policy
-    /// (env/passwd), supplied by the caller — mirroring [`Forest::doctor_session`].
+    /// the matching command in the workstream's directory (the private `spawn_cwd` helper),
+    /// so a frontend
+    /// never re-derives the command. For a claude kind, first-run vs resume is chosen from
+    /// whether Claude's transcript exists on disk under `claude_config_dir` (so a never-prompted
+    /// session starts fresh rather than failing a resume). `seed`/`claude_config_dir` are
+    /// frontend policy (env/passwd), supplied by the caller — mirroring [`Forest::doctor_session`].
     ///
-    /// Errors [`Error::NotSpawnable`] if there is no ready checkout, or
+    /// Errors [`Error::NotSpawnable`] if the workstream has no directory to run in (a `Basic`
+    /// checkout that is not yet `Ready`, or a `Local*` kind whose directory is gone), or
     /// [`Error::SessionNotFound`] if the session is absent.
     pub fn spawn_plan_from_session(
         &self,
@@ -426,23 +495,7 @@ impl Forest {
         claude_config_dir: &Path,
     ) -> Result<ShellPlan> {
         let ws = self.get(id)?;
-        let not_spawnable = |state: &str| Error::NotSpawnable {
-            id,
-            state: state.to_string(),
-        };
-        let mode = ws.body.mode().ok_or_else(|| not_spawnable("none"))?;
-        if mode.state() != CheckoutState::Ready {
-            return Err(not_spawnable(mode.state().as_str()));
-        }
-        let cwd = match ws.body.location().map(|loc| &loc.within) {
-            Some(LocationWithinForest::BasicForest { path }) => path.clone(),
-            // A ready checkout without a location would be a corrupt document.
-            None => {
-                return Err(Error::Corrupt(format!(
-                    "workstream {id} has no checkout location"
-                )))
-            }
-        };
+        let cwd = spawn_cwd(&ws)?;
 
         let session = doc::get_session(&self.load_doc(id)?, session_id)?
             .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
@@ -680,20 +733,120 @@ const TRUNK_BOOKMARK: &str = "main";
 /// lockstep with the clone remote name in `provider.rs`.
 const SAFETY_REMOTES: [&str; 2] = ["origin", "github"];
 
-/// Whether a workstream is safe to remove without `--force`.
-///
-/// For a `Basic` workstream this runs the "all jj revs are on the remote trunk"
-/// check (see [`all_jj_revs_are_in_remote_github`]): only a confirmed pass returns
-/// `Ok(true)`. `Ok(false)` is a definite "not safe" (→ [`Error::UnsafeToRemove`]);
-/// an operational VCS failure surfaces as `Err`.
-fn is_safe_to_remove(ws: &Workstream) -> Result<bool> {
+/// Whether — and under what condition — a workstream may be removed. The exhaustive
+/// per-kind match forces each new kind to decide its own removal policy.
+enum Removability {
+    /// Safe to remove without `--force`.
+    Safe,
+    /// Not safe by itself; `--force` overrides.
+    ForceOnly,
+    /// Never removable — even `--force` cannot remove it.
+    Forbidden,
+}
+
+/// The [`Removability`] of a workstream:
+/// - `Basic` — [`Removability::Safe`] iff all jj revs are already on the remote trunk
+///   (see [`all_jj_revs_are_in_remote_github`]); else [`Removability::ForceOnly`]. An
+///   operational VCS failure surfaces as `Err`.
+/// - `LocalUnmanagedExistingPath` — always [`Removability::Forbidden`] (its path is
+///   managed outside silverwood).
+/// - `LocalTmp` — `Safe` once its directory no longer exists; else `ForceOnly`.
+/// - `LocalBlank` — `Safe` while its directory is empty (or already gone); else `ForceOnly`.
+fn removability(ws: &Workstream) -> Result<Removability> {
+    let managed = |safe: bool| {
+        if safe {
+            Removability::Safe
+        } else {
+            Removability::ForceOnly
+        }
+    };
     match &ws.body.kind {
-        WorkstreamKind::Basic { location, .. } => match &location.within {
-            LocationWithinForest::BasicForest { path } => {
-                all_jj_revs_are_in_remote_github(Path::new(path))
-            }
-        },
+        WorkstreamKind::Basic { location, .. } => {
+            let LocationWithinForest::BasicForest { path } = &location.within;
+            Ok(managed(all_jj_revs_are_in_remote_github(Path::new(path))?))
+        }
+        WorkstreamKind::LocalUnmanagedExistingPath { .. } => Ok(Removability::Forbidden),
+        WorkstreamKind::LocalTmp { location } => {
+            let LocationWithinForest::BasicForest { path } = &location.within;
+            Ok(managed(!Path::new(path).exists()))
+        }
+        WorkstreamKind::LocalBlank { location } => {
+            let LocationWithinForest::BasicForest { path } = &location.within;
+            Ok(managed(dir_is_empty(Path::new(path))?))
+        }
     }
+}
+
+/// The on-disk directory silverwood may delete when removing this workstream. `None`
+/// for a kind whose directory is managed outside silverwood
+/// (`LocalUnmanagedExistingPath`), which must never be deleted.
+fn managed_checkout_path(kind: &WorkstreamKind) -> Option<&str> {
+    match kind {
+        WorkstreamKind::Basic { location, .. }
+        | WorkstreamKind::LocalTmp { location }
+        | WorkstreamKind::LocalBlank { location } => {
+            let LocationWithinForest::BasicForest { path } = &location.within;
+            Some(path)
+        }
+        WorkstreamKind::LocalUnmanagedExistingPath { .. } => None,
+    }
+}
+
+/// Whether `path` is an empty directory. An absent path counts as empty — there is
+/// nothing to lose by removing the record.
+fn dir_is_empty(path: &Path) -> Result<bool> {
+    match fs::read_dir(path) {
+        Ok(mut entries) => Ok(entries.next().is_none()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(true),
+        Err(e) => Err(Error::io(path, e)),
+    }
+}
+
+/// The directory to run a session in, if the workstream is ready to be spawned into,
+/// else [`Error::NotSpawnable`]. `Basic` is ready only once its checkout is `Ready`;
+/// the `Local*` kinds are ready as long as their recorded directory exists on disk.
+fn spawn_cwd(ws: &Workstream) -> Result<String> {
+    let not_spawnable = |state: &str| Error::NotSpawnable {
+        id: ws.id,
+        state: state.to_string(),
+    };
+    match &ws.body.kind {
+        WorkstreamKind::Basic { mode, location } => {
+            if mode.state() != CheckoutState::Ready {
+                return Err(not_spawnable(mode.state().as_str()));
+            }
+            let LocationWithinForest::BasicForest { path } = &location.within;
+            Ok(path.clone())
+        }
+        WorkstreamKind::LocalUnmanagedExistingPath { location }
+        | WorkstreamKind::LocalTmp { location }
+        | WorkstreamKind::LocalBlank { location } => {
+            let LocationWithinForest::BasicForest { path } = &location.within;
+            if Path::new(path).is_dir() {
+                Ok(path.clone())
+            } else {
+                Err(not_spawnable("missing"))
+            }
+        }
+    }
+}
+
+/// Validate the `local-unmanaged-existing-path` seed before anything is persisted: the
+/// path must be an existing directory on the same filesystem as the forest's storage
+/// (`working_copies_dir`). Any failure is an [`Error::InvalidSource`].
+fn precheck_existing_path(path: &Path, working_copies_dir: &Path) -> Result<()> {
+    if !path.is_dir() {
+        return Err(Error::InvalidSource(format!(
+            "existing path {path:?} is not an existing directory"
+        )));
+    }
+    if !apfs::same_volume(path, working_copies_dir)? {
+        return Err(Error::InvalidSource(format!(
+            "existing path {path:?} must be on the same filesystem as the forest \
+             (its storage is at {working_copies_dir:?})"
+        )));
+    }
+    Ok(())
 }
 
 /// True iff `checkout` is a jj workspace root and every non-empty rev in it is an

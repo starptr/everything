@@ -1,0 +1,26 @@
+{
+  "name": "苺ましまろ 🍓",
+  "status": "active",
+  "created_at": "1970-01-01T00:00:00Z",
+  "kind": "basic",
+  "mode": {
+    "checkout_mode": "jj-colocated",
+    "initial_source": "https://example.com/x.git",
+    "state": "pending"
+  },
+  "location": {
+    "forest_id": "00000000-0000-0000-0000-000000000000",
+    "within": {
+      "forest_kind": "basic-forest",
+      "path": ""
+    }
+  },
+  "kv": {
+    "app.andref.silverwood.session": {
+      "sid-α": "{\"kind\":\"claude-code\",\"name\":\"Frieren 葬送のフリーレン\",\"created_at\":\"1970-01-01T00:00:00Z\"}"
+    },
+    "ns": {
+      "k": "\"日本語\""
+    }
+  }
+}

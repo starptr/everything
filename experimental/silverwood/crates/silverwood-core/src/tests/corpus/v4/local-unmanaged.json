@@ -1,0 +1,14 @@
+{
+  "name": "local-unmanaged",
+  "status": "active",
+  "created_at": "1970-01-01T00:00:00Z",
+  "kind": "local-unmanaged-existing-path",
+  "location": {
+    "forest_id": "00000000-0000-0000-0000-000000000000",
+    "within": {
+      "forest_kind": "basic-forest",
+      "path": "/Users/x/existing"
+    }
+  },
+  "kv": {}
+}
