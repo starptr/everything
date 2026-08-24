@@ -25,12 +25,31 @@ fn new_schema_reflects_the_new_command_tree() {
     let schema = json(&dir, &["--json", "new-schema"]);
     assert_eq!(schema["name"], "new");
 
-    // The one variant today is `basic`; find it under the root's subcommands.
     let variants = schema["subcommands"].as_array().expect("subcommands array");
-    let basic = variants
-        .iter()
-        .find(|v| v["name"] == "basic")
-        .expect("basic variant");
+    let variant = |name: &str| {
+        variants
+            .iter()
+            .find(|v| v["name"] == name)
+            .unwrap_or_else(|| panic!("missing variant {name}: {variants:?}"))
+    };
+    let basic = variant("basic");
+
+    // The checkout-less `local-*` variants are leaves off the root (no mode subtree).
+    // `local-blank`/`local-tmp` take no positionals; `local-unmanaged-existing-path`
+    // takes one `<ABSOLUTE_PATH>`, so a frontend renders exactly the right inputs.
+    assert!(variant("local-blank")["args"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(variant("local-tmp")["args"].as_array().unwrap().is_empty());
+    assert!(variant("local-blank")["subcommands"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    let adopt = variant("local-unmanaged-existing-path");
+    let adopt_args = adopt["args"].as_array().expect("args array");
+    assert_eq!(adopt_args.len(), 1);
+    assert_eq!(adopt_args[0]["value_name"], "ABSOLUTE_PATH");
 
     // `basic`'s children are the checkout modes; collect their leaves by tag.
     let modes = basic["subcommands"].as_array().expect("mode subcommands");

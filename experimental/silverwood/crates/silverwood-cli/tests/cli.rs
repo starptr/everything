@@ -6,7 +6,7 @@ mod common;
 
 use std::path::Path;
 
-use common::{fails, forest, json, run};
+use common::{fails, forest, json, ok, run};
 
 #[test]
 fn info_reports_forest_at_env_path() {
@@ -241,6 +241,69 @@ fn new_skip_registers_without_provisioning() {
         json(&dir, &["--json", "workstream", id, "show"])["overall_state"],
         "active - basic.initialized-without-checkout"
     );
+}
+
+/// The checkout-less `local-blank` kind creates an empty in-forest directory (no clone),
+/// so its full lifecycle runs in the sandbox: create → an empty dir with no `mode` →
+/// plain `remove` succeeds while empty and discards the dir.
+#[test]
+fn local_blank_create_and_remove_lifecycle() {
+    let dir = forest();
+
+    let ws = json(&dir, &["--json", "new", "local-blank", "--name", "b"]);
+    assert_eq!(ws["kind"], "local-blank");
+    assert_eq!(ws["overall_state"], "active - local-blank");
+    assert!(ws.get("mode").is_none(), "no checkout mode: {ws}");
+    let id = ws["id"].as_str().unwrap();
+    let path = ws["location"]["within"]["path"].as_str().unwrap();
+    assert!(Path::new(path).is_dir(), "blank dir created: {path}");
+
+    // Empty ⇒ plain remove proceeds and deletes the directory.
+    ok(&dir, &["workstream", id, "remove"]);
+    assert_eq!(
+        json(&dir, &["--json", "workstream", id, "show"])["overall_state"],
+        "deleted - local-blank"
+    );
+    assert!(!Path::new(path).exists(), "removed blank dir");
+}
+
+/// A `local-unmanaged-existing-path` workstream adopts an existing directory and can
+/// never be removed — even `--force` fails and the adopted directory is left intact.
+#[test]
+fn local_unmanaged_adopts_and_refuses_removal() {
+    let dir = forest();
+    let adopted = forest(); // an existing dir on the same filesystem as the forest
+    let adopted_path = adopted.path().to_str().unwrap();
+
+    let ws = json(
+        &dir,
+        &[
+            "--json",
+            "new",
+            "local-unmanaged-existing-path",
+            adopted_path,
+            "--name",
+            "u",
+        ],
+    );
+    assert_eq!(ws["kind"], "local-unmanaged-existing-path");
+    assert_eq!(ws["location"]["within"]["path"], adopted_path);
+    assert!(ws.get("mode").is_none());
+    let id = ws["id"].as_str().unwrap();
+
+    // Removal is forbidden, with and without --force; the adopted dir is never touched.
+    for args in [
+        vec!["workstream", id, "remove"],
+        vec!["workstream", id, "remove", "--force"],
+    ] {
+        let stderr = fails(&dir, &args);
+        assert!(stderr.contains("cannot be removed"), "got: {stderr}");
+        assert_eq!(
+            json(&dir, &["--json", "workstream", id, "show"])["status"],
+            "active"
+        );
+        assert!(adopted.path().is_dir(), "adopted dir must survive");
+    }
 }
 
 #[test]

@@ -350,9 +350,9 @@ enum SessionCreate {
     },
 }
 
-/// The workstream variant (kind) to create — the first `new` subcommand level. Only
-/// `basic` today (`WorkstreamKind` is `#[non_exhaustive]`); the kebab name matches the
-/// stored `kind` tag.
+/// The workstream variant (kind) to create — the first `new` subcommand level. Each
+/// kebab name matches the stored `kind` tag. `basic` materializes a code-checkout; the
+/// `local-*` kinds track a plain directory (no checkout mode).
 #[derive(Subcommand)]
 enum NewVariant {
     /// A basic workstream, materialized by a checkout mode.
@@ -364,6 +364,17 @@ enum NewVariant {
         #[command(subcommand)]
         mode: NewModeArg,
     },
+    /// Adopt an existing directory as a workstream. silverwood never creates or deletes
+    /// it — removal is unsupported (even `--force`), since it may be managed elsewhere.
+    LocalUnmanagedExistingPath {
+        /// Absolute path to the existing directory (must be on the forest's filesystem).
+        #[arg(value_name = "ABSOLUTE_PATH")]
+        path: String,
+    },
+    /// A fresh ephemeral `/tmp/<uuid>` directory with no code checkout.
+    LocalTmp {},
+    /// A fresh empty `working-copies/<uuid>` directory with no code checkout.
+    LocalBlank {},
 }
 
 /// CLI spelling of [`CheckoutExtent`] for `new basic --checkout-extent`.
@@ -396,11 +407,14 @@ enum WorkstreamCommand {
     /// Archive the workstream (tombstone).
     Archive,
 
-    /// Remove the workstream: mark it deleted and delete its checked-out code. Refuses
-    /// unless it is safe to remove (a `basic` checkout that is a jj workspace root with
-    /// all non-empty revs already on the remote trunk) — pass `--force` to remove anyway.
+    /// Remove the workstream: mark it deleted and delete the directory silverwood manages
+    /// for it. Refuses unless it is safe to remove — `basic`: a jj workspace root with all
+    /// non-empty revs on the remote trunk; `local-tmp`: its directory is already gone;
+    /// `local-blank`: its directory is empty. Pass `--force` to override. A
+    /// `local-unmanaged-existing-path` workstream can never be removed (even with `--force`).
     Remove {
-        /// Remove even if the workstream is not deemed safe to remove.
+        /// Remove even if the workstream is not deemed safe to remove (no effect on a
+        /// `local-unmanaged-existing-path` workstream, which is never removable).
         #[arg(long)]
         force: bool,
     },
@@ -642,17 +656,21 @@ fn run(cli: Cli) -> CliResult {
 
 fn run_new(forest: &Forest, json: bool, name: Option<String>, variant: NewVariant) -> CliResult {
     let name = name.ok_or("`--name <NAME>` is required")?;
-    let NewVariant::Basic {
-        mode,
-        checkout_extent,
-    } = variant;
-    let ws = forest.create_workstream(NewWorkstream {
-        name,
-        kind: NewKind::Basic {
+    let kind = match variant {
+        NewVariant::Basic {
+            mode,
+            checkout_extent,
+        } => NewKind::Basic {
             mode: mode.into_new_mode()?,
             checkout_extent: checkout_extent.into(),
         },
-    })?;
+        NewVariant::LocalUnmanagedExistingPath { path } => NewKind::LocalUnmanagedExistingPath {
+            path: AbsolutePath::parse(&path)?,
+        },
+        NewVariant::LocalTmp {} => NewKind::LocalTmp,
+        NewVariant::LocalBlank {} => NewKind::LocalBlank,
+    };
+    let ws = forest.create_workstream(NewWorkstream { name, kind })?;
     emit(json, &workstream_json(&ws), || print_workstream(&ws));
     Ok(())
 }
