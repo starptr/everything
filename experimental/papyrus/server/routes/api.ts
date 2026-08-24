@@ -63,6 +63,17 @@ apiRoutes.get("/new-schema", async (c) => {
   }
 });
 
+// The session kinds a tab can be created from (drives the New Tab menu) — pure
+// metadata from `silverwood session-schema`.
+apiRoutes.get("/session-schema", async (c) => {
+  try {
+    return c.json(await sw.sessionSchema());
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[session-schema]\x1b[0m ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // ---- node model: a canvas node IS a silverwood workstream ----
 
 // Project a workstream into the node the client renders. Every durable field is
@@ -154,27 +165,49 @@ apiRoutes.get("/sessions", async (c) => {
   }
 });
 
+// A kind takes the advisory lock iff it is claude-code*: those are the resumable agent
+// sessions silverwood models with a lock (SessionKind::ClaudeCode* carry `lock`; PlainShell
+// / DiskSpace do not). So the rule tracks silverwood-core rather than a hardcoded pair.
+export function kindLocks(kind: string): boolean {
+  return kind.startsWith("claude-code");
+}
+
+// papyrus-supplied default `--name` per kind; the kind tag is the fallback for a new kind.
+const SESSION_NAME_DEFAULTS: Record<string, string> = {
+  "claude-code": "claude",
+  "claude-code-noninteractive": "claude",
+  "plain-shell": "shell",
+  "disk-space": "disk",
+};
+
+// The session kinds silverwood offers, cached (static per binary) so the POST route can
+// validate `kind`/options without shelling out on every create. Reset lazily on miss.
+let sessionSchemaCache: sw.SessionKindInfo[] | null = null;
+async function knownSessionKinds(): Promise<sw.SessionKindInfo[]> {
+  if (!sessionSchemaCache) sessionSchemaCache = await sw.sessionSchema();
+  return sessionSchemaCache;
+}
+
 // Record a fresh durable session in silverwood BEFORE its PTY is spawned — `spawn from-id`
 // reads the record to know how to run it, so the create is mandatory: this THROWS on failure
 // and the caller must not spawn without a record. papyrus mints the id (for a claude session it
-// is also the `claude --session-id`). For a claude kind it additionally acquires the advisory
-// lock (best-effort — advisory, so it never blocks the spawn). Returns whether the lock is held.
+// is also the `claude --session-id`). A claude kind additionally acquires the advisory lock
+// (best-effort — advisory, so it never blocks the spawn). Returns the lock state + the name used.
 async function recordFreshSession(
-  variant: "claude-code" | "plain-shell",
+  kind: string,
   wsId: string,
   sessionId: string,
-): Promise<boolean> {
-  if (variant === "plain-shell") {
-    await sw.sessionCreate("plain-shell", wsId, sessionId, "shell");
-    return false;
-  }
-  await sw.sessionCreate("claude-code", wsId, sessionId, "claude");
+  options: Record<string, string>,
+): Promise<{ holdsLock: boolean; name: string }> {
+  const name = SESSION_NAME_DEFAULTS[kind] ?? kind;
+  await sw.sessionCreate(kind, wsId, sessionId, name, options);
+  if (!kindLocks(kind)) return { holdsLock: false, name };
   try {
     await sw.sessionLock(wsId, sessionId, HOLDER);
-    return true;
+    return { holdsLock: true, name };
   } catch (e: any) {
     logError(`\x1b[38;5;141m[session-register]\x1b[0m lock ${sessionId}: ${e.message}`);
-    return false;
+    return { holdsLock: false, name };
   }
 }
 
@@ -271,20 +304,20 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
     return c.json({ error: "checkout not ready" }, 400);
   }
 
-  // silverwood is authoritative for the session's kind (the tab may be stale). A shell
-  // kind carries no lock; a claude kind acquires the advisory lock. Either way the PTY is
-  // a uniform `spawn from-id`, and silverwood decides how to run it (a shell reopens fresh;
-  // a claude session resumes if a transcript exists, else starts fresh).
+  // silverwood is authoritative for the session's kind (the tab may be stale). An ephemeral
+  // kind (shell, disk-space) carries no lock; a claude kind acquires the advisory lock. Either
+  // way the PTY is a uniform `spawn from-id`, and silverwood decides how to run it (a shell
+  // reopens fresh; a claude session resumes if a transcript exists, else starts fresh).
   const durable = await sw
     .sessionLs(wsId)
     .catch(() => ({}) as Record<string, sw.AgentSession>);
-  const isShell = durable[sessionId]?.kind === "plain-shell";
+  const kind = durable[sessionId]?.kind ?? "claude-code";
 
   // Acquire the advisory lock (claude kinds only). A contention failure → 409 so the UI
   // can offer Force; any other silverwood error is logged and ignored (the lock is
   // advisory, so it must never block a connect on its own).
   let holdsLock = false;
-  if (!isShell) {
+  if (kindLocks(kind)) {
     try {
       await sw.sessionLock(wsId, sessionId, HOLDER, !!force);
       holdsLock = true;
@@ -299,22 +332,44 @@ apiRoutes.post("/sessions/:wsId/sessions/connect", async (c) => {
     sessionKey: sessionId,
     workstreamId: wsId,
     cwd,
-    kind: isShell ? "plain-shell" : "claude-code",
+    kind,
   });
   session.holdsLock = holdsLock;
   log(`\x1b[38;5;141m[session]\x1b[0m connected ${sessionId}`);
   return c.json({ sessionId, connected: true });
 });
 
-// Add a fresh session tab of the requested `variant` (body `{ variant }`, default
-// "claude-code"). papyrus mints the id and records the durable silverwood session FIRST
-// (so `spawn from-id` can read it), then spawns its PTY — so the tab (and any rename)
-// persists workstream-scoped. A claude kind also acquires its advisory lock; a plain shell
-// carries none and reopens fresh. A record failure fails the request (nothing is spawned).
+// Add a fresh session tab of the requested `kind` (body `{ kind, options }`, default kind
+// "claude-code"; legacy `variant` accepted as an alias). `kind`/`options` are validated
+// against `session-schema` so silverwood stays authoritative and a client can't smuggle a
+// global flag (e.g. `--forest`) in as an option. papyrus mints the id and records the durable
+// silverwood session FIRST (so `spawn from-id` can read it), then spawns its PTY — so the tab
+// (and any rename) persists workstream-scoped. A claude kind also acquires its advisory lock;
+// an ephemeral kind carries none. A record failure fails the request (nothing is spawned).
 apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
   const wsId = c.req.param("wsId");
   const body = await c.req.json().catch(() => ({}));
-  const variant = body.variant === "plain-shell" ? "plain-shell" : "claude-code";
+  const kind: string =
+    (typeof body.kind === "string" && body.kind) ||
+    (typeof body.variant === "string" && body.variant) ||
+    "claude-code";
+  const options: Record<string, string> =
+    body.options && typeof body.options === "object" ? body.options : {};
+
+  // Validate the kind + options against silverwood's own schema (source of truth).
+  let known: sw.SessionKindInfo[];
+  try {
+    known = await knownSessionKinds();
+  } catch (e: any) {
+    logError(`\x1b[38;5;141m[session]\x1b[0m schema: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+  const spec = known.find((k) => k.kind === kind);
+  if (!spec) return c.json({ error: `unknown session kind: ${kind}` }, 400);
+  const allowed = new Set(spec.options.map((o) => o.long));
+  const bad = Object.keys(options).find((o) => !allowed.has(o));
+  if (bad) return c.json({ error: `unknown option --${bad} for ${kind}` }, 400);
+
   let ws: sw.Workstream;
   try {
     ws = await sw.get(wsId);
@@ -326,17 +381,17 @@ apiRoutes.post("/sessions/:wsId/sessions", async (c) => {
     return c.json({ error: "checkout not ready" }, 400);
   }
   const sessionId = randomUUID();
-  let holdsLock: boolean;
+  let rec: { holdsLock: boolean; name: string };
   try {
-    holdsLock = await recordFreshSession(variant, wsId, sessionId);
+    rec = await recordFreshSession(kind, wsId, sessionId, options);
   } catch (e: any) {
-    logError(`\x1b[38;5;141m[session]\x1b[0m record ${variant} ${sessionId}: ${e.message}`);
+    logError(`\x1b[38;5;141m[session]\x1b[0m record ${kind} ${sessionId}: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
-  const session = spawnTerminal({ sessionKey: sessionId, workstreamId: wsId, cwd, kind: variant });
-  session.holdsLock = holdsLock;
-  log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${variant} ${sessionId}`);
-  return c.json({ sessionId, connected: true, variant });
+  const session = spawnTerminal({ sessionKey: sessionId, workstreamId: wsId, cwd, kind });
+  session.holdsLock = rec.holdsLock;
+  log(`\x1b[38;5;141m[session]\x1b[0m spawned fresh ${kind} ${sessionId}`);
+  return c.json({ sessionId, connected: true, kind, name: rec.name });
 });
 
 // Disconnect a session: kill its live PTY (releasing the lock). The durable

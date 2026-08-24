@@ -21,11 +21,11 @@ export interface Session {
   everConnected?: boolean;
   // Whether this instance currently holds the session's advisory lock.
   holdsLock?: boolean;
-  // The session variant this PTY runs. Both are durable silverwood session records;
-  // "claude-code" (default) is a resumable agent session with an advisory lock,
-  // "plain-shell" is a `silverwood spawn <ws>` login shell that carries no lock and
-  // reopens as a fresh shell (there is no process to resume).
-  kind?: "claude-code" | "plain-shell";
+  // The silverwood session kind tag this PTY runs (from `session-schema`), recorded for
+  // reference only — the PTY command is a uniform `spawn from-id`, so `kind` never shapes
+  // it. claude-code* kinds are resumable agent sessions with an advisory lock; ephemeral
+  // kinds (plain-shell, disk-space) carry no lock and reopen fresh. Defaults to "claude-code".
+  kind?: string;
 }
 
 export interface LinearTicket {

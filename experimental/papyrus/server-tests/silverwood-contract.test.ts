@@ -83,6 +83,40 @@ describe("silverwood wrapper contract (skip-mode, no network)", () => {
     expect(await sw.sessionLs(ws.id)).not.toHaveProperty(sid);
   });
 
+  test("session-schema reflects every kind (source of truth for the New Tab menu)", async () => {
+    const kinds = await sw.sessionSchema();
+    const tags = kinds.map((k) => k.kind);
+    expect(tags).toEqual(
+      expect.arrayContaining([
+        "claude-code",
+        "plain-shell",
+        "claude-code-noninteractive",
+        "disk-space",
+      ]),
+    );
+    // Only the noninteractive kind carries an option, a required bool; no kind exposes --name.
+    const noni = kinds.find((k) => k.kind === "claude-code-noninteractive")!;
+    expect(noni.options).toEqual([
+      expect.objectContaining({ long: "run-direnv-exec", required: true, value_kind: "bool" }),
+    ]);
+    for (const k of kinds) expect(k.options.map((o) => o.long)).not.toContain("name");
+  });
+
+  test("session create records disk-space + claude-code-noninteractive (options preserved)", async () => {
+    const ws = await newSkipWs("kinds");
+
+    const diskId = crypto.randomUUID();
+    await sw.sessionCreate("disk-space", ws.id, diskId, "disk");
+    expect((await sw.sessionLs(ws.id))[diskId]?.kind).toBe("disk-space");
+
+    // The noninteractive kind requires --run-direnv-exec; the wrapper appends it from options.
+    const noniId = crypto.randomUUID();
+    await sw.sessionCreate("claude-code-noninteractive", ws.id, noniId, "claude", {
+      "run-direnv-exec": "true",
+    });
+    expect((await sw.sessionLs(ws.id))[noniId]?.kind).toBe("claude-code-noninteractive");
+  });
+
   test("session lock/unlock advisory lifecycle", async () => {
     const ws = await newSkipWs("lock");
     const sid = crypto.randomUUID();

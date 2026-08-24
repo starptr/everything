@@ -68,6 +68,22 @@ export interface CommandNode {
   subcommands: CommandNode[]; // empty at a leaf
 }
 
+// The session kinds a tab can be created from, from `silverwood session-schema` (drives
+// the New Tab menu). Flat — one entry per `session create` subcommand; `options` are the
+// user-supplied flags beyond the papyrus-minted id/session_id/name (today only the
+// noninteractive kind's `--run-direnv-exec` bool).
+export interface SessionOptionInfo {
+  long: string; // long flag without `--`, e.g. "run-direnv-exec"
+  help: string;
+  required: boolean;
+  value_kind: "bool" | "string";
+}
+export interface SessionKindInfo {
+  kind: string; // kebab kind tag, = the silverwood SessionKind tag
+  description: string;
+  options: SessionOptionInfo[];
+}
+
 /// Run `silverwood --json <args>` and parse its stdout. Async (never blocks the
 /// event loop) so a slow `new` clone does not freeze the server. Throws on a
 /// non-zero exit, surfacing silverwood's stderr.
@@ -104,6 +120,11 @@ export function get(id: string): Promise<Workstream> {
 /// The `new` command tree the modal drives creation from (pure metadata, no forest).
 export function newSchema(): Promise<CommandNode> {
   return run(["new-schema"]);
+}
+
+/// The session kinds a tab can be created from (pure metadata, no forest).
+export function sessionSchema(): Promise<SessionKindInfo[]> {
+  return run(["session-schema"]);
 }
 
 export async function getPapyrusKv(id: string): Promise<Record<string, string>> {
@@ -170,17 +191,20 @@ export function unsetKv(id: string, key: string): Promise<void> {
   return serialize(id, () => run(["kv", "unset", id, PAPYRUS_NS, key]));
 }
 
-/// Record a durable session of `kind` under a caller-minted id. `session create`
-/// is a per-kind subcommand (`claude-code` | `plain-shell`); the kind flows through
-/// as that subcommand name.
+/// Record a durable session of `kind` under a caller-minted id. `session create` is a
+/// per-kind subcommand (the `kind` tag from `session-schema`); the kind flows through as
+/// that subcommand name. `options` are extra flags for the kind (e.g. `run-direnv-exec`),
+/// appended as `--<long> <value>`.
 export function sessionCreate(
-  kind: "claude-code" | "plain-shell",
+  kind: string,
   id: string,
   sessionId: string,
   name: string,
+  options: Record<string, string> = {},
 ): Promise<void> {
+  const optArgs = Object.entries(options).flatMap(([k, v]) => [`--${k}`, v]);
   return serialize(id, () =>
-    run(["session", "create", kind, id, sessionId, "--name", name]),
+    run(["session", "create", kind, id, sessionId, "--name", name, ...optArgs]),
   );
 }
 

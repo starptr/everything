@@ -78,7 +78,7 @@ export function spawnTerminal(params: {
   sessionKey: string;
   workstreamId: string;
   cwd: string;
-  kind?: "claude-code" | "plain-shell";
+  kind?: string;
 }): Session {
   const { sessionKey, workstreamId, cwd, kind = "claude-code" } = params;
 
