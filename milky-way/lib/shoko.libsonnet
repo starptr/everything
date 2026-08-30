@@ -15,7 +15,11 @@ local images = import 'milky-way/lib/images.libsonnet';
 // filesystem, so the torrent keeps seeding from downloads/qbittorrent/ AND an organized hardlink lands
 // in the library -- one physical copy. The hardlink is made by qbittorrent (see qbittorrent.libsonnet
 // `hardlinkOnFinished`, which fires on that tag or the sonarr-for-sdxarr category); Shoko only
-// move-organizes. Drop folders + renamer (WebAOM) are set in the WebUI post-deploy.
+// move-organizes. Drop folders + the renamer CONFIG (a custom LuaRenamer "AniDB Seasons" script)
+// are set in the WebUI post-deploy; the LuaRenamer PLUGIN itself is bootstrapped onto the config
+// PVC by the `init-luarenamer` init container (it is not in the Shoko image, and the default
+// renamer silently fails to rename+move files without it -- recognized files then strand in the
+// drop source instead of moving to the library).
 //
 // Like jellyfin, Shoko has no API-key-on-boot to pin -- its config (AniDB creds, import folders,
 // renamer, local users) is set during an interactive first-run wizard, so this lib carries NO
@@ -50,8 +54,39 @@ local images = import 'milky-way/lib/images.libsonnet';
     // by the init container (below) so it can be added as an Import Folder in the WebUI, which requires
     // the path to already exist. Kept separate from Sonarr's '/data/library/Animations (Seadexarr)'.
     libraryDir='/data/library/Anime (Shoko)',
+    // LuaRenamer plugin (the renamer backing the WebUI-configured default renamer config). It is
+    // NOT bundled in the Shoko image, and without it the default renamer fails to load so
+    // rename+move-on-import silently no-ops and recognized files pile up in the drop source. The
+    // `init-luarenamer` init container installs this pinned build onto the config PVC. linux-x64
+    // asset (methanol is amd64); bumping luaRenamerVersion re-triggers the install on next boot.
+    luaRenamerZipUrl='https://github.com/Mik1ll/LuaRenamer/releases/download/v5.10.3-stable-5.3.1/LuaRenamer_v5.10.3-stable-5.3.1-0-g4f8f6bb_linux-x64.zip',
+    luaRenamerZipSha256='bf073cd227509f5340cb36a7c6078a5dd2002e1fef5712bfa585d0ce53054c55',
+    luaRenamerVersion='5.10.3-stable-5.3.1',
   ):: {
     local this = self,
+
+    // LuaRenamer plugin bootstrap (see the `luaRenamer*` params + the `init-luarenamer` init
+    // container). Idempotent: skips the network fetch when the pinned version is already unpacked
+    // on the config PVC (a marker file), and always re-asserts uid-1000 ownership so the uid-1000
+    // Shoko process can read the plugin it loads. Pin values arrive via env (LR_* below).
+    local luaRenamerInstallScript = |||
+      set -eu
+      mkdir -p "$LR_PLUGINS_DIR"
+      marker="$LR_PLUGINS_DIR/.luarenamer-$LR_VERSION"
+      if [ ! -f "$marker" ] || [ ! -f "$LR_PLUGINS_DIR/LuaRenamer/LuaRenamer.dll" ]; then
+        echo "installing LuaRenamer $LR_VERSION"
+        tmp="$LR_PLUGINS_DIR/.luarenamer.zip"
+        curl -fsSL -o "$tmp" "$LR_URL"
+        echo "$LR_SHA  $tmp" | sha256sum -c -
+        rm -rf "$LR_PLUGINS_DIR/LuaRenamer"
+        unzip -q -o "$tmp" -d "$LR_PLUGINS_DIR"
+        rm -f "$tmp" "$LR_PLUGINS_DIR"/.luarenamer-*
+        : > "$marker"
+      else
+        echo "LuaRenamer $LR_VERSION already present"
+      fi
+      chown -R 1000:1000 "$LR_PLUGINS_DIR"
+    |||,
 
     configPvc: {
       apiVersion: 'v1',
@@ -98,6 +133,30 @@ local images = import 'milky-way/lib/images.libsonnet';
                 resources: {
                   requests: { memory: '16Mi', cpu: '25m' },
                   limits: { memory: '32Mi', cpu: '50m' },
+                },
+              },
+              {
+                // Install the LuaRenamer plugin onto the config PVC before Shoko starts (see the
+                // luaRenamer* params). Reuses the Shoko image purely as a tool image -- it already
+                // ships curl/unzip/sha256sum and matches the target platform -- with the entrypoint
+                // overridden. Runs as root (no gosu) so it can unpack into /config and chown to
+                // uid 1000; mounts ONLY the config volume. Idempotent, so a normal restart is a
+                // no-op (the plugin persists on the PVC; only a fresh PVC hits the network).
+                name: 'init-luarenamer',
+                image: image,
+                command: ['sh', '-c', luaRenamerInstallScript],
+                env: [
+                  { name: 'LR_PLUGINS_DIR', value: configMountPath + '/Shoko.CLI/plugins' },
+                  { name: 'LR_URL', value: luaRenamerZipUrl },
+                  { name: 'LR_SHA', value: luaRenamerZipSha256 },
+                  { name: 'LR_VERSION', value: luaRenamerVersion },
+                ],
+                volumeMounts: [
+                  { name: 'config', mountPath: configMountPath },
+                ],
+                resources: {
+                  requests: { memory: '32Mi', cpu: '50m' },
+                  limits: { memory: '128Mi', cpu: '250m' },
                 },
               },
             ],
