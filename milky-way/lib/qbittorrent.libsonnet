@@ -42,6 +42,16 @@ local images = import 'milky-way/lib/images.libsonnet';
     // Journey's End (BD Remux ...)") never import even though the files inside are "... - S01E01 ...".
     // A path scan parses each file instead, so it succeeds. See the hook script comment below.
     onTorrentFinished=null,
+    // Optional "run on torrent finished" -> Radarr import hook (the movie sibling of onTorrentFinished).
+    // null disables it. When set, shape is { radarrHost, radarrPort, radarrApiKey, category, importMode? }:
+    // on each COMPLETED torrent in `category`, qbittorrent asks Radarr to import the content, resolving
+    // the target MOVIE itself. Like sonarr-for-sdxarr, radarr-for-sdxarr has no indexers -- SeaDexArr adds
+    // the torrent straight to qbittorrent, so Radarr never grabbed it and its Completed Download Handling
+    // can only auto-import by parsing the release name's title+year. SeaDex release names frequently carry
+    // a different year than Radarr's TMDb entry (e.g. "The Boy and the Heron 2024" vs Radarr's 2023 ->
+    // "Unknown Movie"), so Radarr silently drops those. This hook re-derives the movie by TITLE, ignoring
+    // the year, and force-imports. See autorunScriptRadarr below.
+    onTorrentFinishedRadarr=null,
     // Optional "run on torrent finished" -> HARDLINK-into-a-directory hook. null disables it. When set,
     // shape is { tags?, categories?, destDir } (at least one selector): on each COMPLETED torrent whose
     // category is in `categories` OR that carries any tag in `tags`, qbittorrent hardlinks the content
@@ -138,17 +148,22 @@ local images = import 'milky-way/lib/images.libsonnet';
     ]),
     local configDataInitialSeed = { 'qBittorrent.conf': qbtConfInitialSeed },
 
-    // ---- Optional "run on torrent finished" -> Sonarr import hook (see the onTorrentFinished param) ----
-    local hookEnabled = onTorrentFinished != null || hardlinkOnFinished != null,
+    // ---- Optional "run on torrent finished" -> *arr import + Shoko hardlink hooks (see the params above) ----
+    local hookEnabled = onTorrentFinished != null || onTorrentFinishedRadarr != null || hardlinkOnFinished != null,
     local hookImportMode =
       if onTorrentFinished != null && std.objectHas(onTorrentFinished, 'importMode')
       then onTorrentFinished.importMode
       else 'Copy',   // "Copy" = copy-or-HARDLINK (honors Sonarr's "use hardlinks"); never "Move" (breaks seeding)
+    local radarrImportMode =
+      if onTorrentFinishedRadarr != null && std.objectHas(onTorrentFinishedRadarr, 'importMode')
+      then onTorrentFinishedRadarr.importMode
+      else 'Copy',   // "Copy" = copy-or-HARDLINK (honors Radarr's "use hardlinks"); never "Move" (breaks seeding)
 
     // The program qbittorrent runs on completion. It substitutes its own tokens into the argv:
     // %F = content path, %L = category, %G = tags (quoted so values with spaces survive). We keep the
     // actual logic in a mounted script (below) rather than an inline command so quoting stays sane. The
-    // script dispatches on category and tags, so the two handlers (Sonarr import, Shoko hardlink) coexist.
+    // script dispatches on category and tags, so the handlers (Sonarr import, Radarr import, Shoko
+    // hardlink) coexist.
     local autorunProgram = '/bin/sh /scripts/on-complete.sh "%F" "%L" "%G"',
     // Common preamble: shebang + param parse. Each handler below is appended only when its feature is
     // configured, so a single-feature hook renders exactly that feature's logic (and nothing else).
@@ -241,10 +256,70 @@ local images = import 'milky-way/lib/images.libsonnet';
         | curl -fsS -m 300 --resolve "$SONARR_HOST:$SONARR_PORT:$sonarr_ip" -X POST "$api/api/v3/command" \
             -H "X-Api-Key: $SONARR_API_KEY" -H 'Content-Type: application/json' --data @-
     |||,
+    // Radarr import handler (appended only when onTorrentFinishedRadarr is set). Mirrors the Sonarr
+    // handler above but resolves the MOVIE itself: SeaDexArr adds the torrent directly, so Radarr never
+    // grabbed it and its Completed Download Handling matches only by parsing the release's title+year --
+    // which fails when SeaDex's release year differs from Radarr's TMDb year ("Unknown Movie"). We parse
+    // the release, use Radarr's own match when the year lines up, else re-derive the movie by TITLE alone
+    // (normalized, year ignored). Guard-based: exits 0 unless the torrent is in this instance's category,
+    // so it's safe to run after the Shoko/Sonarr branches.
+    local autorunScriptRadarr = |||
+      # Only this Radarr instance's category; ignore anything else.
+      [ "$category" = "$RADARR_IMPORT_CATEGORY" ] || exit 0
+      [ -n "$content_path" ] || exit 0
+      # This pod's only resolver is gluetun's 127.0.0.1 (public DNS over the tunnel), so it can't resolve
+      # the in-cluster Radarr Service name. Resolve it via kube-dns explicitly, then dial the returned IP
+      # with --resolve (gluetun already allows svcCidr outbound; Host stays the Service name).
+      radarr_ip=$(nslookup "$RADARR_HOST" "$CLUSTER_DNS_IP" 2>/dev/null | awk '/^Name:/{seen=1} seen&&/^Address/{print $NF; exit}')
+      [ -n "$radarr_ip" ] || { echo "on-complete: could not resolve $RADARR_HOST via $CLUSTER_DNS_IP" >&2; exit 1; }
+      api="http://$RADARR_HOST:$RADARR_PORT"
+      rcurl() { curl -fsS -m 300 --resolve "$RADARR_HOST:$RADARR_PORT:$radarr_ip" -H "X-Api-Key: $RADARR_API_KEY" "$@"; }
+      # 1. Resolve the ONE target movie for this torrent (SeaDexArr adds one release per movie). Ask Radarr
+      #    to parse the release name: take its own movie match when the year lines up, else fall back to
+      #    matching the parsed TITLE -- normalized to lowercase-alphanumeric -- against every movie's title,
+      #    original title and alternate titles, ignoring the year entirely.
+      base=$(basename "$content_path")
+      pinfo=$(rcurl -G "$api/api/v3/parse" --data-urlencode "title=$base")
+      movie_id=$(printf '%s' "$pinfo" | jq -r '.movie.id // empty')
+      if [ -z "$movie_id" ]; then
+        ptitle=$(printf '%s' "$pinfo" | jq -r '.parsedMovieInfo.primaryMovieTitle // (.parsedMovieInfo.movieTitles[0] // "")')
+        [ -n "$ptitle" ] || { echo "on-complete: could not parse a movie title from $base" >&2; exit 0; }
+        movie_id=$(rcurl "$api/api/v3/movie" | jq -r --arg pt "$ptitle" '
+          ($pt | ascii_downcase | gsub("[^a-z0-9]";"")) as $w
+          | [ .[]
+              | select(([.title, .originalTitle] + [.alternateTitles[]?.title]
+                        | map(select(. != null) | ascii_downcase | gsub("[^a-z0-9]";"")) | index($w)))
+              | .id ] | first // empty')
+      fi
+      [ -n "$movie_id" ] || { echo "on-complete: could not map $base to a Radarr movie" >&2; exit 0; }
+      # 2. Idempotency + first-grab-wins: skip if the resolved movie already has a file (Radarr's own CDH
+      #    may have imported a year-matching release, and every quality profile is upgradeAllowed=false).
+      [ "$(rcurl "$api/api/v3/movie/$movie_id" | jq -r '.hasFile')" = "true" ] \
+        && { echo "on-complete: radarr movie $movie_id already has a file; skipping"; exit 0; }
+      # 3. Ask Radarr to parse the folder into importable files (folder= accepts a directory or a single
+      #    file), then force each onto the resolved movieId. importMode "Copy" honors Radarr's "use
+      #    hardlinks" -> one physical copy on the shared fs, source kept so the torrent keeps seeding.
+      files=$(rcurl -G "$api/api/v3/manualimport" \
+          --data-urlencode "folder=$content_path" --data-urlencode "filterExistingFiles=false" \
+        | jq -c --argjson mid "$movie_id" '[.[] | select(.path != null) | {path, movieId: $mid, quality, languages, releaseGroup, indexerFlags: (.indexerFlags // 0)}]')
+      count=$(printf '%s' "$files" | jq 'length')
+      [ "$count" -gt 0 ] || { echo "on-complete: no importable files in $content_path"; exit 0; }
+      printf '{"name":"ManualImport","importMode":"%s","files":%s}' "$RADARR_IMPORT_MODE" "$files" \
+        | rcurl -X POST "$api/api/v3/command" -H 'Content-Type: application/json' --data @-
+    |||,
+    // Each *arr import handler runs in its OWN SUBSHELL so its `[ category = ... ] || exit 0` skip-guard
+    // (and any error under `set -e`) exits only that subshell, not the whole on-complete script. That
+    // makes the handlers independent and order-free: a torrent in one *arr category makes the OTHER
+    // handler's guard exit its subshell harmlessly, then control returns and the next handler runs. (The
+    // Shoko hardlink above intentionally has no guard/exit and always falls through.) `|| true` keeps a
+    // handler failure from aborting the script. Without this, the first *arr handler's mismatch `exit 0`
+    // would terminate the script before the second *arr handler could run.
+    local subshell(body) = '(\n' + body + ') || true\n',
     local autorunScript =
       autorunScriptPreamble
       + (if hardlinkOnFinished != null then autorunScriptShoko else '')
-      + (if onTorrentFinished != null then autorunScriptSonarr else ''),
+      + (if onTorrentFinished != null then subshell(autorunScriptSonarr) else '')
+      + (if onTorrentFinishedRadarr != null then subshell(autorunScriptRadarr) else ''),
     local autorunScriptData = { 'on-complete.sh': autorunScript },
 
     // Enforce the hook via the WebUI API on every start (idempotent). The seeded qBittorrent.conf is
@@ -270,14 +345,24 @@ local images = import 'milky-way/lib/images.libsonnet';
 
     // Container/volume fragments spliced into the pod below only when the hook is enabled.
     local hookEnv =
-      (if onTorrentFinished != null then [
+      // Shared by both *arr import handlers (they resolve their Service through kube-dns; see the scripts).
+      (if onTorrentFinished != null || onTorrentFinishedRadarr != null
+       then [{ name: 'CLUSTER_DNS_IP', value: clusterDnsIp }] else [])
+      + (if onTorrentFinished != null then [
         { name: 'SONARR_HOST', value: onTorrentFinished.sonarrHost },
         { name: 'SONARR_PORT', value: std.toString(onTorrentFinished.sonarrPort) },
-        { name: 'CLUSTER_DNS_IP', value: clusterDnsIp },
         { name: 'SONARR_IMPORT_CATEGORY', value: onTorrentFinished.category },
         { name: 'SONARR_IMPORT_MODE', value: hookImportMode },
         // Keep the key out of the Deployment's plaintext env -- pull it from a Secret this lib renders.
         { name: 'SONARR_API_KEY', valueFrom: { secretKeyRef: { name: name + '-sonarr-import', key: 'sonarr-api-key' } } },
+      ] else [])
+      + (if onTorrentFinishedRadarr != null then [
+        { name: 'RADARR_HOST', value: onTorrentFinishedRadarr.radarrHost },
+        { name: 'RADARR_PORT', value: std.toString(onTorrentFinishedRadarr.radarrPort) },
+        { name: 'RADARR_IMPORT_CATEGORY', value: onTorrentFinishedRadarr.category },
+        { name: 'RADARR_IMPORT_MODE', value: radarrImportMode },
+        // Keep the key out of the Deployment's plaintext env -- pull it from a Secret this lib renders.
+        { name: 'RADARR_API_KEY', valueFrom: { secretKeyRef: { name: name + '-radarr-import', key: 'radarr-api-key' } } },
       ] else [])
       + (if hardlinkOnFinished != null then
            (if std.objectHas(hardlinkOnFinished, 'categories')
@@ -299,11 +384,11 @@ local images = import 'milky-way/lib/images.libsonnet';
     vpnSecret: this.vpn.secret,
     vpnControlConfig: this.vpn.configMap,
 
-    // Hook resources (only when enabled): the script ConfigMap (for either handler) and the
-    // Sonarr-API-key Secret (only when the Sonarr handler is used). NB: computed field KEYS are
-    // evaluated in the enclosing scope, so they can see the `onTorrentFinished`/`hardlinkOnFinished`
-    // params but NOT the object-local `hookEnabled` -- gate on the params directly.
-    [if onTorrentFinished != null || hardlinkOnFinished != null then 'autorunConfigMap']: {
+    // Hook resources (only when enabled): the script ConfigMap (shared by every handler) and the
+    // per-*arr API-key Secrets (each only when its handler is used). NB: computed field KEYS are
+    // evaluated in the enclosing scope, so they can see the `onTorrentFinished`/`onTorrentFinishedRadarr`/
+    // `hardlinkOnFinished` params but NOT the object-local `hookEnabled` -- gate on the params directly.
+    [if onTorrentFinished != null || onTorrentFinishedRadarr != null || hardlinkOnFinished != null then 'autorunConfigMap']: {
       apiVersion: 'v1',
       kind: 'ConfigMap',
       metadata: { name: name + '-autorun', namespace: namespace },
@@ -314,6 +399,12 @@ local images = import 'milky-way/lib/images.libsonnet';
       kind: 'Secret',
       metadata: { name: name + '-sonarr-import', namespace: namespace },
       stringData: { 'sonarr-api-key': onTorrentFinished.sonarrApiKey },
+    },
+    [if onTorrentFinishedRadarr != null then 'radarrImportSecret']: {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: name + '-radarr-import', namespace: namespace },
+      stringData: { 'radarr-api-key': onTorrentFinishedRadarr.radarrApiKey },
     },
 
     configMapInitialSeed: {

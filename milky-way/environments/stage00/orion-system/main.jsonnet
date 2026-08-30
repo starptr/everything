@@ -223,6 +223,19 @@ local pubkeys = import 'magic/common/public_keys.json';
       sonarrApiKey: secrets.sonarrForSdxarr.apiKey,
       category: 'sonarr-for-sdxarr',
     },
+    // Movie sibling of the Sonarr hook above, for radarr-for-sdxarr. On each COMPLETED torrent in the
+    // `radarr-for-sdxarr` category, ask Radarr to import it -- resolving the movie by TITLE (ignoring the
+    // year). This is the movie analog of the Sonarr batch-name recovery: SeaDexArr adds the torrent
+    // straight to qBittorrent, so Radarr never grabbed it and its Completed Download Handling can only
+    // match by parsing title+year -- which fails when the SeaDex release year differs from Radarr's TMDb
+    // year (e.g. "The Boy and the Heron 2024" vs Radarr's 2023 -> "Unknown Movie"), leaving the download
+    // stuck. Same service/port/key/category source-of-truth as the buildarr + seadexarr Radarr blocks below.
+    onTorrentFinishedRadarr = {
+      radarrHost: utils.domainOfService(this.radarrForSdxarr.service),
+      radarrPort: utils.associateObjectsByKey(this.radarrForSdxarr.service.spec.ports, 'name')['webui'].port,
+      radarrApiKey: secrets.radarrForSdxarr.apiKey,
+      category: 'radarr-for-sdxarr',
+    },
     // On each COMPLETED torrent that carries the `on-finish-hardlink-to-shoko-import` TAG -- or is in
     // the `sonarr-for-sdxarr` category -- hardlink the content into Shoko's drop-source folder
     // (/data/downloads/shoko-drop, on the same mdata fs as the downloads, so the link costs no extra
