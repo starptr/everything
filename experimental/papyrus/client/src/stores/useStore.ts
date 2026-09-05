@@ -78,6 +78,10 @@ export interface AgentSession {
   notes?: string;
   // The workstream's attached sessions, one tab each (server projection).
   tabs?: SessionTab[];
+  // Per-workstream tab UI state (papyrus KV): the user's tab order (session ids) and
+  // the last-used tab, restored when the workstream is reopened.
+  tabOrder?: string[];
+  activeTab?: string;
   // Linear ticket info
   ticketId?: string;
   ticketTitle?: string;

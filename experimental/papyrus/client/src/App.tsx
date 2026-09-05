@@ -140,6 +140,8 @@ function AppContent() {
           customColor: n.customColor,
           notes: n.notes,
           tabs: (n.sessions || []) as AgentSession["tabs"],
+          tabOrder: n.tabOrder as string[] | undefined,
+          activeTab: n.activeTab as string | undefined,
         };
 
         if (store.sessions.has(n.nodeId)) {

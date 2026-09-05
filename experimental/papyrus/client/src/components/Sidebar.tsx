@@ -25,6 +25,7 @@ import {
 import { useStore, SessionTab } from "../stores/useStore";
 import { AgentIcon } from "./AgentIcon";
 import { type PendingOptimism, shouldDropOptimism, mergePendingTabs } from "./sessionOptimism";
+import { orderTabs, sameOrder, moveWithinOrder } from "./tabOrder";
 import { Terminal } from "./Terminal";
 import { NewSessionMenu, type SessionPick } from "./NewSessionMenu";
 import { useResizablePane } from "./useResizablePane";
@@ -53,6 +54,23 @@ const iconOptions = [
 // The tab title is silverwood's session `name`, verbatim.
 function tabLabel(t: SessionTab): string {
   return t.name;
+}
+
+// Fire-and-forget PATCH of a workstream's papyrus KV (tab state). Best-effort: the tab
+// order / last-used tab are non-critical UI state that self-heals on the next selection,
+// reorder, or reconcile, so a failed write is swallowed rather than surfaced. Both the
+// async rejection and the sync no-origin throw (a relative URL under about:blank, e.g.
+// in tests) are ignored.
+function patchWorkstream(id: string, body: Record<string, unknown>): void {
+  try {
+    fetch(`/api/sessions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  } catch {
+    // No usable origin to persist to (e.g. the test DOM) — nothing to do.
+  }
 }
 
 export function Sidebar() {
@@ -85,7 +103,39 @@ export function Sidebar() {
     max: 1200,
   });
 
-  const [activeTabId, setActiveTabId] = useState<string | undefined>(undefined);
+  // Selected tab, scoped per workstream (node id → session id) and persisted to papyrus
+  // KV so reopening a workstream restores its last-used tab. A single shared value would
+  // (and did) reset to the first tab whenever you switched workstreams.
+  const [activeTabByNode, setActiveTabByNode] = useState<Record<string, string | undefined>>({});
+  const activeTabId = selectedNodeId ? activeTabByNode[selectedNodeId] : undefined;
+  // Set this workstream's selected tab locally (no persist) — for fallbacks/clamping.
+  const setActiveForNode = useCallback(
+    (id: string | undefined) => {
+      if (!selectedNodeId) return;
+      setActiveTabByNode((m) => ({ ...m, [selectedNodeId]: id }));
+    },
+    [selectedNodeId],
+  );
+  // Select a tab from a user action: update locally AND persist to KV.
+  const selectTab = useCallback(
+    (id: string) => {
+      if (!selectedNodeId) return;
+      setActiveForNode(id);
+      patchWorkstream(selectedNodeId, { activeTab: id });
+    },
+    [selectedNodeId, setActiveForNode],
+  );
+  // Which workstreams we've already seeded from their persisted `activeTab` this session,
+  // so seeding runs once per node and a later local selection is never overwritten.
+  const seededRef = useRef<Set<string>>(new Set());
+  // Drag-reorder optimism (node id → ordered session ids), mirroring `pendingByNode`.
+  // Shown immediately on drag; retired once the server echoes the same order.
+  const [orderByNode, setOrderByNode] = useState<Record<string, string[]>>({});
+  // The tab being dragged (HTML5 DnD), and the last order produced this drag (null until
+  // an actual reorder happens, so a click-drag with no movement persists nothing).
+  const dragIdRef = useRef<string | null>(null);
+  const latestOrderRef = useRef<string[] | null>(null);
+
   // The session whose rename panel is open (its pencil was clicked), + its buffer.
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionName, setEditSessionName] = useState("");
@@ -127,6 +177,33 @@ export function Sidebar() {
   // it (`pending` is already scoped to the selected node — see `pendingByNode`).
   const tabs: SessionTab[] = mergePendingTabs(storeTabs, pending);
 
+  // Apply the user's tab order: a live drag's optimistic order takes precedence, else the
+  // persisted order from KV. Tabs not in the order (e.g. a just-created one) land at the end.
+  const effectiveOrder =
+    (selectedNodeId ? orderByNode[selectedNodeId] : undefined) ?? session?.tabOrder;
+  const orderedTabs: SessionTab[] = orderTabs(tabs, effectiveOrder);
+
+  // Live-reorder while dragging over a tab: move the dragged tab into the hovered tab's
+  // slot and show it immediately (optimism only). Computed from the current (already
+  // optimistic) order, so hovering across neighbors shifts smoothly.
+  const dragOverTab = (overId: string) => {
+    const dragId = dragIdRef.current;
+    if (!dragId || !selectedNodeId || dragId === overId) return;
+    const currentIds = orderedTabs.map((t) => t.sessionId);
+    const next = moveWithinOrder(currentIds, dragId, overId);
+    if (sameOrder(next, currentIds)) return;
+    latestOrderRef.current = next;
+    setOrderByNode((m) => ({ ...m, [selectedNodeId]: next }));
+  };
+
+  // Persist the settled order once the drag ends — only if a reorder actually happened.
+  const persistOrder = () => {
+    const ids = latestOrderRef.current;
+    dragIdRef.current = null;
+    if (!selectedNodeId || !ids) return;
+    patchWorkstream(selectedNodeId, { tabOrder: ids });
+  };
+
   // Reset node-level edit buffers when the selected workstream changes.
   useEffect(() => {
     if (session) {
@@ -141,16 +218,50 @@ export function Sidebar() {
     setConnectError(null);
   }, [selectedNodeId]);
 
-  // Default/clamp the active tab to one that exists.
+  // Seed a workstream's selected tab from its persisted `activeTab` (papyrus KV), once
+  // per node per session. Waits until the value is projected; a manual selection made
+  // first wins (the `m[id] !== undefined` guard); an invalid/deleted id is corrected by
+  // the clamp below. This is what restores the last-used tab when a workstream reopens.
   useEffect(() => {
-    if (tabs.length === 0) {
-      if (activeTabId !== undefined) setActiveTabId(undefined);
+    const id = selectedNodeId;
+    if (!id || seededRef.current.has(id)) return;
+    const persisted = session?.activeTab;
+    if (!persisted) return;
+    seededRef.current.add(id);
+    setActiveTabByNode((m) => (m[id] !== undefined ? m : { ...m, [id]: persisted }));
+  }, [selectedNodeId, session?.activeTab]);
+
+  // Default/clamp the selected tab to one that exists, scoped to this workstream. Uses a
+  // functional update (not the stale render-closure `activeTabId`) so it composes with the
+  // seed effect in the same commit: if the seed just restored a valid tab from KV, this
+  // no-ops instead of clobbering it back to the first tab. The fallback to the first tab is
+  // local-only — only explicit user selection persists, so a stale id never overwrites KV.
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const id = selectedNodeId;
+    if (orderedTabs.length === 0) {
+      setActiveTabByNode((m) => (m[id] === undefined ? m : { ...m, [id]: undefined }));
       return;
     }
-    if (!activeTabId || !tabs.some((t) => t.sessionId === activeTabId)) {
-      setActiveTabId(tabs[0].sessionId);
+    setActiveTabByNode((m) => {
+      const cur = m[id];
+      if (cur && orderedTabs.some((t) => t.sessionId === cur)) return m;
+      return { ...m, [id]: orderedTabs[0].sessionId };
+    });
+  }, [orderedTabs, selectedNodeId]);
+
+  // Retire a drag's optimistic order once the server echoes the same order back.
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const override = orderByNode[selectedNodeId];
+    if (override && sameOrder(session?.tabOrder, override)) {
+      setOrderByNode((m) => {
+        const n = { ...m };
+        delete n[selectedNodeId];
+        return n;
+      });
     }
-  }, [tabs, activeTabId]);
+  }, [session?.tabOrder, selectedNodeId, orderByNode]);
 
   // Close the rename panel if its session's tab vanished.
   useEffect(() => {
@@ -179,7 +290,7 @@ export function Sidebar() {
     });
   }, [storeTabs]);
 
-  const activeTab = tabs.find((t) => t.sessionId === activeTabId);
+  const activeTab = orderedTabs.find((t) => t.sessionId === activeTabId);
 
   const handleClose = () => {
     setSidebarOpen(false);
@@ -191,7 +302,7 @@ export function Sidebar() {
     if (!selectedNodeId) return;
     setBusy(true);
     setConnectError(null);
-    setActiveTabId(tab.sessionId);
+    selectTab(tab.sessionId);
     try {
       const res = await fetch(`/api/sessions/${selectedNodeId}/sessions/connect`, {
         method: "POST",
@@ -211,7 +322,7 @@ export function Sidebar() {
         ...p,
         [data.sessionId]: { ov: { connected: true }, seq: reconcileSeqRef.current },
       }));
-      setActiveTabId(data.sessionId);
+      selectTab(data.sessionId);
     } catch (e: any) {
       setConnectError(e.message);
     } finally {
@@ -245,7 +356,7 @@ export function Sidebar() {
           seq: reconcileSeqRef.current,
         },
       }));
-      setActiveTabId(data.sessionId);
+      selectTab(data.sessionId);
     } catch (e: any) {
       setConnectError(e.message);
     } finally {
@@ -486,9 +597,10 @@ export function Sidebar() {
             )}
           </AnimatePresence>
 
-          {/* Session tabs */}
+          {/* Session tabs — drag to reorder (order persisted per workstream). Native
+              HTML5 DnD: the tab body is the drag surface; clicks on it still select. */}
           <div className="flex-shrink-0 flex items-stretch gap-1 px-2 pt-2 border-b border-border overflow-x-auto">
-            {tabs.map((t) => {
+            {orderedTabs.map((t) => {
               const lockedByOther = t.lock && !t.lock.mine;
               const dot = t.connected ? "#22C55E" : lockedByOther ? "#FBBF24" : "#6B7280";
               const isActive = t.sessionId === activeTabId;
@@ -496,7 +608,25 @@ export function Sidebar() {
               return (
                 <div
                   key={t.sessionId}
-                  className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-t-md text-xs whitespace-nowrap transition-colors ${
+                  draggable
+                  onDragStart={(e) => {
+                    dragIdRef.current = t.sessionId;
+                    latestOrderRef.current = null;
+                    e.dataTransfer.effectAllowed = "move";
+                    // A payload is required for a drag to start in some browsers.
+                    e.dataTransfer.setData("text/plain", t.sessionId);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    dragOverTab(t.sessionId);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    persistOrder();
+                  }}
+                  onDragEnd={persistOrder}
+                  className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-t-md text-xs whitespace-nowrap select-none cursor-grab active:cursor-grabbing transition-colors ${
                     isActive
                       ? "bg-canvas text-content border-b-2 border-content"
                       : "text-content-muted hover:bg-surface-active"
@@ -506,7 +636,7 @@ export function Sidebar() {
                     onClick={() => {
                       // Switching to a different tab closes an open rename pane.
                       if (t.sessionId !== activeTabId) setEditingSessionId(null);
-                      setActiveTabId(t.sessionId);
+                      selectTab(t.sessionId);
                     }}
                     title={t.sessionId}
                     className={`flex items-center gap-1.5 min-w-0 ${isActive ? "" : "hover:text-content"}`}
@@ -518,7 +648,7 @@ export function Sidebar() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveTabId(t.sessionId);
+                      selectTab(t.sessionId);
                       if (isEditingTab) {
                         setEditingSessionId(null);
                       } else {
