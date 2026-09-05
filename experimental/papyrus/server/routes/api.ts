@@ -112,6 +112,9 @@ async function buildNode(ws: sw.Workstream) {
   }
 
   const position = sw.decodeKv<{ x: number; y: number }>(kv, "position");
+  // Per-workstream tab UI state: the user's tab order (session ids) and last-used tab.
+  const tabOrder = sw.decodeKv<string[]>(kv, "tabOrder");
+  const activeTab = sw.decodeKv<string>(kv, "activeTab");
   return {
     nodeId: ws.id,
     sessionId: ws.id,
@@ -124,6 +127,8 @@ async function buildNode(ws: sw.Workstream) {
     customColor: sw.decodeKv<string>(kv, "color"),
     notes: sw.decodeKv<string>(kv, "notes"),
     ...(position ? { position } : {}),
+    ...(tabOrder ? { tabOrder } : {}),
+    ...(activeTab ? { activeTab } : {}),
     // Node visuals: is any session connected in THIS papyrus instance, and the
     // checkout state. No live agent-activity status (that needed the hook).
     connected: tabs.some((t) => t.connected),
@@ -435,9 +440,10 @@ apiRoutes.patch("/sessions/:wsId/sessions/:sessionId", async (c) => {
   return c.json({ success: true });
 });
 
-// Edit a node's label/color/notes/position. Label is the workstream name (silverwood
-// rename); color, notes, and canvas position are papyrus KV. Position is per-node —
-// the client saves only the workstream it moved, so one instance never rewrites another's.
+// Edit a node's label/color/notes/position/tab-state. Label is the workstream name
+// (silverwood rename); color, notes, canvas position, tab order, and the last-used tab
+// are papyrus KV. These are per-node — the client saves only the workstream it changed,
+// so one instance never rewrites another's.
 apiRoutes.patch("/sessions/:sessionId", async (c) => {
   const id = c.req.param("sessionId");
   const u = await c.req.json();
@@ -446,6 +452,8 @@ apiRoutes.patch("/sessions/:sessionId", async (c) => {
     if (u.customColor !== undefined) await sw.setKv(id, "color", u.customColor);
     if (u.notes !== undefined) await sw.setKv(id, "notes", u.notes);
     if (u.position !== undefined) await sw.setKv(id, "position", u.position);
+    if (u.tabOrder !== undefined) await sw.setKv(id, "tabOrder", u.tabOrder);
+    if (u.activeTab !== undefined) await sw.setKv(id, "activeTab", u.activeTab);
   } catch (e: any) {
     return c.json({ error: e.message }, 400);
   }
