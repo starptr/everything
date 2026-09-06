@@ -36,6 +36,7 @@ local gluetunLeakTest = import 'milky-way/lib/gluetun-leak-test.libsonnet';
 local kubo = import 'milky-way/lib/kubo.libsonnet';
 local kuboTest = import 'milky-way/lib/kubo-test.libsonnet';
 local andrefIpfsDepot = import 'milky-way/lib/andref-ipfs-depot.libsonnet';
+local yutobotDiscord = import 'milky-way/lib/yutobot-discord.libsonnet';
 local testExampleWhaleImageDigest = import 'milky-way/lib/test-example-whale-image-digest.libsonnet';
 local letsEncryptCloudflare = import 'milky-way/lib/letsencrypt-cloudflare.libsonnet';
 local testTraefikAcme = import 'milky-way/lib/test-traefik-acme-ingress.libsonnet';
@@ -849,6 +850,14 @@ local pubkeys = import 'magic/common/public_keys.json';
     publicHostname = "depot.andref.app",
     gatewayBaseDomain = "ipfs.andref.app",
     issuerName = activeLetsEncryptIssuerName,
+  ),
+
+  // yutobot-discord: Yuto's personal Discord bot (lib/yutobot-discord.libsonnet), migrated off its
+  // old CapRover droplet. Outbound-only (gateway websocket, no server), so just a Secret + a
+  // single-replica Deployment. The whole .env comes from the sops binary secret; the container
+  // mounts it at /app/.env where the app's dotenv.config() reads it.
+  yutobotDiscord: yutobotDiscord.new(
+    envFileContent = secretsRegistry['discord/yutobot.env'],
   ),
 
   cilium: charts.cilium,
