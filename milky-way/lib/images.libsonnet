@@ -177,6 +177,17 @@ local images = {
       fullyQualifiedRepository: "docker.io/yuto7/andref-ipfs-depot",
       defaultDigest: { hash: std.trim(importstr "exports/whale/digests/andref-ipfs-depot.txt") },
     },
+    // Patched Shokofin (Jellyfin plugin) as a FILE-DELIVERY image: stable v6.0.5 + the backported
+    // `VFS_UseSourceFileAsVersionIdentifier` feature (see whale/outputs.nix). Not a service -- its
+    // /plugin dir is copied onto Jellyfin's config PVC by lib/jellyfin.libsonnet's init container.
+    // Digest from exports/whale/digests/jellyfin-shokofin-plugin.txt (written by
+    // `nix run ./flake-profiles/whale#jellyfin-shokofin-plugin-push`). This pin (and the declarative
+    // install it drives) is PERMANENT; when upstream ships the feature in a stable release, only the
+    // whale build's patch/overlay goes away -- it then packages the stock plugin, digest re-pinned here.
+    "jellyfin-shokofin-plugin": {
+      fullyQualifiedRepository: "docker.io/yuto7/jellyfin-shokofin-plugin",
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/jellyfin-shokofin-plugin.txt") },
+    },
     // Kubo (go-ipfs), the reference IPFS implementation -- run here as a VPN-fronted pinned-mirror
     // node (lib/kubo.libsonnet). Multi-arch INDEX digest (k3s resolves the per-node arch; the index
     // includes linux/amd64 for methanol), same convention as the *arr/qbittorrent pins; tagHint is
