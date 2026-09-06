@@ -291,6 +291,85 @@
     };
   };
 
+  # Patched Shokofin (Jellyfin plugin) -- stable v6.0.5 + ONE upstream feature commit backported:
+  # `VFS_UseSourceFileAsVersionIdentifier` (upstream 30eb9b55), which makes Jellyfin's multi-version
+  # episode picker label each version by its source file's basename instead of the opaque
+  # `[Shoko File=N]` VFS name. The option is gated (default off), so the build is behaviorally
+  # identical to stock 6.0.5 until enabled. See
+  # whale/patches/shokofin-source-file-version-identifier.patch and milky-way/lib/jellyfin.libsonnet.
+  #
+  # Only the BACKPORT is temporary. Once upstream ships this feature in a stable Shokofin, drop the
+  # patch + buildDotnetModule + whale/shokofin-nuget-deps.json + the DLL overlay and collapse this to
+  # a plain image that packages the stock release zip (fetchurl -> /plugin). The file-delivery image
+  # itself, the images.libsonnet pin, and the jellyfin init container that consumes it are PERMANENT
+  # -- they are how the plugin is installed declaratively, patched or not (never revert to a
+  # hand-installed UI plugin).
+  #
+  # This is the repo's first buildDotnetModule. We build ONLY Shokofin.dll (the single patched
+  # managed assembly) and OVERLAY it onto the pinned upstream release zip -- so every shipped
+  # dependency DLL + meta.json comes from upstream unchanged and we never have to guess the dep set.
+  # NuGet deps are vendored in whale/shokofin-nuget-deps.json (regenerate by pointing a scratch
+  # buildDotnetModule flake at v6.0.5 + this patch and running `nix run .#default.fetch-deps`).
+  shokofinSrc = imagePkgs.fetchFromGitHub {
+    owner = "ShokoAnime";
+    repo = "Shokofin";
+    rev = "v6.0.5";
+    hash = "sha256-vAbhbMnnfnFkBIramuRccuSvDb+WJKGG6hOX9V5luNc=";
+  };
+  shokofinPatchedBuild = imagePkgs.buildDotnetModule {
+    pname = "shokofin";
+    version = "6.0.5-sfvi";
+    src = shokofinSrc;
+    patches = [ ./patches/shokofin-source-file-version-identifier.patch ];
+    # Collapse the multi-target (net9.0;net8) to a single net9.0 target: Jellyfin 10.11 is .NET 9, so
+    # net8 is dead weight, and a single <TargetFramework> lets `dotnet publish` run without an
+    # explicit -f (a plural <TargetFrameworks>, even with one value, forces multi-target publish).
+    postPatch = ''
+      substituteInPlace Shokofin/Shokofin.csproj \
+        --replace-fail '<TargetFrameworks>net9.0;net8</TargetFrameworks>' '<TargetFramework>net9.0</TargetFramework>'
+    '';
+    projectFile = "Shokofin/Shokofin.csproj";
+    nugetDeps = ./shokofin-nuget-deps.json;
+    dotnet-sdk = imagePkgs.dotnetCorePackages.sdk_9_0;
+    dotnet-runtime = imagePkgs.dotnetCorePackages.runtime_9_0;
+    executables = [ ];   # a library plugin, no executables to wrap
+    doCheck = false;
+  };
+  stockShokofinZip = imagePkgs.fetchurl {
+    url = "https://github.com/ShokoAnime/Shokofin/releases/download/v6.0.5/shoko_6.0.5.0_for_10.11.zip";
+    hash = "sha256-Pm/uMugqSAOExmr4jQhpvPaL7ZqJescCPzeur7Rma+8=";
+  };
+  # The installable plugin dir = the pinned upstream release zip with ONLY Shokofin.dll swapped for
+  # our patched build, and autoUpdate disabled in meta.json so Jellyfin's updater can't replace the
+  # patched DLL with a stock release.
+  shokofinPluginDir = imagePkgs.runCommand "shokofin-plugin-6.0.5-sfvi" {
+    nativeBuildInputs = [ imagePkgs.unzip imagePkgs.jq ];
+  } ''
+    mkdir -p "$out"
+    unzip -q ${stockShokofinZip} -d "$out"
+    cp -f ${shokofinPatchedBuild}/lib/shokofin/Shokofin.dll "$out/Shokofin.dll"
+    jq '.autoUpdate = false' "$out/meta.json" > "$out/meta.json.tmp"
+    mv "$out/meta.json.tmp" "$out/meta.json"
+  '';
+  # File-delivery image (the repo's first): bakes the plugin dir at /plugin plus busybox for the init
+  # container's sh/cp. There is no service Entrypoint -- milky-way/lib/jellyfin.libsonnet runs this as
+  # an init container that copies /plugin into Jellyfin's config PVC (cf. grand-central, which reuses
+  # its own image as an init container).
+  jellyfin-shokofin-plugin = image-nix-artifacts {
+    name = "jellyfin-shokofin-plugin";
+    buildLayeredImageArg = {
+      tag = "latest";
+      contents = [ imagePkgs.busybox ];
+      extraCommands = ''
+        mkdir -p plugin
+        cp -r ${shokofinPluginDir}/. plugin/
+      '';
+      config = {
+        Cmd = [ "sh" ];
+      };
+    };
+  };
+
   # `nix develop` target for a long-lived `skopeo login`. Uses the same skopeo (and
   # nixpkgs) as the push-scripts, so the auth.json written here is always compatible.
   mkAuthShell = pkgs: pkgs.mkShell {
@@ -315,6 +394,8 @@ in {
       seadexarr-push = seadexarr.push-script.x86_64-linux;
       andref-ipfs-depot-image = andref-ipfs-depot.image.x86_64-linux;
       andref-ipfs-depot-push = andref-ipfs-depot.push-script.x86_64-linux;
+      jellyfin-shokofin-plugin-image = jellyfin-shokofin-plugin.image.x86_64-linux;
+      jellyfin-shokofin-plugin-push = jellyfin-shokofin-plugin.push-script.x86_64-linux;
     };
     aarch64-darwin = {
       whale-push-example = example-artifacts.push-script.aarch64-darwin;
@@ -323,6 +404,7 @@ in {
       autobrr-push = autobrr.push-script.aarch64-darwin;
       seadexarr-push = seadexarr.push-script.aarch64-darwin;
       andref-ipfs-depot-push = andref-ipfs-depot.push-script.aarch64-darwin;
+      jellyfin-shokofin-plugin-push = jellyfin-shokofin-plugin.push-script.aarch64-darwin;
     };
   };
 

@@ -1,0 +1,97 @@
+diff --git a/Shokofin/Configuration/PluginConfiguration.cs b/Shokofin/Configuration/PluginConfiguration.cs
+index 06fb16e..7507c89 100644
+--- a/Shokofin/Configuration/PluginConfiguration.cs
++++ b/Shokofin/Configuration/PluginConfiguration.cs
+@@ -593,6 +593,12 @@ public class PluginConfiguration : BasePluginConfiguration {
+     /// </summary>
+     public bool VFS_ResolveLinks { get; set; }
+ 
++    /// <summary>
++    /// Use the file name of the source file as the version identifier in the
++    /// UI.
++    /// </summary>
++    public bool VFS_UseSourceFileAsVersionIdentifier { get; set; } = false;
++
+     /// <summary>
+     /// Maximum number of exceptions before aborting the VFS generation. Set to
+     /// 0 to disable limit.
+diff --git a/Shokofin/Pages/Scripts/Common.js b/Shokofin/Pages/Scripts/Common.js
+index 013d8ea..f4bcf72 100644
+--- a/Shokofin/Pages/Scripts/Common.js
++++ b/Shokofin/Pages/Scripts/Common.js
+@@ -539,6 +539,7 @@ export const LibraryMenu = globalThis.LibraryMenu;
+  *   VFS_AddReleaseGroup: boolean;
+  *   VFS_AddResolution: boolean;
+  *   VFS_ResolveLinks: boolean;
++ *   VFS_UseSourceFileAsVersionIdentifier: boolean;
+  *   VFS_MaxTotalExceptionsBeforeAbort: number;
+  *   VFS_MaxSeriesExceptionsBeforeAbort: number;
+  *   VFS_UseSemaphore: boolean;
+diff --git a/Shokofin/Pages/Scripts/Settings.js b/Shokofin/Pages/Scripts/Settings.js
+index 76f2080..9846897 100644
+--- a/Shokofin/Pages/Scripts/Settings.js
++++ b/Shokofin/Pages/Scripts/Settings.js
+@@ -669,6 +669,7 @@ function applyFormToConfig(form, config) {
+             config.AddCreditsAsSpecialFeatures = form.querySelector("#AddCreditsAsSpecialFeatures").checked;
+             config.VFS_AddReleaseGroup = form.querySelector("#VFS_AddReleaseGroup").checked;
+             config.VFS_AddResolution = form.querySelector("#VFS_AddResolution").checked;
++            config.VFS_UseSourceFileAsVersionIdentifier = form.querySelector("#VFS_UseSourceFileAsVersionIdentifier").checked;
+ 
+             config.VFS_Threads = vfsTreads;
+             form.querySelector("#VFS_Threads").value = vfsTreads;
+@@ -929,6 +930,7 @@ async function applyConfigToForm(form, config) {
+             form.querySelector("#AddCreditsAsSpecialFeatures").checked = config.AddCreditsAsSpecialFeatures;
+             form.querySelector("#VFS_AddReleaseGroup").checked = config.VFS_AddReleaseGroup;
+             form.querySelector("#VFS_AddResolution").checked = config.VFS_AddResolution;
++            form.querySelector("#VFS_UseSourceFileAsVersionIdentifier").checked = config.VFS_UseSourceFileAsVersionIdentifier;
+ 
+             form.querySelector("#VFS_Threads").value = config.VFS_Threads;
+             form.querySelector("#VFS_ResolveLinks").checked = config.VFS_ResolveLinks;
+diff --git a/Shokofin/Pages/Settings.html b/Shokofin/Pages/Settings.html
+index 285cd4f..34be47a 100644
+--- a/Shokofin/Pages/Settings.html
++++ b/Shokofin/Pages/Settings.html
+@@ -2081,6 +2081,13 @@ form:not(.advanced-mode) .advanced-only {
+                             </label>
+                             <div class="fieldDescription checkboxFieldDescription">Add the full or short release group name to all automatically linked files in the VFS. "No Group" will be used for all manually linked files. <strong>Warning</strong>: The release group in the file name may change if the release group info is incomplete, unavailable, or otherwise updated in Shoko at a later date, and thus may cause episode/movie entries to be "removed" and "added" as new entries when that happens. <strong>Use at your own risk.</strong></div>
+                         </div>
++                        <div class="checkboxContainer checkboxContainer-withDescription advanced-only">
++                            <label class="emby-checkbox-label">
++                                <input is="emby-checkbox" type="checkbox" id="VFS_UseSourceFileAsVersionIdentifier" />
++                                <span>Use Source File As Version Identifier</span>
++                            </label>
++                            <div class="fieldDescription checkboxFieldDescription">Use the source file name as the version identifier.</div>
++                        </div>
+                         <div class="checkboxContainer checkboxContainer-withDescription">
+                             <label class="emby-checkbox-label">
+                                 <input is="emby-checkbox" type="checkbox" id="VFS_AddResolution" />
+diff --git a/Shokofin/Web/VfsActionFilter.cs b/Shokofin/Web/VfsActionFilter.cs
+index 3fd89fc..13bdf38 100644
+--- a/Shokofin/Web/VfsActionFilter.cs
++++ b/Shokofin/Web/VfsActionFilter.cs
+@@ -1,5 +1,6 @@
+ using System.IO;
+ using System.Threading.Tasks;
++using MediaBrowser.Model.Dto;
+ using Microsoft.AspNetCore.Mvc;
+ using Microsoft.AspNetCore.Mvc.Filters;
+ 
+@@ -8,6 +9,18 @@ namespace Shokofin.Web;
+ public class VfsActionFilter : IAsyncActionFilter {
+     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next) {
+         var executedResult = await next().ConfigureAwait(false);
++        if (
++            executedResult.Result is ObjectResult result1 &&
++            result1.Value is BaseItemDto { MediaSources.Length: > 0 } dto &&
++            dto.Path.StartsWith(Plugin.Instance.VirtualRoot) &&
++            Plugin.Instance.Configuration.VFS_UseSourceFileAsVersionIdentifier
++        ) {
++            foreach (var mediaSource in dto.MediaSources) {
++                var path = File.ResolveLinkTarget(mediaSource.Path, returnFinalTarget: false)?.FullName ?? mediaSource.Path;
++                var fileName = Path.GetFileNameWithoutExtension(path);
++                mediaSource.Name = fileName;
++            }
++        }
+         if (
+             executedResult.Result is PhysicalFileResult result &&
+             result.FileName.StartsWith(Plugin.Instance.VirtualRoot) &&
