@@ -28,4 +28,7 @@
   'gluetun-vpn-proxy.conf': importstr '/Users/yuto/.config/sops-nix/secrets/k8s-config/gluetun-vpn-proxy.conf',
   'thelounge-gluetun.conf': importstr '/Users/yuto/.config/sops-nix/secrets/k8s-config/thelounge-gluetun.conf',
   'kubo-gluetun.conf': importstr '/Users/yuto/.config/sops-nix/secrets/k8s-config/kubo-gluetun.conf',
+  // yutobot-discord's whole .env (binary secret under discord/, not k8s-config/); rendered by
+  // sops-nix on sodium at <secrets>/discord/yutobot.env. Consumed by lib/yutobot-discord.libsonnet.
+  'discord/yutobot.env': importstr '/Users/yuto/.config/sops-nix/secrets/discord/yutobot.env',
 }

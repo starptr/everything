@@ -170,6 +170,15 @@
         mode = "0400";
         sopsFile = ./../../../secrets/k8s-config/kubo-gluetun.conf;
       };
+      # yutobot-discord's .env (whole-file binary blob). No `path` override: sops-nix renders it at
+      # the default <secrets>/discord/yutobot.env, which milky-way's secrets.libsonnet importstr's
+      # into the k8s Secret (milky-way/lib/yutobot-discord.libsonnet). Same rationale as the
+      # k8s-config secrets above -- don't add a `path =` that would move it out from under that import.
+      secrets."discord/yutobot.env" = {
+        format = "binary";
+        mode = "0400";
+        sopsFile = ./../../../secrets/discord/yutobot.env;
+      };
       # Private key the grand-central reverse-tunnel LaunchAgent authenticates with (its public
       # half is grand-central's tunnelKeys in milky-way main.jsonnet). Binary so the PEM round-
       # trips byte-for-byte; 0600 because ssh rejects a group/world-readable identity file.
