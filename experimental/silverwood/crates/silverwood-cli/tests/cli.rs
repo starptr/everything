@@ -442,13 +442,13 @@ fn spawn_direct_variants_reflect_the_kind() {
         args[3]
     );
 
-    // claude-code-noninteractive: claude directly when direnv off …
+    // claude-code-noninteractiveshell: claude directly when direnv off …
     let plan = json(
         &dir,
         &[
             "--json",
             "spawn",
-            "claude-code-noninteractive",
+            "claude-code-noninteractiveshell",
             "--run-direnv-exec",
             "false",
             "resume",
@@ -466,7 +466,7 @@ fn spawn_direct_variants_reflect_the_kind() {
         &[
             "--json",
             "spawn",
-            "claude-code-noninteractive",
+            "claude-code-noninteractiveshell",
             "--run-direnv-exec",
             "true",
             "first-run",

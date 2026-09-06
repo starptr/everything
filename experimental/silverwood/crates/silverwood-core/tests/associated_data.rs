@@ -172,12 +172,12 @@ fn session_doctor_and_lock_cover_the_new_kinds() {
     let ws = forest.create_workstream(new_ws("new-kinds-demo")).unwrap();
     let claude = temp_forest("new-kinds-claude");
 
-    // claude-code-noninteractive is a claude kind: doctor checks the transcript, and it locks.
+    // claude-code-noninteractiveshell is a claude kind: doctor checks the transcript, and it locks.
     forest
         .create_session(
             ws.id,
             "ni",
-            SessionKind::ClaudeCodeNoninteractive {
+            SessionKind::ClaudeCodeNoninteractiveshell {
                 lock: None,
                 run_direnv_exec: true,
             },
@@ -185,7 +185,7 @@ fn session_doctor_and_lock_cover_the_new_kinds() {
         )
         .unwrap();
     let report = forest.doctor_session(ws.id, "ni", &claude).unwrap();
-    assert_eq!(report.kind, "claude-code-noninteractive");
+    assert_eq!(report.kind, "claude-code-noninteractiveshell");
     assert_eq!(report.conversation_exists, Some(false));
     forest.lock_session(ws.id, "ni", "A", false).unwrap();
     assert_eq!(
@@ -241,12 +241,12 @@ fn spawn_plan_from_session_resolves_each_kind() {
     assert!(plan.args[3].contains("exec claude --session-id 'cc-1'"));
     assert_eq!(plan.cwd, cwd);
 
-    // claude-code-noninteractive with direnv on: `direnv exec <cwd> claude --session-id`.
+    // claude-code-noninteractiveshell with direnv on: `direnv exec <cwd> claude --session-id`.
     forest
         .create_session(
             ws.id,
             "ni-1",
-            SessionKind::ClaudeCodeNoninteractive {
+            SessionKind::ClaudeCodeNoninteractiveshell {
                 lock: None,
                 run_direnv_exec: true,
             },

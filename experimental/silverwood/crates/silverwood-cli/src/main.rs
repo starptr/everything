@@ -13,7 +13,7 @@ use std::str::FromStr;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use silverwood_core::{
-    claude_code_noninteractive_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
+    claude_code_noninteractiveshell_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
     AbsolutePath, AgentSession, CheckoutExtent, ClaudeRun, DoctorReport, Forest, HttpsGitUrl,
     LocationWithinForest, NewCheckoutMode, NewKind, NewWorkstream, SessionKind, ShellPlan,
     SpawnSeed, UpgradeReport, Workstream, WorkstreamId, DOC_SCHEMA_VERSION,
@@ -137,7 +137,7 @@ enum SpawnCommand {
     },
     /// A Claude Code session, run non-interactively (claude directly), with explicit
     /// control over loading the checkout's `.envrc`.
-    ClaudeCodeNoninteractive {
+    ClaudeCodeNoninteractiveshell {
         /// Whether to wrap claude in `direnv exec <cwd>` — required, `true` or `false`.
         #[arg(long, action = clap::ArgAction::Set, required = true)]
         run_direnv_exec: bool,
@@ -331,7 +331,7 @@ enum SessionCreate {
     },
     /// A Claude Code session run non-interactively (claude directly, not inside the user's
     /// interactive shell), with explicit `--run-direnv-exec` control over loading `.envrc`.
-    ClaudeCodeNoninteractive {
+    ClaudeCodeNoninteractiveshell {
         /// The workstream id to attach the session to (from `silverwood ls`).
         id: String,
         /// The Claude Code session id to record.
@@ -850,7 +850,7 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
     let id = match &cmd {
         SessionCommand::Create(SessionCreate::ClaudeCode { id, .. })
         | SessionCommand::Create(SessionCreate::PlainShell { id, .. })
-        | SessionCommand::Create(SessionCreate::ClaudeCodeNoninteractive { id, .. })
+        | SessionCommand::Create(SessionCreate::ClaudeCodeNoninteractiveshell { id, .. })
         | SessionCommand::Create(SessionCreate::DiskSpace { id, .. })
         | SessionCommand::Ls { id }
         | SessionCommand::Rename { id, .. }
@@ -878,7 +878,7 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
             let name = name.unwrap_or_else(|| session_id.clone());
             forest.create_session(id, &session_id, SessionKind::PlainShell {}, &name)?;
         }
-        SessionCommand::Create(SessionCreate::ClaudeCodeNoninteractive {
+        SessionCommand::Create(SessionCreate::ClaudeCodeNoninteractiveshell {
             session_id,
             name,
             run_direnv_exec,
@@ -888,7 +888,7 @@ fn run_session(forest: &Forest, json: bool, cmd: SessionCommand) -> CliResult {
             forest.create_session(
                 id,
                 &session_id,
-                SessionKind::ClaudeCodeNoninteractive {
+                SessionKind::ClaudeCodeNoninteractiveshell {
                     lock: None,
                     run_direnv_exec,
                 },
@@ -956,12 +956,12 @@ fn run_spawn(forest: &Forest, json: bool, what: SpawnCommand) -> CliResult {
             let (session_id, run, wd) = run.parts();
             claude_code_plan(&wd.resolve()?, &session_id, run, &seed)
         }
-        SpawnCommand::ClaudeCodeNoninteractive {
+        SpawnCommand::ClaudeCodeNoninteractiveshell {
             run_direnv_exec,
             run,
         } => {
             let (session_id, run, wd) = run.parts();
-            claude_code_noninteractive_plan(
+            claude_code_noninteractiveshell_plan(
                 &wd.resolve()?,
                 &session_id,
                 run,

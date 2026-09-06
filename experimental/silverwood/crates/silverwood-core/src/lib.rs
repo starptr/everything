@@ -37,7 +37,7 @@ pub use migrate::DOC_SCHEMA_VERSION;
 pub use provider::{CheckoutProvider, JjColocated};
 pub use source::{AbsolutePath, HttpsGitUrl};
 pub use spawn::{
-    claude_code_noninteractive_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
+    claude_code_noninteractiveshell_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
     ClaudeRun, ShellPlan, SpawnSeed,
 };
 pub use workstream::{

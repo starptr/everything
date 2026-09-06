@@ -145,7 +145,14 @@ pub enum SessionKind {
     /// inside the user's interactive shell — with `direnv exec <cwd>` wrapping chosen
     /// explicitly by `run_direnv_exec` (not derived from the checkout mode). Carries a
     /// resumption lock like [`SessionKind::ClaudeCode`].
-    ClaudeCodeNoninteractive {
+    ///
+    /// `alias` accepts the pre-rename tag `claude-code-noninteractive`: a
+    /// backward-compatible decode (not a schema bump), so records written before the
+    /// rename still read, and re-serialize under the new tag on their next write. This
+    /// is an *additive* change (`DESIGN.md` §9.0/§9.2) — no destructive migration, no
+    /// upgrade barrier.
+    #[serde(alias = "claude-code-noninteractive")]
+    ClaudeCodeNoninteractiveshell {
         /// The advisory resumption lock, if currently held.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lock: Option<SessionLock>,
@@ -169,7 +176,7 @@ impl SessionKind {
     pub fn tag(&self) -> &'static str {
         match self {
             SessionKind::ClaudeCode { .. } => "claude-code",
-            SessionKind::ClaudeCodeNoninteractive { .. } => "claude-code-noninteractive",
+            SessionKind::ClaudeCodeNoninteractiveshell { .. } => "claude-code-noninteractiveshell",
             SessionKind::PlainShell {} => "plain-shell",
             SessionKind::DiskSpace {} => "disk-space",
         }
@@ -316,7 +323,7 @@ impl AgentSession {
     pub fn lock(&self) -> Option<&SessionLock> {
         match &self.kind {
             SessionKind::ClaudeCode { lock }
-            | SessionKind::ClaudeCodeNoninteractive { lock, .. } => lock.as_ref(),
+            | SessionKind::ClaudeCodeNoninteractiveshell { lock, .. } => lock.as_ref(),
             SessionKind::PlainShell {} | SessionKind::DiskSpace {} => None,
         }
     }
@@ -674,6 +681,34 @@ mod tests {
             let json = serde_json::to_value(&kind).unwrap();
             assert_eq!(json["kind"], serde_json::json!(kind.tag()));
         }
+    }
+
+    /// The pre-rename tag `claude-code-noninteractive` still deserializes (via the
+    /// variant's serde `alias`) into the renamed variant, and re-serializes under the
+    /// new tag — a backward-compatible read, no schema migration. So records written
+    /// before the rename are read transparently and normalized on their next write.
+    #[test]
+    fn legacy_noninteractive_tag_deserializes_and_normalizes() {
+        let legacy = r#"{"kind":"claude-code-noninteractive","name":"ni","created_at":"2020-01-01T00:00:00Z","run_direnv_exec":true}"#;
+        let session: AgentSession = serde_json::from_str(legacy).unwrap();
+        assert!(matches!(
+            session.kind,
+            SessionKind::ClaudeCodeNoninteractiveshell {
+                run_direnv_exec: true,
+                ..
+            }
+        ));
+
+        // Re-serializing writes the canonical new tag (= tag()), so any rewrite of an
+        // old record normalizes it to the new name on disk.
+        let reencoded = serde_json::to_value(&session).unwrap();
+        assert_eq!(reencoded["kind"], "claude-code-noninteractiveshell");
+        assert_eq!(reencoded["kind"], serde_json::json!(session.kind.tag()));
+
+        // The current tag also round-trips unchanged.
+        let again: AgentSession =
+            serde_json::from_str(&serde_json::to_string(&session).unwrap()).unwrap();
+        assert_eq!(again, session);
     }
 
     fn basic_body(status: Status, state: CheckoutState) -> WorkstreamBody {

@@ -301,7 +301,7 @@ pub(crate) fn set_session_lock(
         .map_err(|e| Error::Corrupt(format!("session {session_id}: {e}")))?;
     match &mut session.kind {
         SessionKind::ClaudeCode { lock: slot }
-        | SessionKind::ClaudeCodeNoninteractive { lock: slot, .. } => *slot = lock,
+        | SessionKind::ClaudeCodeNoninteractiveshell { lock: slot, .. } => *slot = lock,
         // A shell kind has no lock slot; refuse rather than silently drop the request.
         SessionKind::PlainShell {} | SessionKind::DiskSpace {} => {
             return Err(Error::SessionNotLockable {

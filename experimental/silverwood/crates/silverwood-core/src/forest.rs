@@ -19,7 +19,7 @@ use crate::id::{ForestId, WorkstreamId};
 use crate::migrate;
 use crate::provider::{CheckoutProvider, JjColocated};
 use crate::spawn::{
-    claude_code_noninteractive_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
+    claude_code_noninteractiveshell_plan, claude_code_plan, disk_space_plan, plain_shell_plan,
     ClaudeRun, ShellPlan, SpawnSeed,
 };
 use crate::workstream::{
@@ -460,7 +460,7 @@ impl Forest {
         let session = doc::get_session(&doc, session_id)?
             .ok_or_else(|| Error::SessionNotFound(session_id.to_string()))?;
         let conversation_exists = match &session.kind {
-            SessionKind::ClaudeCode { .. } | SessionKind::ClaudeCodeNoninteractive { .. } => Some(
+            SessionKind::ClaudeCode { .. } | SessionKind::ClaudeCodeNoninteractiveshell { .. } => Some(
                 crate::claude::claude_conversation_exists(config_dir, session_id),
             ),
             // A shell kind has no persisted conversation to check; doctor can't
@@ -513,9 +513,9 @@ impl Forest {
             SessionKind::ClaudeCode { .. } => {
                 claude_code_plan(&cwd, session_id, claude_run(), seed)
             }
-            SessionKind::ClaudeCodeNoninteractive {
+            SessionKind::ClaudeCodeNoninteractiveshell {
                 run_direnv_exec, ..
-            } => claude_code_noninteractive_plan(
+            } => claude_code_noninteractiveshell_plan(
                 &cwd,
                 session_id,
                 claude_run(),

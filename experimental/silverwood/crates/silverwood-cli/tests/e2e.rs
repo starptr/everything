@@ -93,14 +93,14 @@ fn session_schema_reflects_the_session_create_subcommands() {
     };
 
     // The kinds papyrus supplies id/session_id/name for; only extra options are surfaced.
-    // Three kinds take no options; the noninteractive kind takes a required bool.
+    // Three kinds take no options; the noninteractiveshell kind takes a required bool.
     for tag in ["claude-code", "plain-shell", "disk-space"] {
         assert!(
             kind(tag)["options"].as_array().unwrap().is_empty(),
             "{tag} should have no options"
         );
     }
-    let opts = kind("claude-code-noninteractive")["options"]
+    let opts = kind("claude-code-noninteractiveshell")["options"]
         .as_array()
         .expect("options array");
     assert_eq!(opts.len(), 1);
@@ -351,7 +351,7 @@ fn new_direnv_unsafe_mode_is_ready() {
 /// a Claude transcript exists under `CLAUDE_CONFIG_DIR`. Needs a real (ready) checkout —
 /// hence ignored. (The pure kind→plan builders are unit-tested in `silverwood-core`;
 /// direnv-unsafe checkout modes no longer affect the plan — the interactive claude-code kind
-/// is direnv-blind, and explicit `direnv exec` lives on `claude-code-noninteractive`.)
+/// is direnv-blind, and explicit `direnv exec` lives on `claude-code-noninteractiveshell`.)
 #[test]
 #[ignore = "network + jj; run via `cargo test -- --ignored`"]
 fn spawn_from_id_resolves_each_session_kind() {
@@ -393,13 +393,13 @@ fn spawn_from_id_resolves_each_session_kind() {
         .contains("exec claude --session-id 'cc-1'"));
     assert_eq!(plan["cwd"], cwd);
 
-    // claude-code-noninteractive with direnv on: `direnv exec <cwd> claude --session-id`.
+    // claude-code-noninteractiveshell with direnv on: `direnv exec <cwd> claude --session-id`.
     ok(
         &dir,
         &[
             "session",
             "create",
-            "claude-code-noninteractive",
+            "claude-code-noninteractiveshell",
             id,
             "ni-1",
             "--run-direnv-exec",

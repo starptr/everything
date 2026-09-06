@@ -20,7 +20,7 @@
 //! gets none. A non-interactive `<shell> -c 'cmd'` cannot do this (its interactive rc is
 //! not sourced and no prompt is drawn), which is why these kinds use `<shell> -l -i -c` and
 //! run the hooks by hand — see `interactive_shell_plan`/`prompt_hook_snippet`. The one
-//! kind that still wraps `direnv exec` explicitly is `claude-code-noninteractive`, gated on
+//! kind that still wraps `direnv exec` explicitly is `claude-code-noninteractiveshell`, gated on
 //! its own `run_direnv_exec` flag (the deterministic, rc-free counterpart).
 
 use std::collections::BTreeMap;
@@ -141,12 +141,12 @@ pub fn disk_space_plan(cwd: &str, seed: &SpawnSeed) -> ShellPlan {
     )
 }
 
-/// The **claude-code-noninteractive** kind: `claude` run directly in the clean login env
+/// The **claude-code-noninteractiveshell** kind: `claude` run directly in the clean login env
 /// (no interactive shell), optionally wrapped in `direnv exec <cwd>` to load the checkout's
 /// pre-approved `.envrc`. The explicit, deterministic counterpart to [`claude_code_plan`] —
 /// `run_direnv_exec` selects the wrapping, not the checkout mode. `cwd` is a distinct argv
 /// element, so no shell quoting is needed (the plan is exec'd directly, never via a shell).
-pub fn claude_code_noninteractive_plan(
+pub fn claude_code_noninteractiveshell_plan(
     cwd: &str,
     session_id: &str,
     run: ClaudeRun,
@@ -398,8 +398,8 @@ mod tests {
     }
 
     #[test]
-    fn noninteractive_runs_claude_directly_when_direnv_off() {
-        let plan = claude_code_noninteractive_plan(
+    fn noninteractiveshell_runs_claude_directly_when_direnv_off() {
+        let plan = claude_code_noninteractiveshell_plan(
             "/w/abc",
             "sess-1",
             ClaudeRun::FirstRun,
@@ -411,9 +411,9 @@ mod tests {
     }
 
     #[test]
-    fn noninteractive_wraps_claude_in_direnv_exec_when_on() {
+    fn noninteractiveshell_wraps_claude_in_direnv_exec_when_on() {
         // The checkout path is a distinct argv element (no shell quoting needed).
-        let plan = claude_code_noninteractive_plan(
+        let plan = claude_code_noninteractiveshell_plan(
             "/w/a b/c",
             "sess-1",
             ClaudeRun::Resume,
