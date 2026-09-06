@@ -47,8 +47,11 @@ local images = import 'milky-way/lib/images.libsonnet';
     // Install the pinned patched Shokofin plugin dir onto the config PVC before Jellyfin starts.
     // Idempotent + content-addressed: the marker encodes the patched Shokofin.dll's sha256, so a new
     // build reinstalls but a plain restart is a no-op. Clears any other Shoko_* dir so Jellyfin loads
-    // exactly our version, and chowns to uid 1000 (the LSIO Jellyfin runtime uid) so it can read the
-    // assemblies it loads. The plugin files live at /plugin in the whale image (busybox gives sh/cp).
+    // exactly our version. chown to uid 1000 (the LSIO Jellyfin runtime uid) AND chmod u+w: the files
+    // come from the read-only (0444) Nix store via `cp -a`, but Jellyfin must be able to REWRITE
+    // meta.json (it rewrites plugin manifests on status/enable-disable and repo reconciliation) -- a
+    // normal install's files are owner-writable, and read-only ones make the plugins dashboard throw
+    // UnauthorizedAccessException. The plugin files live at /plugin in the whale image (busybox: sh/cp).
     local shokofinPluginInstallScript = |||
       set -eu
       plugins=/config/data/plugins
@@ -66,6 +69,7 @@ local images = import 'milky-way/lib/images.libsonnet';
         echo "patched Shokofin $ver already installed"
       fi
       chown -R 1000:1000 "$dest"
+      chmod -R u+w "$dest"
     |||,
 
     configPvc: {
