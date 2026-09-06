@@ -180,7 +180,7 @@ export function kindLocks(kind: string): boolean {
 // papyrus-supplied default `--name` per kind; the kind tag is the fallback for a new kind.
 const SESSION_NAME_DEFAULTS: Record<string, string> = {
   "claude-code": "claude",
-  "claude-code-noninteractive": "claude",
+  "claude-code-noninteractiveshell": "claude",
   "plain-shell": "shell",
   "disk-space": "disk",
 };

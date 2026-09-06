@@ -24,7 +24,7 @@ export const FALLBACK_SESSION_SCHEMA: SessionKindInfo[] = [
   { kind: "claude-code", description: "A Claude Code session.", options: [] },
   { kind: "plain-shell", description: "A plain login shell.", options: [] },
   {
-    kind: "claude-code-noninteractive",
+    kind: "claude-code-noninteractiveshell",
     description: "A Claude Code session run non-interactively.",
     options: [
       {
@@ -46,7 +46,7 @@ export interface KindPresentation {
 }
 const KIND_PRESENTATION: Record<string, KindPresentation> = {
   "claude-code": { icon: "sparkles", color: "#F97316" },
-  "claude-code-noninteractive": { icon: "sparkles", color: "#F97316" },
+  "claude-code-noninteractiveshell": { icon: "sparkles", color: "#F97316" },
   "plain-shell": { icon: "terminal" },
   "disk-space": { icon: "cpu" },
 };

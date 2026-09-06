@@ -58,7 +58,7 @@ describe("NewSessionMenu", () => {
     const { onPick } = renderMenu();
     fireEvent.click(screen.getByText(/run-direnv-exec=true/));
     expect(onPick).toHaveBeenCalledWith({
-      kind: "claude-code-noninteractive",
+      kind: "claude-code-noninteractiveshell",
       options: { "run-direnv-exec": "true" },
     });
   });

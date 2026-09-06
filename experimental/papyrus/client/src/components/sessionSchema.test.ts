@@ -34,15 +34,15 @@ describe("expandKindToRows", () => {
   });
 
   test("a required bool option → two rows, one per true/false, differentiated by the flag name", () => {
-    const noni = FALLBACK_SESSION_SCHEMA.find((k) => k.kind === "claude-code-noninteractive")!;
+    const noni = FALLBACK_SESSION_SCHEMA.find((k) => k.kind === "claude-code-noninteractiveshell")!;
     const rows = expandKindToRows(noni);
     expect(rows).toHaveLength(2);
     const byExec = Object.fromEntries(rows.map((r) => [r.options["run-direnv-exec"], r]));
     expect(byExec["true"]).toBeDefined();
     expect(byExec["false"]).toBeDefined();
     // Title stays the silverwood tag, with the chosen flag appended (no invented wording).
-    expect(byExec["true"].label).toBe("claude-code-noninteractive (run-direnv-exec=true)");
-    expect(byExec["false"].label).toBe("claude-code-noninteractive (run-direnv-exec=false)");
+    expect(byExec["true"].label).toBe("claude-code-noninteractiveshell (run-direnv-exec=true)");
+    expect(byExec["false"].label).toBe("claude-code-noninteractiveshell (run-direnv-exec=false)");
     expect(rows[0].key).not.toBe(rows[1].key);
   });
 
@@ -84,8 +84,8 @@ describe("schemaToRows", () => {
     expect(rows.map((r) => r.kind)).toEqual([
       "claude-code",
       "plain-shell",
-      "claude-code-noninteractive",
-      "claude-code-noninteractive",
+      "claude-code-noninteractiveshell",
+      "claude-code-noninteractiveshell",
       "disk-space",
     ]);
   });

@@ -71,7 +71,7 @@ export interface CommandNode {
 // The session kinds a tab can be created from, from `silverwood session-schema` (drives
 // the New Tab menu). Flat — one entry per `session create` subcommand; `options` are the
 // user-supplied flags beyond the papyrus-minted id/session_id/name (today only the
-// noninteractive kind's `--run-direnv-exec` bool).
+// noninteractiveshell kind's `--run-direnv-exec` bool).
 export interface SessionOptionInfo {
   long: string; // long flag without `--`, e.g. "run-direnv-exec"
   help: string;
