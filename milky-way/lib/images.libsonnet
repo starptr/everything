@@ -188,6 +188,14 @@ local images = {
       fullyQualifiedRepository: "docker.io/yuto7/jellyfin-shokofin-plugin",
       defaultDigest: { hash: std.trim(importstr "exports/whale/digests/jellyfin-shokofin-plugin.txt") },
     },
+    // yutobot-discord: Yuto's Discord bot (lib/yutobot-discord.libsonnet), a whale-built Node app
+    // (buildNpmPackage flake in yutobot-discord/, wrapped in whale/outputs.nix). Digest from
+    // exports/whale/digests/yutobot-discord.txt (written by
+    // `nix run ./flake-profiles/whale#yutobot-discord-push`).
+    "yutobot-discord": {
+      fullyQualifiedRepository: "docker.io/yuto7/yutobot-discord",
+      defaultDigest: { hash: std.trim(importstr "exports/whale/digests/yutobot-discord.txt") },
+    },
     // Kubo (go-ipfs), the reference IPFS implementation -- run here as a VPN-fronted pinned-mirror
     // node (lib/kubo.libsonnet). Multi-arch INDEX digest (k3s resolves the per-node arch; the index
     // includes linux/amd64 for methanol), same convention as the *arr/qbittorrent pins; tagHint is

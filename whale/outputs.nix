@@ -20,6 +20,13 @@
   # needs nothing but the binary + its runtime closure + TLS roots + an init.
   andrefIpfsDepotBin = inputs.andref-ipfs-depot.packages.x86_64-linux.default;
 
+  # yutobot-discord: our Node (discord.js) bot, built by its own buildNpmPackage flake for
+  # x86_64-linux. The build wraps the app entrypoint into $out/bin/yutobot-discord on a pinned
+  # Node 22; the assets (font + wii menu png) are inside the package and loaded via __dirname, so
+  # the image needs only the app + its runtime closure (node, canvas's cairo/pango) + TLS roots +
+  # tzdata + an init.
+  yutobotDiscordApp = inputs.yutobot-discord.packages.x86_64-linux.default;
+
   # SeaDexArr (bbtufty) -- whale-built FORK of the pinned upstream `:main` image. NOT built from source
   # (it's a niche Python app not in nixpkgs): we pull the exact pinned digest -- which already carries the
   # qbittorrent-api 2025.11.1 login fix (see milky-way/lib/images.libsonnet) -- and patch ONE file in
@@ -370,6 +377,39 @@
     };
   };
 
+  # yutobot-discord (Yuto's Discord bot). Wraps the buildNpmPackage app above in a minimal layered
+  # image: dumb-init is PID 1 so k8s SIGTERM stops the pod promptly; cacert + SSL_CERT_FILE give
+  # discord.js's HTTPS/gateway calls a CA bundle; tzdata + TZ back the welcome card's local-time
+  # rendering (America/Los_Angeles, matching the app's original CapRover deploy). No server, so no
+  # ExposedPorts. The app reads DISCORD_* from a .env in its CWD, so WorkingDir=/app (created empty
+  # here) is where lib/yutobot-discord.libsonnet mounts the sops Secret. See
+  # milky-way/lib/yutobot-discord.libsonnet.
+  yutobot-discord = image-nix-artifacts {
+    name = "yutobot-discord";
+    buildLayeredImageArg = {
+      tag = "latest";
+      contents = [
+        yutobotDiscordApp
+        imagePkgs.cacert
+        imagePkgs.tzdata
+        imagePkgs.dumb-init
+      ];
+      # WorkingDir target for the mounted .env; layered images don't create it implicitly.
+      extraCommands = ''
+        mkdir -p app
+      '';
+      config = {
+        Entrypoint = [ "dumb-init" "--" "${yutobotDiscordApp}/bin/yutobot-discord" ];
+        Env = [
+          "SSL_CERT_FILE=${imagePkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          "TZ=America/Los_Angeles"
+          "ZONEINFO=${imagePkgs.tzdata}/share/zoneinfo"
+        ];
+        WorkingDir = "/app";
+      };
+    };
+  };
+
   # `nix develop` target for a long-lived `skopeo login`. Uses the same skopeo (and
   # nixpkgs) as the push-scripts, so the auth.json written here is always compatible.
   mkAuthShell = pkgs: pkgs.mkShell {
@@ -396,6 +436,8 @@ in {
       andref-ipfs-depot-push = andref-ipfs-depot.push-script.x86_64-linux;
       jellyfin-shokofin-plugin-image = jellyfin-shokofin-plugin.image.x86_64-linux;
       jellyfin-shokofin-plugin-push = jellyfin-shokofin-plugin.push-script.x86_64-linux;
+      yutobot-discord-image = yutobot-discord.image.x86_64-linux;
+      yutobot-discord-push = yutobot-discord.push-script.x86_64-linux;
     };
     aarch64-darwin = {
       whale-push-example = example-artifacts.push-script.aarch64-darwin;
@@ -405,6 +447,7 @@ in {
       seadexarr-push = seadexarr.push-script.aarch64-darwin;
       andref-ipfs-depot-push = andref-ipfs-depot.push-script.aarch64-darwin;
       jellyfin-shokofin-plugin-push = jellyfin-shokofin-plugin.push-script.aarch64-darwin;
+      yutobot-discord-push = yutobot-discord.push-script.aarch64-darwin;
     };
   };
 

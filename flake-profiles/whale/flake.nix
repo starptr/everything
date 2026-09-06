@@ -10,6 +10,10 @@
   # wraps it in a minimal image. Self-contained (its own pinned nixpkgs), so it doesn't follow
   # whale's nixpkgs.
   inputs.andref-ipfs-depot.url = "path:./../../andref-ipfs-depot";
+  # The yutobot-discord Node app (buildNpmPackage flake). whale consumes its built x86_64-linux
+  # package and wraps it in a minimal image. Self-contained (its own pinned nixpkgs / Node 22), so
+  # it doesn't follow whale's nixpkgs.
+  inputs.yutobot-discord.url = "path:./../../yutobot-discord";
   inputs.systems.url = "github:nix-systems/default";
 
   outputs = inputs: (import ./../../whale/outputs.nix) inputs;
