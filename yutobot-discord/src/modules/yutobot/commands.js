@@ -47,7 +47,10 @@ const logicCommands = [
 		name: "foocheck",
 		description: "List members who don't have the `foo` role (needs Manage Roles)",
 		execute: async ({ message }) => {
-			if (!message.member.hasPermission("MANAGE_ROLES")) return;
+			if (!message.member.hasPermission("MANAGE_ROLES")) {
+				message.channel.send("you need the perm `Manage Roles` to run this command :(");
+				return;
+			}
 			try {
 				const allMembers = (await message.guild.members.fetch()).array().filter(member => !member.user.bot);
 				const allMembersWithoutFoo = allMembers.filter(member => !member.roles.cache.array().some(role => role.name === "foo"));
@@ -57,6 +60,7 @@ const logicCommands = [
 			} catch (err) {
 				console.error("foocheck failed.");
 				console.error(err);
+				message.channel.send("sry, foocheck broke ¯\\_(ツ)_/¯");
 			}
 		},
 	},
@@ -64,7 +68,10 @@ const logicCommands = [
 		name: "owoifier",
 		description: "Toggle the random owoifier (needs Administrator)",
 		execute: ({ message, state }) => {
-			if (!message.member.hasPermission("ADMINISTRATOR")) return;
+			if (!message.member.hasPermission("ADMINISTRATOR")) {
+				message.channel.send("you need the perm `Administrator` to run this command :(");
+				return;
+			}
 			state.owoifierEnabled = !state.owoifierEnabled;
 			message.channel.send(state.owoifierEnabled ? "1" : "0");
 		},
