@@ -30,6 +30,10 @@ const { registerFont, createCanvas, loadImage } = require('canvas');
         ctx.fillText(time, 980, 860);
     
         return message.channel.send(new Discord.MessageAttachment(canvas.toBuffer("image/png")));
+    }).catch((err) => {
+        console.error("wiimenu failed.");
+        console.error(err);
+        message.channel.send("sry, Ⓐ button broke :(");
     });
 };
 
