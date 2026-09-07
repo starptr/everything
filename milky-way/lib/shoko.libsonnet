@@ -21,11 +21,18 @@ local images = import 'milky-way/lib/images.libsonnet';
 // renamer silently fails to rename+move files without it -- recognized files then strand in the
 // drop source instead of moving to the library).
 //
-// Like jellyfin, Shoko has no API-key-on-boot to pin -- its config (AniDB creds, import folders,
-// renamer, local users) is set during an interactive first-run wizard, so this lib carries NO
-// Secret and no config-as-code; it's plain PUID/PGID/TZ. PUID/PGID are 1000/1000 to match
-// qbittorrent/sonarr/jellyfin so Shoko owns the same uid-1000 files on the shared volume (hardlinks
-// and moves need write access to them).
+// Shoko's first-run config (AniDB creds, import folders, local users) is set during an interactive
+// wizard, so most of it is NOT config-as-code -- it's plain PUID/PGID/TZ (1000/1000, to match
+// qbittorrent/sonarr/jellyfin so Shoko owns the same uid-1000 files on the shared volume; hardlinks
+// and moves need write access to them). The ONE exception is the LuaRenamer config that
+// names+organizes the library: its Lua script lives in Shoko's SQLite DB (serialized as
+// version-pinned LZ4-MessagePack, so it can't be seeded as a plain file), so a small
+// `renamer-reconcile` Job drives it through Shoko's REST API instead -- it create/updates the
+// `AniDB Seasons` config from milky-way/lib/shoko-renamer-anidb-seasons.lua and pins it as the
+// DefaultRenamer. The Job authenticates with a sops-backed API key (`apiKey`); when that key is null
+// the whole reconciler (Secret + ConfigMap + Job) is omitted and Shoko still deploys, so a fresh
+// cluster is never blocked on a key that only exists after Shoko's first-run. See the `apiKey` /
+// `renamer*` params + the reconciler resources (renamerReconcile*) below.
 //
 // Storage: /home/shoko/.shoko is Shoko's config VOLUME -- a SQLite DB plus an AniDB/TMDB
 // metadata+image cache it rewrites at runtime. SQLite over NFS is unsafe (locking/corruption), so it
@@ -62,6 +69,12 @@ local images = import 'milky-way/lib/images.libsonnet';
     luaRenamerZipUrl='https://github.com/Mik1ll/LuaRenamer/releases/download/v5.10.3-stable-5.3.1/LuaRenamer_v5.10.3-stable-5.3.1-0-g4f8f6bb_linux-x64.zip',
     luaRenamerZipSha256='bf073cd227509f5340cb36a7c6078a5dd2002e1fef5712bfa585d0ce53054c55',
     luaRenamerVersion='5.10.3-stable-5.3.1',
+    // Renamer reconciler (see the header). A sops-backed Shoko API key -> the `renamer-reconcile` Job
+    // authenticates with it to manage the LuaRenamer config as code. NULL (the default) omits the
+    // whole reconciler so Shoko still deploys without a key; wire it from secrets.shoko.apiKey.
+    apiKey=null,
+    renamerConfigName='AniDB Seasons',   // the LuaRenamer config this reconciler owns + sets as DefaultRenamer
+    renamerScript=importstr 'milky-way/lib/shoko-renamer-anidb-seasons.lua',
   ):: {
     local this = self,
 
@@ -87,6 +100,83 @@ local images = import 'milky-way/lib/images.libsonnet';
       fi
       chown -R 1000:1000 "$LR_PLUGINS_DIR"
     |||,
+
+    // Desired LuaRenamer config the reconciler upserts. Mirrors the shape of GET /api/v3/Renamer/
+    // Config/<name>: RenamerID = the LuaRenamer plugin, Settings = the plugin's setting list. The four
+    // toggles stay false (the script drives illegal-char handling itself via `replace_illegal_chars`),
+    // and the Lua lives in the version-controlled .lua file next to this lib.
+    local desiredRenamerConfig = {
+      RenamerID: 'LuaRenamer',
+      Name: renamerConfigName,
+      Settings: [
+        { Name: 'Script', Value: renamerScript },
+        { Name: 'Remove Illegal Characters', Value: false },
+        { Name: 'Replace Illegal Characters', Value: false },
+        { Name: 'Use Existing Anime Location', Value: false },
+        { Name: 'Platform-Dependent Illegal Characters', Value: false },
+      ],
+    },
+    local desiredRenamerConfigJson = std.manifestJsonEx(desiredRenamerConfig, '  '),
+
+    // Surgical RFC-6902 patch that makes our config the default + turns on relocate/rename/move-on-
+    // import. `add` acts as replace for existing members, so it's safe whether or not the fields are
+    // already set. Baked at eval time (name is known) so the reconcile shell needs no JSON escaping.
+    local defaultRenamerPatch = std.manifestJsonEx([
+      { op: 'add', path: '/Plugins/Renamer/DefaultRenamer', value: renamerConfigName },
+      { op: 'add', path: '/Plugins/Renamer/RelocateOnImport', value: true },
+      { op: 'add', path: '/Plugins/Renamer/RenameOnImport', value: true },
+      { op: 'add', path: '/Plugins/Renamer/MoveOnImport', value: true },
+    ], '  '),
+
+    // The reconcile loop (runs in the Job below, reusing the Shoko image for its curl+jq). Waits for
+    // the unauthenticated /Init/Status, then create-or-updates the config (skipping the write when the
+    // live config already matches -- idempotent) and ensures it's the default renamer. The desired
+    // JSON bodies are mounted read-only at /reconcile from the ConfigMap.
+    local renamerReconcileScript = |||
+      set -eu
+      api="$SHOKO_API"; name="$RENAMER_NAME"
+      enc=$(printf %s "$name" | jq -sRr @uri)
+      norm() { jq -S '{RenamerID,Name,Settings:(.Settings|sort_by(.Name)|map({Name,Value}))}' "$1"; }
+      echo "waiting for Shoko API at $api ..."
+      i=0
+      until curl -fsS -o /dev/null "$api/Init/Status"; do
+        i=$((i + 1)); [ "$i" -ge 150 ] && { echo "timed out waiting for Shoko API"; exit 1; }
+        sleep 2
+      done
+      auth="apikey: $SHOKO_API_KEY"
+      code=$(curl -s -o /tmp/cur.json -w '%{http_code}' -H "$auth" "$api/Renamer/Config/$enc")
+      if [ "$code" = 200 ]; then
+        if [ "$(norm /tmp/cur.json)" = "$(norm /reconcile/config.json)" ]; then
+          echo "renamer '$name' already up to date"
+        else
+          echo "updating renamer '$name'"
+          curl -fsS -X PUT -H "$auth" -H 'Content-Type: application/json' \
+            --data @/reconcile/config.json "$api/Renamer/Config/$enc" >/dev/null
+        fi
+      elif [ "$code" = 404 ]; then
+        echo "creating renamer '$name'"
+        curl -fsS -X POST -H "$auth" -H 'Content-Type: application/json' \
+          --data @/reconcile/config.json "$api/Renamer/Config" >/dev/null
+      else
+        echo "unexpected HTTP $code from GET Renamer/Config"; cat /tmp/cur.json; exit 1
+      fi
+      cur_default=$(curl -fsS -H "$auth" "$api/Settings" | jq -r '.Plugins.Renamer.DefaultRenamer // ""')
+      if [ "$cur_default" = "$name" ]; then
+        echo "default renamer already '$name'"
+      else
+        echo "setting default renamer to '$name'"
+        curl -fsS -X PATCH -H "$auth" -H 'Content-Type: application/json-patch+json' \
+          --data @/reconcile/default-renamer.patch.json "$api/Settings" >/dev/null \
+          || echo "warn: could not set default renamer; set it in the WebUI"
+      fi
+      echo "renamer reconcile complete."
+    |||,
+
+    // Re-run the Job only when the desired config, patch, or reconcile logic changes (Jobs are
+    // immutable, so a content change must produce a new object name; ttlSecondsAfterFinished reaps the
+    // superseded one). A no-op apply keeps the same name -> the completed Job is left untouched.
+    local renamerReconcileHash =
+      std.substr(std.md5(desiredRenamerConfigJson + defaultRenamerPatch + renamerReconcileScript), 0, 10),
 
     configPvc: {
       apiVersion: 'v1',
@@ -243,6 +333,76 @@ local images = import 'milky-way/lib/images.libsonnet';
             }],
           },
         }],
+      },
+    },
+
+    // --- Renamer reconciler (omitted entirely when apiKey is null; see the header). ---
+    // Desired config + default-renamer patch as read-only data for the Job. Fixed-name ConfigMap; the
+    // Job that consumes it is name-hashed, so a content change rolls a fresh run off the new data.
+    [if apiKey != null then 'renamerReconcileConfigMap']: {
+      apiVersion: 'v1',
+      kind: 'ConfigMap',
+      metadata: { name: name + '-renamer-reconcile', namespace: namespace },
+      data: {
+        'config.json': desiredRenamerConfigJson,
+        'default-renamer.patch.json': defaultRenamerPatch,
+      },
+    },
+
+    // The Shoko API key the Job authenticates with (sops-backed, injected via secretKeyRef so it
+    // never lands in the Job spec).
+    [if apiKey != null then 'renamerReconcileSecret']: {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: { name: name + '-renamer-reconcile', namespace: namespace },
+      stringData: { apiKey: apiKey },
+    },
+
+    // One-shot reconcile Job. Reuses the Shoko image purely for its curl+jq (command overridden, so
+    // Shoko's entrypoint never runs); reaches the API over the in-cluster Service. OnFailure +
+    // backoffLimit rides out a slow Shoko startup; ttlSecondsAfterFinished reaps it (and superseded
+    // hashes) after a day. Name-hashed on the desired content, so an unchanged apply leaves it be.
+    [if apiKey != null then 'renamerReconcileJob']: {
+      apiVersion: 'batch/v1',
+      kind: 'Job',
+      metadata: { name: name + '-renamer-reconcile-' + renamerReconcileHash, namespace: namespace },
+      spec: {
+        ttlSecondsAfterFinished: 86400,
+        backoffLimit: 30,
+        template: {
+          metadata: { labels: { app: name + '-renamer-reconcile' } },
+          spec: {
+            restartPolicy: 'OnFailure',
+            tolerations: [
+              { key: 'ephemeral', operator: 'Exists', effect: 'NoSchedule' },
+            ],
+            containers: [
+              {
+                name: 'reconcile',
+                image: image,
+                command: ['sh', '-c', renamerReconcileScript],
+                env: [
+                  { name: 'SHOKO_API', value: 'http://%s.%s.svc:%d/api/v3' % [name, namespace, port] },
+                  { name: 'RENAMER_NAME', value: renamerConfigName },
+                  {
+                    name: 'SHOKO_API_KEY',
+                    valueFrom: { secretKeyRef: { name: name + '-renamer-reconcile', key: 'apiKey' } },
+                  },
+                ],
+                volumeMounts: [
+                  { name: 'reconcile', mountPath: '/reconcile', readOnly: true },
+                ],
+                resources: {
+                  requests: { memory: '32Mi', cpu: '25m' },
+                  limits: { memory: '128Mi', cpu: '250m' },
+                },
+              },
+            ],
+            volumes: [
+              { name: 'reconcile', configMap: { name: name + '-renamer-reconcile' } },
+            ],
+          },
+        },
       },
     },
   },

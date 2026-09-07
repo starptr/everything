@@ -359,14 +359,17 @@ local pubkeys = import 'magic/common/public_keys.json';
   // (Shoko) (its Drop Destination), all on the one shared mdata volume so the move preserves the inode
   // (torrent keeps seeding, one physical copy). Shoko can't hardlink itself, so the hardlink is done by
   // qbittorrent's `hardlinkOnFinished` hook above (tag-driven, plus the sonarr-for-sdxarr category).
-  // Like jellyfin, its
-  // config (AniDB creds, import folders, WebAOM renamer, local users) is set in an interactive
-  // first-run -- so no config-as-code / Secret / buildarr. WebUI via Tailscale L7 ingress; SQLite +
-  // metadata cache on its own iSCSI RWO PVC. Jellyfin views this library via the Shokofin plugin
-  // (configured in Jellyfin's UI); read-only Seanime picks it up automatically (it scans /data/library).
+  // Like jellyfin, most of its config (AniDB creds, import folders, local users) is set in an
+  // interactive first-run -- so no buildarr. The ONE piece managed as code is the LuaRenamer
+  // `AniDB Seasons` config (lib/shoko-renamer-anidb-seasons.lua): a reconcile Job upserts it via
+  // Shoko's API, authenticating with the sops-backed apiKey below (see lib/shoko.libsonnet). WebUI via
+  // Tailscale L7 ingress; SQLite + metadata cache on its own iSCSI RWO PVC. Jellyfin views this library
+  // via the Shokofin plugin; read-only Seanime picks it up automatically (it scans /data/library).
   shoko: shoko.new(
     tailscaleHostname = "shoko",
     mediaVolumeClaimName = this.mdataPvc.metadata.name,
+    // Enables the renamer reconciler; a Shoko WebUI API key (Settings -> API Keys). Omit -> no reconciler.
+    apiKey = secrets.shoko.apiKey,
   ),
 
   // Suwayomi: self-hosted manga reader/server -- the manga counterpart to the anime stack. Installs
